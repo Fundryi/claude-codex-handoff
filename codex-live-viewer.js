@@ -327,8 +327,23 @@ function evHtml(e){
 function renderHead(){
   const meta=sessions.find(s=>s.id===selected);
   headtxt.textContent=meta?((meta.cwd||meta.id)+'   |   model: '+(meta.model||'?')+'   |   thread: '+(meta.threadId||'?')+'   |   resume: codex resume '+(meta.threadId||'')):'select a session (LIVE sessions auto-select)';
-  stopbtn.hidden=!meta;
+  stopbtn.hidden=!meta||meta.status==='DONE'; // nothing left to stop on completed tasks
+  if(stopbtn.hidden)stoplist.hidden=true;
 }
+// short blip on status changes; pitch says what happened
+let actx;
+function beep(f){
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended')actx.resume();
+    const o=actx.createOscillator(),g=actx.createGain();
+    o.type='sine';o.frequency.value=f;
+    g.gain.setValueAtTime(.08,actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001,actx.currentTime+.18);
+    o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+.2);
+  }catch{}
+}
+const TONES={LIVE:880,DONE:520,STALE:300,IDLE:660};
 function sessStart(id){
   const m=(id||'').match(/rollout-(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2})-(\\d{2})-(\\d{2})/);
   return m?new Date(+m[1],m[2]-1,+m[3],+m[4],+m[5],+m[6]).getTime():0;
@@ -380,8 +395,10 @@ es.onmessage=m=>{
   if(d.type==='sessions'){
     for(const s of d.sessions){
       const ps=prevStatus[s.id];
-      // unread marker: new session appears, or status flips (LIVE->IDLE->DONE), while not being watched
-      if(seeded&&s.id!==selected&&(ps===undefined||ps!==s.status))unread.add(s.id);
+      const changed=ps===undefined||ps!==s.status;
+      // unread marker: new session appears, or status flips, while not being watched
+      if(seeded&&s.id!==selected&&changed)unread.add(s.id);
+      if(seeded&&changed)beep(TONES[s.status]||660);
       prevStatus[s.id]=s.status;
     }
     seeded=true;
