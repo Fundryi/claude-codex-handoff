@@ -501,21 +501,43 @@ function serve() {
     console.error("    Run any codex command once, or set CODEX_HOME.");
     process.exit(1);
   }
-  server.on("error", err => {
-    if (err.code === "EADDRINUSE") {
-      console.log("[i] Viewer is already running -> http://localhost:" + PORT);
-      console.log("    Stop it first: node codex-live-viewer.js stop");
-      process.exit(0);
-    }
-    throw err;
-  });
-  server.listen(PORT, "127.0.0.1", () => {
+  let retries = 0;
+  server.on("listening", () => {
     console.log("[OK] Codex Live Viewer -> http://localhost:" + PORT);
     console.log("[OK] Watching: " + SESSIONS_DIR);
     tick();
     watchSessions();
     setInterval(tick, POLL_MS);
   });
+  server.on("error", err => {
+    if (err.code !== "EADDRINUSE") throw err;
+    if (retries === 0) {
+      // an older viewer instance owns the port - shut it down and take over
+      console.log("[i] Port " + PORT + " busy - stopping the old viewer and taking over...");
+      let responded = false;
+      const req = http.request(BASE + "/shutdown", { method: "POST" }, r => {
+        responded = true;
+        r.resume();
+        retries++;
+        setTimeout(() => server.listen(PORT, "127.0.0.1"), 400);
+      });
+      // the old process exiting can reset the socket AFTER replying - not an error
+      req.on("error", () => {
+        if (responded) return;
+        console.error("[X] Port " + PORT + " is used by something that is not the viewer.");
+        console.error("    Set CODEX_VIEWER_PORT to a free port and retry.");
+        process.exit(1);
+      });
+      req.end();
+    } else if (retries < 5) {
+      retries++;
+      setTimeout(() => server.listen(PORT, "127.0.0.1"), 400);
+    } else {
+      console.error("[X] Could not take over port " + PORT + ".");
+      process.exit(1);
+    }
+  });
+  server.listen(PORT, "127.0.0.1");
 }
 
 function ping(cb) {
