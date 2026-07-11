@@ -1,11 +1,14 @@
 {
   "name": "codex-live-viewer",
   "version": "1.0.0",
-  "description": "Read-only live dashboard for all Codex CLI sessions on this machine, including headless handoffs. Zero dependencies.",
+  "private": true,
+  "description": "Lightweight tray and browser dashboard for all local Codex CLI sessions, including headless handoffs.",
   "main": "codex-live-viewer.js",
   "scripts": {
     "start": "node codex-live-viewer.js serve",
-    "stop": "node codex-live-viewer.js stop"
+    "stop": "node codex-live-viewer.js stop",
+    "tray": "cargo run --manifest-path tray-launcher/Cargo.toml",
+    "build:tray": "cargo build --release --locked --manifest-path tray-launcher/Cargo.toml"
   },
   "bin": {
     "codex-live-viewer": "codex-live-viewer.js"
@@ -13,5 +16,16 @@
   "engines": {
     "node": ">=18"
   },
+  "files": [
+    "codex-live-viewer.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fundryi/codex-live-viewer.git"
+  },
+  "homepage": "https://github.com/Fundryi/codex-live-viewer#readme",
+  "bugs": "https://github.com/Fundryi/codex-live-viewer/issues",
   "license": "MIT"
 }

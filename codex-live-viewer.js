@@ -18,6 +18,8 @@ const path = require("path");
 const os = require("os");
 const { execFile, spawn } = require("child_process");
 
+const APP_ID = "codex-live-viewer";
+const APP_VERSION = "1.0.0";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_HOME, "sessions");
@@ -453,15 +455,20 @@ es.onmessage=m=>{
 </script></body></html>`;
 
 const server = http.createServer((req, res) => {
-  if (req.url === "/") {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ application: APP_ID, version: APP_VERSION }));
+  } else if (req.url === "/") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(PAGE);
   } else if (req.url === "/shutdown") {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("bye");
     setTimeout(() => process.exit(0), 100);
   } else if (req.url === "/procs") {
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
     codexProcs(list => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(list));
@@ -469,6 +476,7 @@ const server = http.createServer((req, res) => {
   } else if (req.url.startsWith("/kill?pid=")) {
     if (process.platform !== "win32") { res.writeHead(501); return res.end("kill is Windows-only for now"); }
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
     const pid = parseInt(req.url.slice("/kill?pid=".length), 10);
     if (!Number.isInteger(pid) || pid <= 0) { res.writeHead(400); return res.end("bad pid"); }
     // re-verify the pid is still a codex process before killing anything
@@ -495,6 +503,11 @@ const server = http.createServer((req, res) => {
 // ---------------- CLI ----------------
 const BASE = "http://127.0.0.1:" + PORT;
 
+function trustedControlOrigin(req) {
+  const origin = req.headers.origin;
+  return !origin || origin === "http://127.0.0.1:" + PORT || origin === "http://localhost:" + PORT;
+}
+
 function serve() {
   if (!fs.existsSync(SESSIONS_DIR)) {
     console.error("[X] Sessions dir not found: " + SESSIONS_DIR);
@@ -512,23 +525,24 @@ function serve() {
   server.on("error", err => {
     if (err.code !== "EADDRINUSE") throw err;
     if (retries === 0) {
-      // an older viewer instance owns the port - shut it down and take over
-      console.log("[i] Port " + PORT + " busy - stopping the old viewer and taking over...");
-      let responded = false;
-      const req = http.request(BASE + "/shutdown", { method: "POST" }, r => {
-        responded = true;
-        r.resume();
-        retries++;
-        setTimeout(() => server.listen(PORT, "127.0.0.1"), 400);
+      ping(isViewer => {
+        if (!isViewer) {
+          console.error("[X] Port " + PORT + " is used by something that is not the viewer.");
+          console.error("    Set CODEX_VIEWER_PORT to a free port and retry.");
+          process.exit(1);
+        }
+        console.log("[i] Port " + PORT + " busy - stopping the old viewer and taking over...");
+        const req = http.request(BASE + "/shutdown", { method: "POST" }, r => {
+          r.resume();
+          retries++;
+          setTimeout(() => server.listen(PORT, "127.0.0.1"), 400);
+        });
+        req.on("error", () => {
+          retries++;
+          setTimeout(() => server.listen(PORT, "127.0.0.1"), 400);
+        });
+        req.end();
       });
-      // the old process exiting can reset the socket AFTER replying - not an error
-      req.on("error", () => {
-        if (responded) return;
-        console.error("[X] Port " + PORT + " is used by something that is not the viewer.");
-        console.error("    Set CODEX_VIEWER_PORT to a free port and retry.");
-        process.exit(1);
-      });
-      req.end();
     } else if (retries < 5) {
       retries++;
       setTimeout(() => server.listen(PORT, "127.0.0.1"), 400);
@@ -541,7 +555,18 @@ function serve() {
 }
 
 function ping(cb) {
-  http.get(BASE + "/", () => cb(true)).on("error", () => cb(false));
+  const req = http.get(BASE + "/health", res => {
+    let body = "";
+    res.setEncoding("utf8");
+    res.on("data", chunk => { if (body.length < 1000) body += chunk; });
+    res.on("end", () => {
+      let data;
+      try { data = JSON.parse(body); } catch {}
+      cb(res.statusCode === 200 && data && data.application === APP_ID);
+    });
+  });
+  req.setTimeout(1000, () => req.destroy());
+  req.on("error", () => cb(false));
 }
 
 function openBrowser() {
@@ -567,12 +592,23 @@ function doStart() {
 }
 
 function doStop(cb) {
-  const req = http.request(BASE + "/shutdown", { method: "POST" }, () => {
-    console.log("[OK] Viewer stopped.");
-    if (cb) cb(true);
+  ping(up => {
+    if (!up) { console.log("[i] Viewer was not running."); if (cb) cb(false); return; }
+    let finished = false;
+    const req = http.request(BASE + "/shutdown", { method: "POST" }, () => {
+      if (finished) return;
+      finished = true;
+      console.log("[OK] Viewer stopped.");
+      if (cb) cb(true);
+    });
+    req.on("error", () => {
+      if (finished) return;
+      finished = true;
+      console.log("[i] Viewer was not running.");
+      if (cb) cb(false);
+    });
+    req.end();
   });
-  req.on("error", () => { console.log("[i] Viewer was not running."); if (cb) cb(false); });
-  req.end();
 }
 
 const cmd = process.argv[2] || "serve";

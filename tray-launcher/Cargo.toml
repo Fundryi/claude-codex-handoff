@@ -1,0 +1,16 @@
+[package]
+name = "codex-live-viewer-tray"
+version = "1.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+open = "5.3.6"
+tao = "0.35.3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+tray-icon = { version = "0.24.1", default-features = false }
+windows-sys = { version = "0.61.2", features = ["Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tray-icon = { version = "0.24.1", default-features = false, features = ["gtk"] }

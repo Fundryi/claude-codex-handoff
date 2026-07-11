@@ -9,6 +9,8 @@ desktop.ini
 
 # node (no deps, but just in case)
 node_modules/
+/tray-launcher/target/
+/Codex Live Viewer.exe
 
 # logs / local scratch
 *.log
