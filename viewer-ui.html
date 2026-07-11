@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Codex Live Viewer</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
   <style>
     :root {
       color-scheme: dark;
@@ -81,12 +82,8 @@
     #brand-mark {
       width: 30px;
       height: 30px;
-      border-radius: 9px;
-      background: linear-gradient(145deg, #3379d5, #74b5ff);
-      display: grid;
-      place-items: center;
-      color: #08111f;
-      font-weight: 800;
+      object-fit: contain;
+      flex: none;
     }
     #brand-copy { min-width: 0; flex: 1; }
     #brand-title { font-size: 14px; font-weight: 650; letter-spacing: .1px; }
@@ -453,7 +450,7 @@
 <body>
   <aside id="side" aria-label="Codex sessions">
     <div id="brand">
-      <div id="brand-mark" aria-hidden="true">C</div>
+      <img id="brand-mark" src="/logo.svg" alt="">
       <div id="brand-copy">
         <div id="brand-title">Codex Live Viewer</div>
         <div id="brand-subtitle"><span id="connection"><span id="connection-dot"></span><span id="connection-text">Connecting</span></span></div>

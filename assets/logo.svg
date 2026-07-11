@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-labelledby="title">
+  <title id="title">Codex Live Viewer</title>
+  <defs>
+    <linearGradient id="brand" x1="120" y1="760" x2="880" y2="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1763f6"/>
+      <stop offset="1" stop-color="#00d9da"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#brand)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M330 260 120 500 330 740" stroke-width="84"/>
+    <path d="M670 260 880 500 670 740" stroke-width="84"/>
+    <path d="M500 130V350L410 440 463 493" stroke-width="72"/>
+    <circle cx="500" cy="500" r="70" stroke-width="54"/>
+    <path d="M538 526 590 585 500 680V870" stroke-width="72"/>
+  </g>
+</svg>

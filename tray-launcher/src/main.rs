@@ -469,16 +469,14 @@ fn find_viewer_script() -> Result<PathBuf, String> {
 }
 
 fn viewer_icon() -> Icon {
-    colored_viewer_icon([88, 166, 255])
+    const SIZE: u32 = 32;
+    Icon::from_rgba(icon_art::render_brand_icon(SIZE), SIZE, SIZE)
+        .expect("valid generated tray icon")
 }
 
 fn viewer_stopped_icon() -> Icon {
-    colored_viewer_icon([248, 81, 73])
-}
-
-fn colored_viewer_icon(color: [u8; 3]) -> Icon {
     const SIZE: u32 = 32;
-    let rgba = icon_art::render_icon(SIZE, color);
+    let rgba = icon_art::render_status_icon(SIZE, [248, 81, 73]);
     Icon::from_rgba(rgba, SIZE, SIZE).expect("valid generated tray icon")
 }
 

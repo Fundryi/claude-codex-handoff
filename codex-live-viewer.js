@@ -476,6 +476,13 @@ try {
   // Keep the embedded page as a compatibility fallback for single-file installs.
 }
 
+let LOGO = null;
+try {
+  LOGO = fs.readFileSync(path.join(__dirname, "assets", "logo.svg"), "utf8");
+} catch {
+  // The embedded compatibility UI does not require the standalone logo asset.
+}
+
 const server = http.createServer((req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -487,6 +494,9 @@ const server = http.createServer((req, res) => {
   } else if (req.url === "/") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(PAGE);
+  } else if (req.url === "/logo.svg" && LOGO) {
+    res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=3600" });
+    res.end(LOGO);
   } else if (req.url === "/shutdown") {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
     if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }

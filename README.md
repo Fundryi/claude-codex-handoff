@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="Codex Live Viewer logo" width="120">
+</p>
+
 # Codex Live Viewer
 
 A read-only dashboard for every [OpenAI Codex CLI](https://github.com/openai/codex) session running on your machine, including headless tasks started by an orchestrator.

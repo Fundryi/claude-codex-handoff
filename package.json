@@ -20,6 +20,7 @@
   "files": [
     "codex-live-viewer.js",
     "viewer-ui.html",
+    "assets/logo.svg",
     "README.md",
     "LICENSE"
   ],

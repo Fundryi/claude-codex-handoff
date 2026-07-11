@@ -1,9 +1,9 @@
+#[allow(dead_code)]
 mod icon_art;
 
 use std::{env, fs, path::Path};
 
 const ICON_SIZES: [u32; 8] = [16, 20, 24, 32, 40, 48, 64, 256];
-const BRAND_BLUE: [u8; 3] = [88, 166, 255];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -28,7 +28,7 @@ fn main() {
 fn build_ico() -> Vec<u8> {
     let images: Vec<Vec<u8>> = ICON_SIZES
         .iter()
-        .map(|size| dib_image(*size, &icon_art::render_icon(*size, BRAND_BLUE)))
+        .map(|size| dib_image(*size, &icon_art::render_brand_icon(*size)))
         .collect();
     let directory_size = 6 + images.len() * 16;
     let mut output =
