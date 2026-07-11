@@ -1,10 +1,14 @@
 # Codex Live Viewer
 
-A read-only live dashboard for **all** [OpenAI Codex CLI](https://github.com/openai/codex) sessions on your machine — including headless handoffs spawned by other tools (e.g. the Claude Code codex plugin), which normally run invisibly with no window at all.
+A read-only live dashboard for **all** [OpenAI Codex CLI](https://github.com/openai/codex) sessions on your machine, including headless coding tasks delegated by an orchestrator.
 
-**The problem:** harness tools (T3 Code, CliDeck, Warp, …) only show sessions they launch themselves. There is no global Codex session registry (see openai/codex #30713, #22321), so background jobs started through the Codex app server are completely invisible.
+## Why this exists
 
-**The trick:** Codex writes every event of every session — regardless of who launched it — live to `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. This viewer tails that folder and streams updates to your browser. A session appears within ~1 second of starting, no matter what spawned it.
+Our workflow uses **Fable as the orchestrator** and **Codex as the coder**. A Fable plugin/skill hands implementation tasks to Codex, which can then work headlessly through the Codex app server.
+
+The missing piece was visibility. Once a coding task was delegated, there was no terminal or window showing whether Codex was working, idle, finished, or stuck. Background Codex sessions were running, but they were difficult to observe and manage.
+
+Codex writes every event from every session to `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. Codex Live Viewer tails those files and streams the activity to your browser. A delegated task appears within roughly one second, regardless of which plugin, skill, or process started it.
 
 ![zero npm dependencies](https://img.shields.io/badge/npm_dependencies-0-brightgreen) ![node >= 18](https://img.shields.io/badge/node-%3E%3D18-blue)
 
