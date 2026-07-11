@@ -139,7 +139,8 @@
       flex: none;
     }
     .filter-button[data-filter="ACTIVE"]::before { background: var(--blue); }
-    .filter-button[data-filter="LIVE"]::before {
+    .filter-button[data-filter="LIVE"]::before { background: var(--blue); }
+    .filter-button[data-filter="LIVE"].has-sessions::before {
       width: 9px;
       height: 9px;
       border: 2px solid var(--blue);
@@ -637,15 +638,16 @@
       lastFilterSignature = signature;
       filters.textContent = '';
       FILTERS.forEach(function (item) {
+        var itemCount = statusCount(item.id);
         var button = document.createElement('button');
         button.type = 'button';
         button.dataset.filter = item.id;
-        button.className = 'filter-button' + (prefs.filter === item.id ? ' on' : '');
+        button.className = 'filter-button' + (prefs.filter === item.id ? ' on' : '') + (item.id === 'LIVE' && itemCount > 0 ? ' has-sessions' : '');
         button.setAttribute('aria-pressed', prefs.filter === item.id ? 'true' : 'false');
         button.append(document.createTextNode(item.label + ' '));
         var count = document.createElement('span');
         count.className = 'count';
-        count.textContent = statusCount(item.id);
+        count.textContent = itemCount;
         button.appendChild(count);
         button.addEventListener('click', function () { chooseFilter(item.id); });
         filters.appendChild(button);
