@@ -501,6 +501,14 @@ function serve() {
     console.error("    Run any codex command once, or set CODEX_HOME.");
     process.exit(1);
   }
+  server.on("error", err => {
+    if (err.code === "EADDRINUSE") {
+      console.log("[i] Viewer is already running -> http://localhost:" + PORT);
+      console.log("    Stop it first: node codex-live-viewer.js stop");
+      process.exit(0);
+    }
+    throw err;
+  });
   server.listen(PORT, "127.0.0.1", () => {
     console.log("[OK] Codex Live Viewer -> http://localhost:" + PORT);
     console.log("[OK] Watching: " + SESSIONS_DIR);
