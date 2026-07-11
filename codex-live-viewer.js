@@ -16,7 +16,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
@@ -417,6 +417,11 @@ const server = http.createServer((req, res) => {
   if (req.url === "/") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(PAGE);
+  } else if (req.url === "/shutdown") {
+    if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("bye");
+    setTimeout(() => process.exit(0), 100);
   } else if (req.url === "/procs") {
     codexProcs(list => {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -448,14 +453,70 @@ const server = http.createServer((req, res) => {
   }
 });
 
-if (!fs.existsSync(SESSIONS_DIR)) {
-  console.error("[X] Sessions dir not found: " + SESSIONS_DIR);
-  console.error("    Run any codex command once, or set CODEX_HOME.");
-  process.exit(1);
+// ---------------- CLI ----------------
+const BASE = "http://127.0.0.1:" + PORT;
+
+function serve() {
+  if (!fs.existsSync(SESSIONS_DIR)) {
+    console.error("[X] Sessions dir not found: " + SESSIONS_DIR);
+    console.error("    Run any codex command once, or set CODEX_HOME.");
+    process.exit(1);
+  }
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log("[OK] Codex Live Viewer -> http://localhost:" + PORT);
+    console.log("[OK] Watching: " + SESSIONS_DIR);
+    tick();
+    setInterval(tick, POLL_MS);
+  });
 }
-server.listen(PORT, "127.0.0.1", () => {
-  console.log("[OK] Codex Live Viewer -> http://localhost:" + PORT);
-  console.log("[OK] Watching: " + SESSIONS_DIR);
-  tick();
-  setInterval(tick, POLL_MS);
-});
+
+function ping(cb) {
+  http.get(BASE + "/", () => cb(true)).on("error", () => cb(false));
+}
+
+function openBrowser() {
+  const url = "http://localhost:" + PORT;
+  const opts = { detached: true, stdio: "ignore" };
+  try {
+    if (process.platform === "win32") spawn("cmd", ["/c", "start", "", url], opts).unref();
+    else if (process.platform === "darwin") spawn("open", [url], opts).unref();
+    else spawn("xdg-open", [url], opts).unref();
+  } catch {}
+}
+
+function doStart() {
+  ping(up => {
+    if (up) { console.log("[OK] already running -> " + BASE); openBrowser(); return; }
+    spawn(process.execPath, [__filename, "serve"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    let tries = 0;
+    const t = setInterval(() => ping(up2 => {
+      if (up2) { clearInterval(t); console.log("[OK] Codex Live Viewer running -> " + BASE); openBrowser(); }
+      else if (++tries > 25) { clearInterval(t); console.error("[X] Failed to start within 5s. Try: node codex-live-viewer.js serve"); process.exit(1); }
+    }), 200);
+  });
+}
+
+function doStop(cb) {
+  const req = http.request(BASE + "/shutdown", { method: "POST" }, () => {
+    console.log("[OK] Viewer stopped.");
+    if (cb) cb(true);
+  });
+  req.on("error", () => { console.log("[i] Viewer was not running."); if (cb) cb(false); });
+  req.end();
+}
+
+const cmd = process.argv[2] || "serve";
+if (cmd === "serve") serve();
+else if (cmd === "start") doStart();
+else if (cmd === "stop") doStop();
+else if (cmd === "restart") doStop(() => setTimeout(doStart, 300));
+else if (cmd === "status") ping(up => console.log(up ? "[OK] running -> " + BASE : "[i] not running"));
+else {
+  console.log("Usage: codex-live-viewer <start|stop|restart|status|serve>");
+  console.log("  start    run in background and open the browser");
+  console.log("  stop     stop the background server");
+  console.log("  restart  stop, then start");
+  console.log("  status   is it running?");
+  console.log("  serve    run in the foreground (default; what npm start does)");
+  process.exit(cmd === "help" || cmd === "--help" ? 0 : 1);
+}

@@ -4,7 +4,11 @@
   "description": "Read-only live dashboard for all Codex CLI sessions on this machine, including headless handoffs. Zero dependencies.",
   "main": "codex-live-viewer.js",
   "scripts": {
-    "start": "node codex-live-viewer.js"
+    "start": "node codex-live-viewer.js serve",
+    "stop": "node codex-live-viewer.js stop"
+  },
+  "bin": {
+    "codex-live-viewer": "codex-live-viewer.js"
   },
   "engines": {
     "node": ">=18"

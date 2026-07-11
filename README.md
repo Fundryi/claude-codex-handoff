@@ -22,13 +22,21 @@ A read-only live dashboard for **all** [OpenAI Codex CLI](https://github.com/ope
 
 Requires [Node.js 18+](https://nodejs.org).
 
-**Windows:** double-click `start-codex-live-viewer.bat`. It opens your browser and starts the server. Stop it with `stop-codex-live-viewer.bat` (or just close the console window).
+**Windows:** double-click `codex-viewer.bat` — it starts the server in the background and opens your browser. No window stays open. From a terminal, the same file is a CLI:
 
-**Any platform:**
+```bat
+codex-viewer start     &:: run in background, open browser
+codex-viewer stop      &:: stop the background server
+codex-viewer restart
+codex-viewer status
+```
+
+**Any platform** (same commands, no wrapper):
 
 ```sh
-node codex-live-viewer.js
-# then open http://localhost:8377
+node codex-live-viewer.js start    # background + browser
+node codex-live-viewer.js stop
+node codex-live-viewer.js serve    # foreground (what npm start does)
 ```
 
 ## Configuration
