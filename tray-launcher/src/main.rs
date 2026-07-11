@@ -5,6 +5,9 @@
     windows_subsystem = "windows"
 )]
 
+#[path = "../icon_art.rs"]
+mod icon_art;
+
 use std::{
     env,
     io::{BufRead, BufReader, Read, Write},
@@ -475,19 +478,7 @@ fn viewer_stopped_icon() -> Icon {
 
 fn colored_viewer_icon(color: [u8; 3]) -> Icon {
     const SIZE: u32 = 32;
-    let mut rgba = vec![0_u8; (SIZE * SIZE * 4) as usize];
-    for y in 0..SIZE {
-        for x in 0..SIZE {
-            let dx = x as i32 - 16;
-            let dy = y as i32 - 16;
-            let radius = dx * dx + dy * dy;
-            let visible = (55..=205).contains(&radius) && !(x > 17 && (10..=21).contains(&y));
-            if visible {
-                let offset = ((y * SIZE + x) * 4) as usize;
-                rgba[offset..offset + 4].copy_from_slice(&[color[0], color[1], color[2], 255]);
-            }
-        }
-    }
+    let rgba = icon_art::render_icon(SIZE, color);
     Icon::from_rgba(rgba, SIZE, SIZE).expect("valid generated tray icon")
 }
 

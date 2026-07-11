@@ -3,6 +3,8 @@ name = "codex-live-viewer-tray"
 version = "1.1.1"
 edition = "2024"
 publish = false
+build = "build.rs"
+description = "System tray launcher for Codex Live Viewer"
 
 [dependencies]
 open = "5.3.6"
@@ -17,3 +19,6 @@ windows-sys = { version = "0.61.2", features = ["Win32_UI_WindowsAndMessaging"] 
 [target.'cfg(target_os = "linux")'.dependencies]
 notify-rust = { version = "4.18.0", default-features = false, features = ["d"] }
 tray-icon = { version = "0.24.1", default-features = false, features = ["gtk"] }
+
+[build-dependencies]
+winresource = { version = "0.1.31", default-features = false }
