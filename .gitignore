@@ -1,0 +1,15 @@
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editors
+.vscode/
+.idea/
+
+# node (no deps, but just in case)
+node_modules/
+
+# logs / local scratch
+*.log
+*.bak.*
