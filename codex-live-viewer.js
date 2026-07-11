@@ -336,6 +336,14 @@ stopbtn.onclick=async()=>{
   const t0=sessStart(selected);
   procs.sort((a,b)=>Math.abs(a.started-t0)-Math.abs(b.started-t0));
   stoplist.innerHTML='';
+  if(t0&&!procs.some(p=>Math.abs(p.started-t0)<15000)){
+    const w=document.createElement('div');
+    w.style.cssText='color:var(--yellow);margin-bottom:8px';
+    w.textContent='\\u26a0 No process matches this session\\u2019s start time \\u2014 the session is most likely already dead. '
+      +'The processes below are shared app-servers / hosts (Codex Desktop, VS Code extension, plugin handoff channel); '
+      +'killing one affects ALL sessions running through it, not just this one.';
+    stoplist.appendChild(w);
+  }
   for(const p of procs){
     const closeMatch=t0&&Math.abs(p.started-t0)<15000;
     const r=document.createElement('div');r.className='proc'+(closeMatch?' close':'');
