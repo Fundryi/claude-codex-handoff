@@ -6,11 +6,14 @@ publish = false
 
 [dependencies]
 open = "5.3.6"
+serde_json = "1.0.150"
 tao = "0.35.3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+notify-rust = { version = "4.18.0", default-features = false }
 tray-icon = { version = "0.24.1", default-features = false }
 windows-sys = { version = "0.61.2", features = ["Win32_UI_WindowsAndMessaging"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+notify-rust = { version = "4.18.0", default-features = false, features = ["d"] }
 tray-icon = { version = "0.24.1", default-features = false, features = ["gtk"] }

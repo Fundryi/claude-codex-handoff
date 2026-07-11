@@ -20,6 +20,7 @@ The launcher:
 - kills only the Node child it started when **Exit** is selected;
 - verifies the viewer through `/health` before trusting port 8377;
 - uses port 8378 as a lightweight single-instance lock;
+- shows native notifications for fresh task completions;
 - opens the browser on startup unless `CODEX_TRAY_NO_OPEN=1` is set.
 
 Useful environment variables:
@@ -30,6 +31,7 @@ Useful environment variables:
 | `CODEX_VIEWER_TRAY_PORT` | viewer port + 1 | Single-instance lock |
 | `CODEX_VIEWER_JS` | auto-detected | Explicit path to `codex-live-viewer.js` |
 | `CODEX_TRAY_NO_OPEN` | unset | Set to `1` to suppress opening the browser |
+| `CODEX_VIEWER_NOTIFICATIONS` | `1` | Set to `0` to disable native notifications |
 
 Linux development packages required by `tray-icon` on Debian/Ubuntu:
 

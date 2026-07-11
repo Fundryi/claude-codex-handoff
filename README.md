@@ -23,6 +23,7 @@ Codex already writes its session events to `~/.codex/sessions/YYYY/MM/DD/rollout
 - Each session shows its thread ID and the matching `codex resume <id>` command.
 - On Windows, you can inspect matching Codex processes and stop a stuck task after confirming the PID.
 - A small Rust tray app starts the Node viewer in the background on Windows and Linux.
+- The tray shows a native notification when a Codex task finishes.
 - The Node viewer itself has no npm dependencies.
 
 ## Quick start
@@ -74,14 +75,17 @@ Pushing a version tag such as `v1.0.0` builds the Windows and Linux launchers an
 | `CODEX_VIEWER_PORT` | `8377` | HTTP port |
 | `CODEX_HOME` | `~/.codex` | Codex home (sessions are read from `$CODEX_HOME/sessions`) |
 | `CODEX_VIEWER_TRAY_PORT` | viewer port + 1 | Tray single-instance lock port |
+| `CODEX_VIEWER_NOTIFICATIONS` | `1` | Set to `0` to disable tray notifications |
 
 ## Optional: completion toasts (Windows)
 
-Run `install-codex-notify-hook.bat` if you also want a Windows toast when a Codex turn finishes. The hook uses [BurntToast](https://github.com/Windos/BurntToast) when it is available and writes each notification to `~/.codex/hooks/notify-log.jsonl`.
+The tray already shows completion notifications while it is running. The viewer and tray work without changing your Codex configuration.
+
+Run `install-codex-notify-hook.bat` if you also want notifications when the viewer is closed. The hook uses [BurntToast](https://github.com/Windos/BurntToast) when it is available and writes each completion to `~/.codex/hooks/notify-log.jsonl`.
 
 The installer keeps the notifier that was already configured and calls it after writing its own notification. It backs up `config.toml`, changes only the `notify` line, verifies the result, and restores the backup if verification fails. You can run it again after a Codex Desktop update changes the notifier path.
 
-The viewer does not need this hook. It only adds completion notifications.
+When the tray is connected, the hook keeps logging and calling the original notifier but suppresses its own toast. This prevents duplicate notifications. The viewer does not need the hook for normal operation.
 
 ## Security notes
 

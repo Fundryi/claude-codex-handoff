@@ -34,6 +34,7 @@ const MAX_EVENTS_KEPT = 500;   // per-session event ring buffer
 // val: { id, file, offset, partial, meta, events[], lastGrow, size }
 const sessions = new Map();
 const sseClients = new Set();
+const notificationClients = new Set();
 
 function listRolloutFiles() {
   const out = [];
@@ -175,7 +176,16 @@ function ingest(file) {
     fresh.push(ev);
     if (s.events.length > MAX_EVENTS_KEPT) s.events.splice(0, s.events.length - MAX_EVENTS_KEPT);
   }
-  if (fresh.length) broadcast({ type: "events", session: s.id, events: fresh });
+  if (fresh.length) {
+    broadcast({ type: "events", session: s.id, events: fresh });
+    if (fresh.some(event => event.kind === "done")) {
+      broadcastNotification({
+        type: "complete",
+        session: s.id,
+        title: String(s.meta.title || "Codex task").slice(0, 120),
+      });
+    }
+  }
 }
 
 function sessionSummary(s) {
@@ -202,6 +212,11 @@ function sessionSummary(s) {
 function broadcast(obj) {
   const line = "data: " + JSON.stringify(obj) + "\n\n";
   for (const res of sseClients) { try { res.write(line); } catch {} }
+}
+
+function broadcastNotification(obj) {
+  const line = "data: " + JSON.stringify(obj) + "\n\n";
+  for (const res of notificationClients) { try { res.write(line); } catch {} }
 }
 
 function tick() {
@@ -457,7 +472,11 @@ es.onmessage=m=>{
 const server = http.createServer((req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-    res.end(JSON.stringify({ application: APP_ID, version: APP_VERSION }));
+    res.end(JSON.stringify({
+      application: APP_ID,
+      version: APP_VERSION,
+      notificationListener: notificationClients.size > 0,
+    }));
   } else if (req.url === "/") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(PAGE);
@@ -495,6 +514,11 @@ const server = http.createServer((req, res) => {
     for (const s of sessions.values())
       res.write("data: " + JSON.stringify({ type: "snapshot", session: s.id, events: s.events }) + "\n\n");
     req.on("close", () => sseClients.delete(res));
+  } else if (req.url === "/notifications") {
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    notificationClients.add(res);
+    res.write(": connected\n\n");
+    req.on("close", () => notificationClients.delete(res));
   } else {
     res.writeHead(404); res.end("not found");
   }

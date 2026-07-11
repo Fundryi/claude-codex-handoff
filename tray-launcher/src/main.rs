@@ -7,7 +7,7 @@
 
 use std::{
     env,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
     process::{Child, Command, Stdio},
@@ -15,9 +15,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+use notify_rust::Notification;
 use tao::{
     event::{Event, StartCause},
-    event_loop::{ControlFlow, EventLoopBuilder},
+    event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy},
 };
 use tray_icon::{
     Icon, TrayIcon, TrayIconBuilder,
@@ -38,6 +39,7 @@ const VIEWER_ID: &str = "codex-live-viewer";
 #[derive(Debug)]
 enum UserEvent {
     Menu(MenuEvent),
+    Completion(String),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -149,6 +151,10 @@ fn main() {
 
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
+    if env::var("CODEX_VIEWER_NOTIFICATIONS").as_deref() != Ok("0") {
+        let notification_proxy = proxy.clone();
+        thread::spawn(move || notification_loop(viewer_port, notification_proxy));
+    }
     let menu_proxy = proxy.clone();
     MenuEvent::set_event_handler(Some(move |event| {
         let _ = menu_proxy.send_event(UserEvent::Menu(event));
@@ -195,6 +201,9 @@ fn main() {
                 tray.take();
                 *control_flow = ControlFlow::Exit;
             }
+            Event::UserEvent(UserEvent::Completion(title)) => {
+                show_completion(&title);
+            }
             _ => {}
         }
     });
@@ -234,6 +243,63 @@ fn probe_viewer(port: u16) -> ViewerProbe {
         ViewerProbe::Viewer
     } else {
         ViewerProbe::Other
+    }
+}
+
+fn notification_loop(port: u16, proxy: EventLoopProxy<UserEvent>) {
+    loop {
+        if let Err(error) = listen_for_notifications(port, &proxy) {
+            eprintln!("[i] Notification stream disconnected: {error}");
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+
+fn listen_for_notifications(port: u16, proxy: &EventLoopProxy<UserEvent>) -> std::io::Result<()> {
+    let mut stream = TcpStream::connect(("127.0.0.1", port))?;
+    let request = format!(
+        "GET /notifications HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAccept: text/event-stream\r\nConnection: keep-alive\r\n\r\n"
+    );
+    stream.write_all(request.as_bytes())?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "viewer closed the notification stream",
+            ));
+        }
+        let Some(data) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        let Ok(event) = serde_json::from_str::<serde_json::Value>(data.trim()) else {
+            continue;
+        };
+        if event.get("type").and_then(|value| value.as_str()) != Some("complete") {
+            continue;
+        }
+        let title = event
+            .get("title")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Codex task")
+            .to_string();
+        if proxy.send_event(UserEvent::Completion(title)).is_err() {
+            return Ok(());
+        }
+    }
+}
+
+fn show_completion(title: &str) {
+    if let Err(error) = Notification::new()
+        .appname("Codex Live Viewer")
+        .summary("Codex task complete")
+        .body(title)
+        .show()
+    {
+        eprintln!("[i] Could not show completion notification: {error}");
     }
 }
 

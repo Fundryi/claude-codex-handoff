@@ -156,7 +156,7 @@ try {
     Add-Content -Path $logPath -Value "{`"ts`":`"$stamp`",`"payload`":$Payload}"
 } catch { }
 
-# --- 2) Parse + toast ---
+# --- 2) Parse + toast (unless the viewer tray is handling notifications) ---
 $type = "codex"; $msg = "Turn complete"
 try {
     $data = $Payload | ConvertFrom-Json
@@ -165,14 +165,23 @@ try {
     if ($msg.Length -gt 140) { $msg = $msg.Substring(0,140) + "..." }
 } catch { }
 
+$viewerHandlesToast = $false
 try {
-    if (Get-Module -ListAvailable -Name BurntToast) {
-        Import-Module BurntToast -ErrorAction SilentlyContinue
-        New-BurntToastNotification -Text "Codex: $type", $msg -ErrorAction SilentlyContinue
-    } else {
-        [console]::beep(800,200)
-    }
+    $viewerPort = if ($env:CODEX_VIEWER_PORT) { $env:CODEX_VIEWER_PORT } else { "8377" }
+    $health = Invoke-RestMethod -Uri "http://127.0.0.1:$viewerPort/health" -TimeoutSec 1
+    $viewerHandlesToast = [bool]$health.notificationListener
 } catch { }
+
+if (-not $viewerHandlesToast) {
+    try {
+        if (Get-Module -ListAvailable -Name BurntToast) {
+            Import-Module BurntToast -ErrorAction SilentlyContinue
+            New-BurntToastNotification -Text "Codex: $type", $msg -ErrorAction SilentlyContinue
+        } else {
+            [console]::beep(800,200)
+        }
+    } catch { }
+}
 
 # --- 3) Chain to original notifier (Computer Use), fire-and-forget ---
 # Never -Wait: the turn-ended helper is known to hang/leak if waited on.
