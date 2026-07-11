@@ -23,6 +23,7 @@ const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_HOME, "sessions");
 const POLL_MS = 1000;          // how often we check files for growth
 const LIVE_WINDOW_MS = 20000;  // file grew within this window => LIVE
+const STALE_AFTER_MS = 10 * 60 * 1000; // quiet this long without task_complete => STALE
 const MAX_SESSIONS = 40;       // most recent sessions to track
 const MAX_EVENTS_KEPT = 500;   // per-session event ring buffer
 
@@ -167,8 +168,12 @@ function ingest(file) {
 }
 
 function sessionSummary(s) {
-  const status = (Date.now() - s.lastGrow) < LIVE_WINDOW_MS ? "LIVE"
-    : s.events.some(e => e.kind === "done") ? "DONE" : "IDLE";
+  // LIVE: file is growing. DONE: wrote task_complete. IDLE: quiet but recent
+  // (slow tool call / thinking). STALE: quiet >10min and never completed - dead/aborted.
+  const quiet = Date.now() - s.lastGrow;
+  const status = quiet < LIVE_WINDOW_MS ? "LIVE"
+    : s.events.some(e => e.kind === "done") ? "DONE"
+    : quiet < STALE_AFTER_MS ? "IDLE" : "STALE";
   const last = s.events[s.events.length - 1];
   return {
     id: s.id,
@@ -235,6 +240,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Codex Live
 .badge{font-size:10px;padding:1px 7px;border-radius:9px;font-weight:bold}
 .LIVE{background:var(--green);color:#000;animation:pulse 1.2s infinite}
 .IDLE{background:var(--yellow);color:#000}.DONE{background:#30363d;color:var(--dim)}
+.STALE{background:#6e2c2c;color:var(--fg)}
 @keyframes pulse{50%{opacity:.55}}
 .cwd{color:var(--dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lastev{color:var(--dim);font-size:11px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -270,10 +276,10 @@ const list=document.getElementById('list'),feed=document.getElementById('feed'),
 const headtxt=document.getElementById('headtxt'),stopbtn=document.getElementById('stopbtn'),stoplist=document.getElementById('stoplist');
 function fmt(ts){if(!ts)return'';try{return new Date(ts).toLocaleTimeString()}catch{return''}}
 function renderTabs(){
-  const counts={ALL:sessions.length,LIVE:0,IDLE:0,DONE:0};
+  const counts={ALL:sessions.length,LIVE:0,IDLE:0,STALE:0,DONE:0};
   for(const s of sessions)counts[s.status]=(counts[s.status]||0)+1;
   tabs.innerHTML='';
-  for(const f of['LIVE','IDLE','DONE','ALL']){
+  for(const f of['LIVE','IDLE','STALE','DONE','ALL']){
     const d=document.createElement('div');d.className='tab'+(f===filter?' on':'');
     d.innerHTML=f+' <span class="n">'+(counts[f]||0)+'</span>';
     d.onclick=()=>{filter=f;lastSig='';renderList()};
