@@ -1,37 +1,41 @@
 # Codex Live Viewer
 
-A read-only live dashboard for **all** [OpenAI Codex CLI](https://github.com/openai/codex) sessions on your machine, including headless coding tasks delegated by an orchestrator.
+A read-only dashboard for every [OpenAI Codex CLI](https://github.com/openai/codex) session running on your machine, including headless tasks started by an orchestrator.
 
 ## Why this exists
 
-Our workflow uses **Fable as the orchestrator** and **Codex as the coder**. A Fable plugin/skill hands implementation tasks to Codex, which can then work headlessly through the Codex app server.
+We use Fable to plan and coordinate work. Its plugin/skill hands implementation tasks to Codex, and Codex does the coding in a headless app-server session.
 
-The missing piece was visibility. Once a coding task was delegated, there was no terminal or window showing whether Codex was working, idle, finished, or stuck. Background Codex sessions were running, but they were difficult to observe and manage.
+Those handoffs do not open a terminal or window. We built this viewer because we wanted to know whether Codex was still working, had finished, or had become stuck.
 
-Codex writes every event from every session to `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. Codex Live Viewer tails those files and streams the activity to your browser. A delegated task appears within roughly one second, regardless of which plugin, skill, or process started it.
+Codex already writes its session events to `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. The viewer follows those files and sends new activity to the browser. A new task usually appears within a second, however it was started.
 
 ![zero npm dependencies](https://img.shields.io/badge/npm_dependencies-0-brightgreen) ![node >= 18](https://img.shields.io/badge/node-%3E%3D18-blue)
 
 ## Features
 
-- **Near-instant updates** — filesystem watch pushes events to the browser via SSE within ~50 ms of Codex writing them (1 s poll as fallback)
-- **Live session list** with task titles (first user prompt) and status tabs: LIVE (pulsing, actively writing) / IDLE / STALE / DONE / ALL
-- **Sectioned feed** — events grouped under USER / AGENT / WORKING / STATUS captions so you can scan what the AI is doing at a glance
-- **Unread markers** — a dot appears when a session you're not watching changes status or gets new events; click the session to mark it read
-- **Live event feed** — user prompts, shell commands, command output, file patches (expandable), reasoning summaries, agent messages, task completion
-- **Auto-follow** — newest LIVE session is selected automatically until you click one yourself
-- **Resume hint** — header shows the thread id and a ready-made `codex resume <id>` command
-- **Stop stuck tasks** (Windows) — lists codex processes sorted by closeness to the session start time, and lets you kill one (with its child tree) after confirmation
-- **Native tray launcher** — a small Rust shell starts the Node viewer hidden on Windows and Linux
-- **Zero npm dependencies** — one file, plain Node
+- Filesystem watching sends new events to the browser through SSE. A one-second poll is there as a fallback.
+- The session list shows the first user prompt as its title and sorts sessions into LIVE, IDLE, STALE, DONE, and ALL.
+- The feed separates user messages, agent messages, working output, and status changes.
+- Sessions you are not watching get an unread dot when something changes.
+- The feed includes prompts, shell commands, command output, patches, reasoning summaries, agent messages, and completion events.
+- The newest live session opens automatically until you choose a session yourself.
+- Each session shows its thread ID and the matching `codex resume <id>` command.
+- On Windows, you can inspect matching Codex processes and stop a stuck task after confirming the PID.
+- A small Rust tray app starts the Node viewer in the background on Windows and Linux.
+- The Node viewer itself has no npm dependencies.
 
 ## Quick start
 
 Requires [Node.js 18+](https://nodejs.org).
 
-**Windows:** download and extract `Codex-Live-Viewer-Windows-x64.zip`, then double-click `Codex Live Viewer.exe`. It starts hidden with a system-tray icon. Double-click the icon to open the viewer; right-click it for **Open viewer** or **Exit**.
+### Windows
 
-**Linux desktop:** download and extract `Codex-Live-Viewer-Linux-x64.zip`, then run:
+Download and extract `Codex-Live-Viewer-Windows-x64.zip`, then double-click `Codex Live Viewer.exe`. The app starts in the system tray without opening a terminal. Double-click the tray icon to open the viewer, or right-click it for `Open viewer` and `Exit`.
+
+### Linux desktop
+
+Download and extract `Codex-Live-Viewer-Linux-x64.zip`, then run:
 
 ```sh
 ./codex-live-viewer-tray
@@ -39,7 +43,7 @@ Requires [Node.js 18+](https://nodejs.org).
 
 The Linux tray requires GTK 3 and Ayatana AppIndicator (for example `libgtk-3-0` and `libayatana-appindicator3-1` on Ubuntu/Debian).
 
-**Node CLI on any platform:**
+### Node CLI
 
 ```sh
 node codex-live-viewer.js serve    # foreground (what npm start does)
@@ -73,34 +77,32 @@ Pushing a version tag such as `v1.0.0` builds the Windows and Linux launchers an
 
 ## Optional: completion toasts (Windows)
 
-`install-codex-notify-hook.bat` installs a Codex `notify` hook that shows a Windows toast (via [BurntToast](https://github.com/Windos/BurntToast)) and appends a log line to `~/.codex/hooks/notify-log.jsonl` whenever any Codex turn completes. It:
+Run `install-codex-notify-hook.bat` if you also want a Windows toast when a Codex turn finishes. The hook uses [BurntToast](https://github.com/Windos/BurntToast) when it is available and writes each notification to `~/.codex/hooks/notify-log.jsonl`.
 
-- chains to whatever notifier was previously configured (e.g. Codex Desktop's Computer Use plumbing), so nothing breaks
-- edits `config.toml` surgically: backup first, single-line change, verify, restore on failure
-- is idempotent — re-run it any time, e.g. after a Codex Desktop update rewrites the notify line
+The installer keeps the notifier that was already configured and calls it after writing its own notification. It backs up `config.toml`, changes only the `notify` line, verifies the result, and restores the backup if verification fails. You can run it again after a Codex Desktop update changes the notifier path.
 
-The viewer does not depend on the hook; they are independent. The hook is the completion ping, the viewer is the live view.
+The viewer does not need this hook. It only adds completion notifications.
 
 ## Security notes
 
-- The server binds to `127.0.0.1` only — nothing is exposed to the network.
-- The viewer itself is read-only; it never writes to session files or steers sessions.
-- Lifecycle and process-control requests reject untrusted browser origins.
-- The kill feature runs `taskkill` on a PID you explicitly pick and confirm, and re-verifies the PID belongs to a codex-related process right before killing. Session-to-process matching is a start-time heuristic (rollout files contain no PID) — read the shown command line before killing, especially `codex app-server`, which hosts *all* plugin handoffs.
+- The server listens on `127.0.0.1`, so it is not exposed to the network.
+- The viewer never writes to Codex session files or sends instructions back to a session.
+- Control requests reject untrusted browser origins.
+- The Windows stop feature runs `taskkill` only after you choose and confirm a PID. It checks the process again immediately before killing it. Rollout files do not contain a PID, so the suggested match is based on start time. Check the command line before stopping `codex app-server`, since that process may host several handoffs.
 
 ## Limitations
 
 - The tray launcher supports Windows and Linux. The Node server and CLI also run on macOS, but there is no macOS tray build yet.
-- **Exit** stops the Node viewer only when that tray instance started it. A viewer that was already running is left untouched.
+- `Exit` stops Node only when that tray instance started it. If Node was already running, the tray leaves it alone.
 - Sessions are detected by file growth. A session whose file stops growing for 20 s shows as IDLE even if the process is still alive (e.g. long-running silent tool call).
 - The rollout schema is not a public API. The parser is schema-tolerant and skips unknown shapes silently; if an event type renders as a gap, extend `simplify()` in `codex-live-viewer.js`.
 
 ## Project layout
 
-- `codex-live-viewer.js` — zero-dependency Node server, CLI, rollout parser, and browser UI
-- `tray-launcher/` — native Windows/Linux tray and Node lifecycle shell
-- `install-codex-notify-hook.bat` — optional Windows completion notifications
-- `.github/workflows/release.yml` — builds release ZIPs when a `v*` tag is pushed
+- `codex-live-viewer.js`: Node server, CLI, rollout parser, and browser UI
+- `tray-launcher/`: Windows and Linux tray app
+- `install-codex-notify-hook.bat`: optional Windows completion notifications
+- `.github/workflows/release.yml`: builds release ZIPs when a `v*` tag is pushed
 
 ## License
 
