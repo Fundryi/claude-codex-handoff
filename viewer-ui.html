@@ -23,6 +23,8 @@
       --purple: #c49cff;
       --sidebar-width: 340px;
       font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
     }
 
     * { box-sizing: border-box; }
@@ -34,6 +36,8 @@
       display: flex;
       overflow: hidden;
       min-width: 0;
+      font-size: 13px;
+      line-height: 1.45;
     }
     button, input { font: inherit; }
     button { color: inherit; }
@@ -85,7 +89,7 @@
       font-weight: 800;
     }
     #brand-copy { min-width: 0; flex: 1; }
-    #brand-title { font-weight: 650; letter-spacing: .1px; }
+    #brand-title { font-size: 14px; font-weight: 650; letter-spacing: .1px; }
     #brand-subtitle { color: var(--muted); font-size: 11px; margin-top: 1px; }
     #connection {
       display: inline-flex;
@@ -109,6 +113,7 @@
       color: var(--fg);
       background: var(--bg);
       padding: 8px 10px;
+      font-size: 13px;
     }
     #search::placeholder { color: var(--faint); }
     #filters { display: grid; gap: 2px; margin-top: 8px; }
@@ -122,6 +127,9 @@
       font-size: 11px;
     }
     .filter-button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; }
+    .filter-button, .view-button, .toolbar-button {
+      transition: color .14s ease, background-color .14s ease, border-color .14s ease;
+    }
     .filter-button::before {
       content: '';
       width: 8px;
@@ -159,7 +167,7 @@
       border-bottom: 1px solid var(--border);
       border-left: 3px solid transparent;
       background: transparent;
-      padding: 10px 12px 11px 10px;
+      padding: 7px 12px 7px 10px;
       cursor: pointer;
       transition: background-color .14s ease, border-color .14s ease;
     }
@@ -182,6 +190,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .session-last { display: none; }
     .session-time { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
     .unread { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 7px var(--blue); }
     .status {
@@ -256,10 +265,11 @@
     .meta-button:hover { color: var(--blue); }
     #header-actions { display: flex; align-items: center; gap: 6px; flex: none; }
     #follow-button {
+      height: 32px;
       border: 1px solid var(--border);
       border-radius: 7px;
       background: transparent;
-      padding: 6px 9px;
+      padding: 0 10px;
       color: var(--muted);
       cursor: pointer;
       font-size: 11px;
@@ -336,7 +346,7 @@
     #feed {
       height: 100%;
       overflow: auto;
-      padding: 18px clamp(14px, 3vw, 36px) 50px;
+      padding: 11px clamp(14px, 3vw, 36px) 50px;
       scroll-behavior: smooth;
     }
     #feed-inner { width: min(100%, 1080px); margin: 0 auto; min-width: 0; }
@@ -353,13 +363,13 @@
       box-shadow: 0 8px 20px #0008;
       font-size: 11px;
     }
-    .event { min-width: 0; margin-bottom: 12px; }
+    .event { min-width: 0; margin-bottom: 7px; }
     .event-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
     .event-kind { font-weight: 700; font-size: 10px; letter-spacing: .45px; }
     .event-time { color: var(--faint); font-size: 10px; }
     .event-body {
       border-left: 2px solid var(--border);
-      padding: 7px 10px;
+      padding: 4px 10px;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: break-word;
@@ -414,12 +424,6 @@
       font-size: 11px;
     }
     .load-earlier:hover { background: var(--hover); color: var(--fg); }
-    body.compact .session { padding-top: 7px; padding-bottom: 7px; }
-    body.compact .session-last { display: none; }
-    body.compact #feed { padding-top: 11px; }
-    body.compact .event { margin-bottom: 7px; }
-    body.compact .event-body { padding-top: 4px; padding-bottom: 4px; }
-
     @media (max-width: 760px) {
       #side {
         position: fixed;
@@ -488,7 +492,6 @@
       <button class="view-button" data-view="activity" type="button">Activity</button>
       <button class="view-button" data-view="raw" type="button">Raw log</button>
       <span class="spacer"></span>
-      <button id="density-button" class="toolbar-button" type="button">Compact</button>
       <button id="autoscroll-button" class="toolbar-button" type="button">Auto-scroll</button>
     </div>
 
@@ -508,7 +511,6 @@
       filter: 'ACTIVE',
       query: '',
       view: 'activity',
-      density: 'comfortable',
       autoFollow: true,
       autoScroll: true,
       selected: null
@@ -541,7 +543,6 @@
     var processPanel = document.getElementById('process-panel');
     var followButton = document.getElementById('follow-button');
     var autoscrollButton = document.getElementById('autoscroll-button');
-    var densityButton = document.getElementById('density-button');
     var connection = document.getElementById('connection');
     var connectionText = document.getElementById('connection-text');
 
@@ -614,13 +615,11 @@
         : savedWidth;
       document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
       document.body.classList.toggle('side-collapsed', !!prefs.sideCollapsed);
-      document.body.classList.toggle('compact', prefs.density === 'compact');
       search.value = prefs.query || '';
       followButton.classList.toggle('on', !!prefs.autoFollow);
       followButton.textContent = prefs.autoFollow ? 'Following newest' : 'Follow newest';
       autoscrollButton.classList.toggle('on', !!prefs.autoScroll);
       autoscrollButton.textContent = prefs.autoScroll ? 'Auto-scroll on' : 'Auto-scroll off';
-      densityButton.textContent = prefs.density === 'compact' ? 'Comfortable' : 'Compact';
       document.querySelectorAll('.view-button').forEach(function (button) {
         button.classList.toggle('on', button.dataset.view === prefs.view);
       });
@@ -648,12 +647,7 @@
         count.className = 'count';
         count.textContent = statusCount(item.id);
         button.appendChild(count);
-        button.addEventListener('click', function () {
-          prefs.filter = item.id;
-          savePrefs();
-          renderFilters();
-          renderList();
-        });
+        button.addEventListener('click', function () { chooseFilter(item.id); });
         filters.appendChild(button);
       });
     }
@@ -675,11 +669,27 @@
         (filter === 'ACTIVE' ? session.status !== 'DONE' : session.status === filter);
     }
 
-    function followSelectedStatus() {
+    function chooseFilter(filter) {
+      prefs.filter = filter;
+      prefs.autoFollow = false;
+      savePrefs();
+      applyPrefs();
+      renderFilters();
+      renderList();
+    }
+
+    function followSelectedStatus(previousStatus) {
       var session = currentSession();
-      if (!session || prefs.filter === 'ALL' || filterIncludes(session, prefs.filter)) return;
+      if (!session || !previousStatus || session.status === previousStatus || prefs.filter === 'ALL' || filterIncludes(session, prefs.filter)) return;
       prefs.filter = session.status;
       savePrefs();
+    }
+
+    function followRunningSession(running) {
+      if (!prefs.autoFollow || !running) return;
+      if (!filterIncludes(running, prefs.filter)) prefs.filter = 'LIVE';
+      if (running.id !== selected) selectSession(running.id, false);
+      else savePrefs();
     }
 
     function renderList() {
@@ -931,11 +941,6 @@
         renderFeed();
       });
     });
-    densityButton.addEventListener('click', function () {
-      prefs.density = prefs.density === 'compact' ? 'comfortable' : 'compact';
-      savePrefs();
-      applyPrefs();
-    });
     autoscrollButton.addEventListener('click', function () {
       prefs.autoScroll = !prefs.autoScroll;
       savePrefs();
@@ -944,10 +949,12 @@
     });
     followButton.addEventListener('click', function () {
       prefs.autoFollow = true;
+      var running = newestRunning();
+      followRunningSession(running);
       savePrefs();
       applyPrefs();
-      var running = newestRunning();
-      if (running) selectSession(running.id, false);
+      renderFilters();
+      renderList();
     });
     jumpLatest.addEventListener('click', scrollToLatest);
     feed.addEventListener('scroll', function () {
@@ -1063,6 +1070,8 @@
     events.onmessage = function (message) {
       var data = JSON.parse(message.data);
       if (data.type === 'sessions') {
+        var previousSelectedSession = currentSession();
+        var previousSelectedStatus = previousSelectedSession ? previousSelectedSession.status : null;
         data.sessions.forEach(function (session) {
           var oldStatus = previousStatus[session.id];
           if (seeded && session.id !== selected && oldStatus !== session.status) unread.add(session.id);
@@ -1071,12 +1080,9 @@
         sessions = data.sessions;
         seeded = true;
         if (selected && !sessions.some(function (session) { return session.id === selected; })) selected = null;
-        if (prefs.autoFollow) {
-          var running = newestRunning();
-          if (running && running.id !== selected) selectSession(running.id, false);
-        }
+        followRunningSession(newestRunning());
         if (!selected && sessions.length) selectSession(sessions[0].id, false);
-        followSelectedStatus();
+        followSelectedStatus(previousSelectedStatus);
         renderFilters();
         renderList();
         renderHeader();

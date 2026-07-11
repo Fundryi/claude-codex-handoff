@@ -22,7 +22,7 @@ Codex already writes its session events to `~/.codex/sessions/YYYY/MM/DD/rollout
 - The newest live session opens automatically until you choose a session yourself.
 - Each session shows its thread ID and the matching `codex resume <id>` command.
 - The responsive dashboard includes search, human-readable status filters, Activity and Raw log views, a collapsible and resizable session list, and a safer task-actions menu.
-- Layout and display preferences are saved in the browser, including sidebar width, selected filter, feed view, density, auto-follow, and auto-scroll.
+- Layout and display preferences are saved in the browser, including sidebar width, selected filter, feed view, auto-follow, and auto-scroll.
 - On Windows, you can inspect matching Codex processes and stop a stuck task after confirming the PID.
 - A small Rust tray app starts the Node viewer in the background on Windows and Linux.
 - The tray shows a native notification when a Codex task finishes.
@@ -105,7 +105,10 @@ When the tray is connected, the hook keeps logging and calling the original noti
 
 ## Project layout
 
-- `codex-live-viewer.js`: Node server, CLI, rollout parser, and browser UI
+- `codex-live-viewer.js`: Node server, CLI, rollout parser, and embedded fallback UI
+- `viewer-ui.html`: zero-dependency responsive browser interface
+- `docs/UI-THEME.md`: visual system and interaction rules
+- `tests/`: Node regression tests for browser navigation state
 - `tray-launcher/`: Windows and Linux tray app
 - `install-codex-notify-hook.bat`: optional Windows completion notifications
 - `.github/workflows/release.yml`: builds release ZIPs when a `v*` tag is pushed

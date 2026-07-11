@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node codex-live-viewer.js serve",
     "stop": "node codex-live-viewer.js stop",
+    "test": "node --test tests/*.test.js",
     "tray": "cargo run --manifest-path tray-launcher/Cargo.toml",
     "build:tray": "cargo build --release --locked --manifest-path tray-launcher/Cargo.toml"
   },
