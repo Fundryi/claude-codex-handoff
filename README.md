@@ -34,7 +34,9 @@ Requires [Node.js 18+](https://nodejs.org).
 
 ### Windows
 
-Download and extract `Codex-Live-Viewer-Windows-x64.zip`, then double-click `Codex Live Viewer.exe`. The app starts in the system tray without opening a terminal. Double-click the tray icon to open the viewer, or right-click it for `Open viewer` and `Exit`.
+Download and extract `Codex-Live-Viewer-Windows-x64.zip`, then double-click `Codex Live Viewer.exe`. The app starts in the system tray without opening a terminal. Double-click the tray icon to open the viewer, or right-click it for status, `Open viewer`, `Restart viewer`, and `Exit`.
+
+The tray checks its Node child once per second. If the background server exits, the icon turns red, the menu shows `Status: Stopped`, and a native notification points to `Restart viewer`. A successful restart restores the blue icon and dashboard without restarting the tray app.
 
 ### Linux desktop
 

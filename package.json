@@ -1,6 +1,6 @@
 {
   "name": "codex-live-viewer",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Lightweight tray and browser dashboard for all local Codex CLI sessions, including headless handoffs.",
   "main": "codex-live-viewer.js",
