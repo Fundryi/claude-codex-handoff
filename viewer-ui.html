@@ -1,0 +1,1118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Live Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: #111720;
+      --panel-2: #171e28;
+      --hover: #1b2531;
+      --selected: #16263a;
+      --border: #293241;
+      --fg: #e6edf3;
+      --muted: #8c9bab;
+      --faint: #637083;
+      --blue: #67a8ff;
+      --green: #4ac26b;
+      --yellow: #e5b849;
+      --red: #ff6b63;
+      --purple: #c49cff;
+      --sidebar-width: 340px;
+      font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      overflow: hidden;
+      min-width: 0;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, [role="separator"]:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+    .icon-button {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: transparent;
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+    }
+    .icon-button:hover { background: var(--hover); }
+    .muted { color: var(--muted); }
+    .mono { font-family: "Cascadia Code", Consolas, monospace; }
+
+    #side {
+      width: var(--sidebar-width);
+      min-width: 240px;
+      max-width: 55vw;
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex: none;
+    }
+    body.side-collapsed #side { display: none; }
+    #brand {
+      min-height: 57px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    #brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: linear-gradient(145deg, #3379d5, #74b5ff);
+      display: grid;
+      place-items: center;
+      color: #08111f;
+      font-weight: 800;
+    }
+    #brand-copy { min-width: 0; flex: 1; }
+    #brand-title { font-weight: 650; letter-spacing: .1px; }
+    #brand-subtitle { color: var(--muted); font-size: 11px; margin-top: 1px; }
+    #connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #connection-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--yellow);
+    }
+    #connection.connected #connection-dot { background: var(--green); }
+    #connection.disconnected #connection-dot { background: var(--red); }
+
+    #side-controls { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); }
+    #search {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--fg);
+      background: var(--bg);
+      padding: 8px 10px;
+    }
+    #search::placeholder { color: var(--faint); }
+    #filters { display: grid; gap: 2px; margin-top: 8px; }
+    .filter-button, .view-button {
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .filter-button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; }
+    .filter-button::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #7b8794;
+      flex: none;
+    }
+    .filter-button[data-filter="ACTIVE"]::before { background: var(--blue); }
+    .filter-button[data-filter="LIVE"]::before {
+      width: 9px;
+      height: 9px;
+      border: 2px solid var(--blue);
+      border-top-color: transparent;
+      background: transparent;
+      animation: spin .8s linear infinite;
+    }
+    .filter-button[data-filter="IDLE"]::before { background: var(--yellow); }
+    .filter-button[data-filter="STALE"]::before { background: #ee964b; }
+    .filter-button[data-filter="DONE"]::before { background: var(--green); }
+    .filter-button[data-filter="ALL"]::before { background: #7b8794; }
+    .filter-button:hover, .view-button:hover { background: var(--hover); color: var(--fg); }
+    .filter-button.on, .view-button.on {
+      border-color: #36577c;
+      background: #172a40;
+      color: #b9d8ff;
+    }
+    .count { opacity: .7; margin-left: auto; }
+    #list { overflow-y: auto; min-height: 0; flex: 1; }
+    .session {
+      width: 100%;
+      display: block;
+      text-align: left;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      border-left: 3px solid transparent;
+      background: transparent;
+      padding: 10px 12px 11px 10px;
+      cursor: pointer;
+      transition: background-color .14s ease, border-color .14s ease;
+    }
+    .session:hover { background: var(--hover); }
+    .session.selected { background: var(--selected); border-left-color: var(--blue); }
+    .session-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .session-title {
+      margin-top: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-project, .session-last {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-time { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
+    .unread { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 7px var(--blue); }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      transition: color .15s ease, background-color .15s ease;
+    }
+    .status.LIVE { background: #172f4d; color: #80bdff; }
+    .status.LIVE::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      margin-right: 5px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    .status.IDLE { background: #473a19; color: #f0cb6e; }
+    .status.STALE { background: #4a2c12; color: #f0a254; }
+    .status.DONE { background: #173923; color: #72dc8c; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
+
+    #splitter {
+      width: 5px;
+      flex: none;
+      cursor: col-resize;
+      background: var(--border);
+      border: 0;
+      padding: 0;
+      touch-action: none;
+    }
+    #splitter:hover, #splitter.dragging { background: var(--blue); }
+    body.side-collapsed #splitter { display: none; }
+
+    #main { min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #task-header {
+      position: relative;
+      padding: 11px 15px 10px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex: none;
+    }
+    #header-top { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    #show-side { display: none; flex: none; }
+    body.side-collapsed #show-side { display: inline-grid; }
+    #task-copy { flex: 1; min-width: 0; }
+    #task-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    #task-title {
+      font-weight: 650;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #task-meta { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    .meta-item { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meta-button {
+      border: 0;
+      padding: 0;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .meta-button:hover { color: var(--blue); }
+    #header-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+    #follow-button {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: transparent;
+      padding: 6px 9px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    #follow-button:hover, #follow-button.on { color: var(--fg); background: var(--hover); }
+    #action-menu {
+      position: absolute;
+      right: 14px;
+      top: 48px;
+      width: 190px;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-2);
+      box-shadow: 0 12px 30px #0008;
+      z-index: 5;
+    }
+    #action-menu button {
+      width: 100%;
+      border: 0;
+      border-radius: 5px;
+      padding: 8px 9px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #action-menu button:hover { background: var(--hover); }
+    #stop-button { color: #ff8f88; }
+    #process-panel {
+      margin-top: 9px;
+      padding-top: 9px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .process { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; overflow-wrap: anywhere; }
+    .kill-button {
+      border: 0;
+      border-radius: 5px;
+      padding: 3px 7px;
+      background: #6d2925;
+      color: #ffd0cc;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+      flex: none;
+    }
+
+    #feed-toolbar {
+      min-height: 43px;
+      padding: 7px 14px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      border-bottom: 1px solid var(--border);
+      background: #0e141c;
+      flex: none;
+    }
+    #feed-toolbar .spacer { flex: 1; }
+    .toolbar-button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .toolbar-button:hover, .toolbar-button.on { background: var(--hover); color: var(--fg); }
+    #feed-wrap { min-height: 0; flex: 1; position: relative; overflow: hidden; }
+    #feed {
+      height: 100%;
+      overflow: auto;
+      padding: 18px clamp(14px, 3vw, 36px) 50px;
+      scroll-behavior: smooth;
+    }
+    #feed-inner { width: min(100%, 1080px); margin: 0 auto; min-width: 0; }
+    #jump-latest {
+      position: absolute;
+      right: 20px;
+      bottom: 16px;
+      border: 1px solid #416891;
+      border-radius: 999px;
+      background: #172b42;
+      color: #c2ddff;
+      padding: 7px 12px;
+      cursor: pointer;
+      box-shadow: 0 8px 20px #0008;
+      font-size: 11px;
+    }
+    .event { min-width: 0; margin-bottom: 12px; }
+    .event-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+    .event-kind { font-weight: 700; font-size: 10px; letter-spacing: .45px; }
+    .event-time { color: var(--faint); font-size: 10px; }
+    .event-body {
+      border-left: 2px solid var(--border);
+      padding: 7px 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      line-height: 1.55;
+      font-size: 13px;
+    }
+    .event.user .event-kind { color: var(--blue); }
+    .event.user .event-body { border-left-color: #376da8; background: #101b28; }
+    .event.agent .event-kind { color: var(--green); }
+    .event.agent .event-body { border-left-color: #2f7341; }
+    .event.done .event-kind { color: var(--green); }
+    .event.err .event-kind { color: var(--red); }
+    .event.sys .event-kind { color: var(--muted); }
+    .event.internal .event-kind { color: var(--purple); }
+    details.technical {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #0e141c;
+      overflow: hidden;
+    }
+    details.technical summary {
+      padding: 7px 10px;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    details.technical pre {
+      margin: 0;
+      border-top: 1px solid var(--border);
+      padding: 10px;
+      color: #b8c5d1;
+      font: 11px/1.55 "Cascadia Code", Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .feed-empty { color: var(--muted); text-align: center; padding: 70px 25px; }
+    .feed-empty strong { display: block; color: var(--fg); font-size: 15px; margin-bottom: 7px; }
+    .load-earlier {
+      width: 100%;
+      margin: 0 0 16px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 10px;
+      background: var(--panel);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .load-earlier:hover { background: var(--hover); color: var(--fg); }
+    body.compact .session { padding-top: 7px; padding-bottom: 7px; }
+    body.compact .session-last { display: none; }
+    body.compact #feed { padding-top: 11px; }
+    body.compact .event { margin-bottom: 7px; }
+    body.compact .event-body { padding-top: 4px; padding-bottom: 4px; }
+
+    @media (max-width: 760px) {
+      #side {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 20;
+        width: min(88vw, 360px) !important;
+        max-width: none;
+        min-width: 0;
+        transform: translateX(-102%);
+        transition: transform .18s ease;
+        box-shadow: 15px 0 40px #000a;
+      }
+      body.mobile-side-open #side { transform: translateX(0); display: flex; }
+      body.side-collapsed #side { display: flex; }
+      #splitter { display: none !important; }
+      #show-side { display: inline-grid; }
+      #hide-side { display: inline-grid; }
+      #task-header { padding-left: 10px; padding-right: 10px; }
+      #task-meta { gap: 4px 9px; }
+      #follow-button { display: none; }
+      #feed-toolbar { padding-left: 8px; padding-right: 8px; overflow-x: auto; }
+      #feed { padding-left: 12px; padding-right: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <aside id="side" aria-label="Codex sessions">
+    <div id="brand">
+      <div id="brand-mark" aria-hidden="true">C</div>
+      <div id="brand-copy">
+        <div id="brand-title">Codex Live Viewer</div>
+        <div id="brand-subtitle"><span id="connection"><span id="connection-dot"></span><span id="connection-text">Connecting</span></span></div>
+      </div>
+      <button id="hide-side" class="icon-button" type="button" title="Collapse session list" aria-label="Collapse session list">&#x2039;</button>
+    </div>
+    <div id="side-controls">
+      <input id="search" type="search" placeholder="Search tasks, projects, or IDs" aria-label="Search sessions">
+      <div id="filters" aria-label="Filter sessions"></div>
+    </div>
+    <div id="list"></div>
+  </aside>
+
+  <div id="splitter" role="separator" aria-label="Resize session list" aria-orientation="vertical" tabindex="0"></div>
+
+  <main id="main">
+    <header id="task-header">
+      <div id="header-top">
+        <button id="show-side" class="icon-button" type="button" title="Show session list" aria-label="Show session list">&#x2630;</button>
+        <div id="task-copy">
+          <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-title">Select a task</span></div>
+          <div id="task-meta"><span class="meta-item">Running tasks are selected automatically</span></div>
+        </div>
+        <div id="header-actions">
+          <button id="follow-button" type="button" title="Automatically select the newest running task">Follow newest</button>
+          <button id="actions-button" class="icon-button" type="button" title="Task actions" aria-label="Task actions" aria-expanded="false">&#x22EF;</button>
+        </div>
+      </div>
+      <div id="action-menu" hidden>
+        <button id="copy-resume" type="button">Copy resume command</button>
+        <button id="stop-button" type="button">Stop task process&#x2026;</button>
+      </div>
+      <div id="process-panel" hidden></div>
+    </header>
+
+    <div id="feed-toolbar">
+      <button class="view-button" data-view="activity" type="button">Activity</button>
+      <button class="view-button" data-view="raw" type="button">Raw log</button>
+      <span class="spacer"></span>
+      <button id="density-button" class="toolbar-button" type="button">Compact</button>
+      <button id="autoscroll-button" class="toolbar-button" type="button">Auto-scroll</button>
+    </div>
+
+    <div id="feed-wrap">
+      <div id="feed"><div id="feed-inner"></div></div>
+      <button id="jump-latest" type="button" hidden>Jump to latest</button>
+    </div>
+  </main>
+
+  <script>
+    'use strict';
+
+    var STORAGE_KEY = 'codex-live-viewer-ui-v1';
+    var defaults = {
+      sideWidth: 340,
+      sideCollapsed: false,
+      filter: 'ACTIVE',
+      query: '',
+      view: 'activity',
+      density: 'comfortable',
+      autoFollow: true,
+      autoScroll: true,
+      selected: null
+    };
+    var prefs = loadPrefs();
+    var sessions = [];
+    var selected = prefs.selected;
+    var store = {};
+    var seeded = false;
+    var unread = new Set();
+    var previousStatus = {};
+    var lastListSignature = '';
+    var lastFilterSignature = '';
+    var renderLimits = {};
+
+    var side = document.getElementById('side');
+    var splitter = document.getElementById('splitter');
+    var list = document.getElementById('list');
+    var filters = document.getElementById('filters');
+    var search = document.getElementById('search');
+    var feed = document.getElementById('feed');
+    var feedInner = document.getElementById('feed-inner');
+    var jumpLatest = document.getElementById('jump-latest');
+    var taskTitle = document.getElementById('task-title');
+    var taskStatus = document.getElementById('task-status');
+    var taskMeta = document.getElementById('task-meta');
+    var actionMenu = document.getElementById('action-menu');
+    var actionsButton = document.getElementById('actions-button');
+    var stopButton = document.getElementById('stop-button');
+    var processPanel = document.getElementById('process-panel');
+    var followButton = document.getElementById('follow-button');
+    var autoscrollButton = document.getElementById('autoscroll-button');
+    var densityButton = document.getElementById('density-button');
+    var connection = document.getElementById('connection');
+    var connectionText = document.getElementById('connection-text');
+
+    var STATUS = {
+      LIVE: { label: 'Running', help: 'The session is actively writing new events.' },
+      IDLE: { label: 'Waiting', help: 'No new events for 20 seconds. It may be thinking or running a quiet tool.' },
+      STALE: { label: 'Possibly stuck', help: 'No new events for more than 10 minutes and no completion event.' },
+      DONE: { label: 'Finished', help: 'The session reported that the task completed.' }
+    };
+    var FILTERS = [
+      { id: 'ACTIVE', label: 'Active' },
+      { id: 'LIVE', label: 'Running' },
+      { id: 'IDLE', label: 'Waiting' },
+      { id: 'STALE', label: 'Stuck' },
+      { id: 'DONE', label: 'Finished' },
+      { id: 'ALL', label: 'All' }
+    ];
+
+    function loadPrefs() {
+      try {
+        var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        return Object.assign({}, defaults, saved);
+      } catch (_) {
+        return Object.assign({}, defaults);
+      }
+    }
+
+    function savePrefs() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch (_) {}
+    }
+
+    function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+    function currentSession() { return sessions.find(function (session) { return session.id === selected; }); }
+    function projectName(cwd) {
+      var parts = String(cwd || '').split(/[\\/]/).filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : 'Unknown project';
+    }
+    function sessionStart(id) {
+      var match = String(id || '').match(/rollout-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/);
+      return match ? new Date(+match[1], match[2] - 1, +match[3], +match[4], +match[5], +match[6]).getTime() : 0;
+    }
+    function relativeTime(timestamp) {
+      if (!timestamp) return '';
+      var seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+      if (seconds < 5) return 'now';
+      if (seconds < 60) return seconds + 's ago';
+      var minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return minutes + 'm ago';
+      var hours = Math.floor(minutes / 60);
+      if (hours < 24) return hours + 'h ago';
+      return Math.floor(hours / 24) + 'd ago';
+    }
+    function eventTime(timestamp) {
+      try { return timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''; }
+      catch (_) { return ''; }
+    }
+    function firstLine(text, limit) {
+      var value = String(text || '').replace(/\s+/g, ' ').trim();
+      return value.length > limit ? value.slice(0, limit - 1) + '\u2026' : value;
+    }
+    function setConnection(state, label) {
+      connection.className = state;
+      connectionText.textContent = label;
+    }
+
+    function applyPrefs() {
+      var savedWidth = Math.max(240, Number(prefs.sideWidth) || 340);
+      prefs.sideWidth = window.innerWidth > 760
+        ? clamp(savedWidth, 240, Math.max(260, window.innerWidth * .55))
+        : savedWidth;
+      document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
+      document.body.classList.toggle('side-collapsed', !!prefs.sideCollapsed);
+      document.body.classList.toggle('compact', prefs.density === 'compact');
+      search.value = prefs.query || '';
+      followButton.classList.toggle('on', !!prefs.autoFollow);
+      followButton.textContent = prefs.autoFollow ? 'Following newest' : 'Follow newest';
+      autoscrollButton.classList.toggle('on', !!prefs.autoScroll);
+      autoscrollButton.textContent = prefs.autoScroll ? 'Auto-scroll on' : 'Auto-scroll off';
+      densityButton.textContent = prefs.density === 'compact' ? 'Comfortable' : 'Compact';
+      document.querySelectorAll('.view-button').forEach(function (button) {
+        button.classList.toggle('on', button.dataset.view === prefs.view);
+      });
+    }
+
+    function statusCount(id) {
+      if (id === 'ALL') return sessions.length;
+      if (id === 'ACTIVE') return sessions.filter(function (s) { return s.status !== 'DONE'; }).length;
+      return sessions.filter(function (s) { return s.status === id; }).length;
+    }
+
+    function renderFilters() {
+      var signature = JSON.stringify([prefs.filter, FILTERS.map(function (item) { return [item.id, statusCount(item.id)]; })]);
+      if (signature === lastFilterSignature) return;
+      lastFilterSignature = signature;
+      filters.textContent = '';
+      FILTERS.forEach(function (item) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.filter = item.id;
+        button.className = 'filter-button' + (prefs.filter === item.id ? ' on' : '');
+        button.setAttribute('aria-pressed', prefs.filter === item.id ? 'true' : 'false');
+        button.append(document.createTextNode(item.label + ' '));
+        var count = document.createElement('span');
+        count.className = 'count';
+        count.textContent = statusCount(item.id);
+        button.appendChild(count);
+        button.addEventListener('click', function () {
+          prefs.filter = item.id;
+          savePrefs();
+          renderFilters();
+          renderList();
+        });
+        filters.appendChild(button);
+      });
+    }
+
+    function visibleSessions() {
+      var query = String(prefs.query || '').trim().toLowerCase();
+      return sessions.filter(function (session) {
+        var statusMatch = prefs.filter === 'ALL' ||
+          (prefs.filter === 'ACTIVE' ? session.status !== 'DONE' : session.status === prefs.filter);
+        if (!statusMatch) return false;
+        if (!query) return true;
+        return [session.title, session.cwd, session.threadId, session.id, session.model]
+          .some(function (value) { return String(value || '').toLowerCase().includes(query); });
+      });
+    }
+
+    function filterIncludes(session, filter) {
+      return filter === 'ALL' ||
+        (filter === 'ACTIVE' ? session.status !== 'DONE' : session.status === filter);
+    }
+
+    function followSelectedStatus() {
+      var session = currentSession();
+      if (!session || prefs.filter === 'ALL' || filterIncludes(session, prefs.filter)) return;
+      prefs.filter = session.status;
+      savePrefs();
+    }
+
+    function renderList() {
+      var shown = visibleSessions();
+      var signature = JSON.stringify([
+        prefs.filter,
+        prefs.query,
+        selected,
+        Math.floor(Date.now() / 10000),
+        shown.map(function (session) {
+          return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id)];
+        })
+      ]);
+      if (signature === lastListSignature) return;
+      lastListSignature = signature;
+      list.textContent = '';
+      shown.forEach(function (session) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'session' + (session.id === selected ? ' selected' : '');
+        button.setAttribute('aria-pressed', session.id === selected ? 'true' : 'false');
+
+        var top = document.createElement('div');
+        top.className = 'session-top';
+        var badge = document.createElement('span');
+        badge.className = 'status ' + session.status;
+        badge.textContent = STATUS[session.status].label;
+        badge.title = STATUS[session.status].help;
+        top.appendChild(badge);
+        if (unread.has(session.id)) {
+          var marker = document.createElement('span');
+          marker.className = 'unread';
+          marker.title = 'New activity';
+          top.appendChild(marker);
+        }
+        var time = document.createElement('span');
+        time.className = 'session-time';
+        time.textContent = relativeTime(session.lastGrow);
+        top.appendChild(time);
+
+        var title = document.createElement('div');
+        title.className = 'session-title';
+        title.textContent = session.title || 'Untitled Codex task';
+        title.title = session.title || '';
+        var project = document.createElement('div');
+        project.className = 'session-project';
+        project.textContent = projectName(session.cwd);
+        project.title = session.cwd || '';
+        var last = document.createElement('div');
+        last.className = 'session-last';
+        last.textContent = session.lastEvent || 'No displayable activity yet';
+
+        button.append(top, title, project, last);
+        button.addEventListener('click', function () { selectSession(session.id, true); });
+        list.appendChild(button);
+      });
+
+      if (!shown.length) {
+        var empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.textContent = sessions.length ? 'No tasks match this filter.' : 'Waiting for Codex sessions\u2026';
+        list.appendChild(empty);
+      }
+    }
+
+    function renderHeader() {
+      var session = currentSession();
+      taskMeta.textContent = '';
+      if (!session) {
+        taskStatus.hidden = true;
+        taskTitle.textContent = 'Select a task';
+        var hint = document.createElement('span');
+        hint.className = 'meta-item';
+        hint.textContent = sessions.length ? 'Choose a task from the session list.' : 'New Codex tasks appear here automatically.';
+        taskMeta.appendChild(hint);
+        stopButton.hidden = true;
+        document.getElementById('copy-resume').hidden = true;
+        return;
+      }
+
+      taskStatus.hidden = false;
+      taskStatus.className = 'status ' + session.status;
+      taskStatus.textContent = STATUS[session.status].label;
+      taskStatus.title = STATUS[session.status].help;
+      taskTitle.textContent = session.title || 'Untitled Codex task';
+      taskTitle.title = session.title || '';
+
+      var values = [
+        { text: projectName(session.cwd), title: session.cwd || '' },
+        { text: session.model || 'Unknown model', title: 'Model' },
+        { text: relativeTime(session.lastGrow), title: 'Last activity' }
+      ];
+      values.forEach(function (item) {
+        var span = document.createElement('span');
+        span.className = 'meta-item';
+        span.textContent = item.text;
+        span.title = item.title;
+        taskMeta.appendChild(span);
+      });
+      if (session.threadId) {
+        var thread = document.createElement('button');
+        thread.type = 'button';
+        thread.className = 'meta-button mono';
+        thread.textContent = 'Thread ' + session.threadId.slice(0, 8) + '\u2026';
+        thread.title = 'Copy thread ID: ' + session.threadId;
+        thread.addEventListener('click', function () { copyText(session.threadId, thread, 'Thread copied'); });
+        taskMeta.appendChild(thread);
+      }
+      stopButton.hidden = session.status === 'DONE';
+      document.getElementById('copy-resume').hidden = !session.threadId;
+    }
+
+    function isInternal(event) {
+      if (event.kind !== 'agent') return false;
+      var text = String(event.text || '').trim();
+      return /^<(permissions|skills|apps|plugins|recommended_plugins|environment_context|developer|multi_agent_mode)/i.test(text) ||
+        text.includes('You are `/root`, the primary agent') ||
+        text.includes('<collaboration_mode>');
+    }
+
+    function eventVisible(event) {
+      return prefs.view === 'raw' || !isInternal(event);
+    }
+
+    function technicalEvent(event) {
+      return ['cmd', 'out', 'patch', 'tool', 'think'].includes(event.kind);
+    }
+
+    function eventLabel(event) {
+      if (isInternal(event)) return 'INTERNAL';
+      return ({ user: 'USER', agent: 'CODEX', cmd: 'COMMAND', out: 'OUTPUT', patch: 'PATCH', tool: 'TOOL', think: 'THINKING', done: 'COMPLETE', err: 'ERROR', sys: 'STATUS' })[event.kind] || 'EVENT';
+    }
+
+    function createEvent(event) {
+      var isLongMessage = ['user', 'agent'].includes(event.kind) && String(event.text || '').length > 3000;
+      if (technicalEvent(event) || isLongMessage) {
+        var details = document.createElement('details');
+        details.className = 'event technical ' + event.kind;
+        if (prefs.view === 'raw') details.open = event.kind === 'patch';
+        var summary = document.createElement('summary');
+        summary.textContent = eventLabel(event) + '  ' + eventTime(event.ts) + '  ' + firstLine(event.text, 150) + (isLongMessage ? '  (expand)' : '');
+        var pre = document.createElement('pre');
+        pre.textContent = event.detail || event.text || '';
+        details.append(summary, pre);
+        return details;
+      }
+
+      var article = document.createElement('article');
+      article.className = 'event ' + event.kind + (isInternal(event) ? ' internal' : '');
+      var head = document.createElement('div');
+      head.className = 'event-head';
+      var kind = document.createElement('span');
+      kind.className = 'event-kind';
+      kind.textContent = eventLabel(event);
+      var time = document.createElement('span');
+      time.className = 'event-time';
+      time.textContent = eventTime(event.ts);
+      head.append(kind, time);
+      var body = document.createElement('div');
+      body.className = 'event-body';
+      body.textContent = event.text || '';
+      article.append(head, body);
+      return article;
+    }
+
+    function renderFeed(preservePosition) {
+      feedInner.textContent = '';
+      var allEvents = (store[selected] || []).filter(eventVisible);
+      var renderKey = String(selected || '') + '|' + prefs.view;
+      var defaultLimit = prefs.view === 'raw' ? 80 : 160;
+      var limit = renderLimits[renderKey] || defaultLimit;
+      var hiddenCount = Math.max(0, allEvents.length - limit);
+      var events = hiddenCount ? allEvents.slice(hiddenCount) : allEvents;
+      if (!selected || !allEvents.length) {
+        var empty = document.createElement('div');
+        empty.className = 'feed-empty';
+        var strong = document.createElement('strong');
+        strong.textContent = selected ? 'No activity to show' : 'Choose a task to inspect';
+        var detail = document.createElement('span');
+        detail.textContent = selected && prefs.view === 'activity'
+          ? 'Switch to Raw log to inspect internal events.'
+          : 'Running tasks are selected automatically unless Follow newest is paused.';
+        empty.append(strong, detail);
+        feedInner.appendChild(empty);
+      } else {
+        var fragment = document.createDocumentFragment();
+        if (hiddenCount) {
+          var earlier = document.createElement('button');
+          earlier.type = 'button';
+          earlier.className = 'load-earlier';
+          earlier.textContent = 'Show earlier activity (' + hiddenCount + ' hidden)';
+          earlier.addEventListener('click', function () {
+            var oldHeight = feed.scrollHeight;
+            var oldTop = feed.scrollTop;
+            renderLimits[renderKey] = limit + 100;
+            renderFeed(true);
+            requestAnimationFrame(function () { feed.scrollTop = oldTop + (feed.scrollHeight - oldHeight); });
+          });
+          fragment.appendChild(earlier);
+        }
+        events.forEach(function (event) { fragment.appendChild(createEvent(event)); });
+        feedInner.appendChild(fragment);
+      }
+      if (prefs.autoScroll && !preservePosition) requestAnimationFrame(scrollToLatest);
+      jumpLatest.hidden = true;
+    }
+
+    function selectSession(id, byUser) {
+      if (byUser) prefs.autoFollow = false;
+      selected = id;
+      prefs.selected = id;
+      unread.delete(id);
+      processPanel.hidden = true;
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+      savePrefs();
+      applyPrefs();
+      renderList();
+      renderHeader();
+      renderFeed();
+      if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
+    }
+
+    function newestRunning() { return sessions.find(function (session) { return session.status === 'LIVE'; }); }
+    function scrollToLatest() { feed.scrollTop = feed.scrollHeight; jumpLatest.hidden = true; }
+    function nearBottom() { return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 90; }
+
+    async function copyText(text, button, successLabel) {
+      var old = button.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = successLabel;
+        window.setTimeout(function () { button.textContent = old; }, 1200);
+      } catch (_) {
+        window.prompt('Copy this value:', text);
+      }
+    }
+
+    search.addEventListener('input', function () {
+      prefs.query = search.value;
+      savePrefs();
+      renderList();
+    });
+    document.querySelectorAll('.view-button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        prefs.view = button.dataset.view;
+        savePrefs();
+        applyPrefs();
+        renderFeed();
+      });
+    });
+    densityButton.addEventListener('click', function () {
+      prefs.density = prefs.density === 'compact' ? 'comfortable' : 'compact';
+      savePrefs();
+      applyPrefs();
+    });
+    autoscrollButton.addEventListener('click', function () {
+      prefs.autoScroll = !prefs.autoScroll;
+      savePrefs();
+      applyPrefs();
+      if (prefs.autoScroll) scrollToLatest();
+    });
+    followButton.addEventListener('click', function () {
+      prefs.autoFollow = true;
+      savePrefs();
+      applyPrefs();
+      var running = newestRunning();
+      if (running) selectSession(running.id, false);
+    });
+    jumpLatest.addEventListener('click', scrollToLatest);
+    feed.addEventListener('scroll', function () {
+      jumpLatest.hidden = nearBottom();
+    }, { passive: true });
+
+    document.getElementById('hide-side').addEventListener('click', function () {
+      if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
+      else {
+        prefs.sideCollapsed = true;
+        savePrefs();
+        applyPrefs();
+      }
+    });
+    document.getElementById('show-side').addEventListener('click', function () {
+      if (window.innerWidth <= 760) document.body.classList.add('mobile-side-open');
+      else {
+        prefs.sideCollapsed = false;
+        savePrefs();
+        applyPrefs();
+      }
+    });
+
+    splitter.addEventListener('pointerdown', function (event) {
+      splitter.setPointerCapture(event.pointerId);
+      splitter.classList.add('dragging');
+    });
+    splitter.addEventListener('pointermove', function (event) {
+      if (!splitter.hasPointerCapture(event.pointerId)) return;
+      prefs.sideWidth = clamp(event.clientX, 240, window.innerWidth * .55);
+      document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
+    });
+    splitter.addEventListener('pointerup', function (event) {
+      if (splitter.hasPointerCapture(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
+      splitter.classList.remove('dragging');
+      savePrefs();
+    });
+    splitter.addEventListener('keydown', function (event) {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      prefs.sideWidth = clamp(prefs.sideWidth + (event.key === 'ArrowRight' ? 16 : -16), 240, window.innerWidth * .55);
+      savePrefs();
+      applyPrefs();
+    });
+
+    actionsButton.addEventListener('click', function () {
+      actionMenu.hidden = !actionMenu.hidden;
+      actionsButton.setAttribute('aria-expanded', actionMenu.hidden ? 'false' : 'true');
+    });
+    document.addEventListener('click', function (event) {
+      if (actionMenu.hidden || actionMenu.contains(event.target) || actionsButton.contains(event.target)) return;
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+    });
+    document.getElementById('copy-resume').addEventListener('click', function () {
+      var session = currentSession();
+      if (session && session.threadId) copyText('codex resume ' + session.threadId, this, 'Resume command copied');
+    });
+
+    stopButton.addEventListener('click', async function () {
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+      processPanel.hidden = false;
+      processPanel.textContent = 'Looking for matching Codex processes\u2026';
+      var processes = [];
+      try { processes = await (await fetch('/procs')).json(); } catch (_) {}
+      processPanel.textContent = '';
+      if (!processes.length) {
+        processPanel.textContent = 'No matching Codex processes were found. The task may already have exited.';
+        return;
+      }
+      var started = sessionStart(selected);
+      processes.sort(function (a, b) { return Math.abs(a.started - started) - Math.abs(b.started - started); });
+      var closeMatch = processes.some(function (process) { return started && Math.abs(process.started - started) < 15000; });
+      if (started && !closeMatch) {
+        var warning = document.createElement('div');
+        warning.style.color = 'var(--yellow)';
+        warning.style.marginBottom = '8px';
+        warning.textContent = 'No process closely matches this task start time. Shared app-server processes can host several tasks; stopping one may affect all of them.';
+        processPanel.appendChild(warning);
+      }
+      processes.forEach(function (process) {
+        var row = document.createElement('div');
+        row.className = 'process';
+        var kill = document.createElement('button');
+        kill.type = 'button';
+        kill.className = 'kill-button';
+        kill.textContent = 'STOP';
+        kill.addEventListener('click', async function () {
+          if (!window.confirm('Stop PID ' + process.pid + ' (' + process.name + ') and its entire child process tree?\n\nThis cannot be undone.')) return;
+          var message = '';
+          try { message = await (await fetch('/kill?pid=' + process.pid, { method: 'POST' })).text(); }
+          catch (error) { message = 'Request failed: ' + error; }
+          window.alert(message);
+          processPanel.hidden = true;
+        });
+        var description = document.createElement('span');
+        description.className = 'mono';
+        description.textContent = 'PID ' + process.pid + '  ' + process.name + '  ' + String(process.cmd || '').slice(0, 180);
+        row.append(kill, description);
+        processPanel.appendChild(row);
+      });
+    });
+
+    window.addEventListener('resize', function () {
+      applyPrefs();
+      if (window.innerWidth > 760) document.body.classList.remove('mobile-side-open');
+    });
+
+    var events = new EventSource('/events');
+    events.onopen = function () { setConnection('connected', 'Live updates connected'); };
+    events.onerror = function () { setConnection('disconnected', 'Reconnecting\u2026'); };
+    events.onmessage = function (message) {
+      var data = JSON.parse(message.data);
+      if (data.type === 'sessions') {
+        data.sessions.forEach(function (session) {
+          var oldStatus = previousStatus[session.id];
+          if (seeded && session.id !== selected && oldStatus !== session.status) unread.add(session.id);
+          previousStatus[session.id] = session.status;
+        });
+        sessions = data.sessions;
+        seeded = true;
+        if (selected && !sessions.some(function (session) { return session.id === selected; })) selected = null;
+        if (prefs.autoFollow) {
+          var running = newestRunning();
+          if (running && running.id !== selected) selectSession(running.id, false);
+        }
+        if (!selected && sessions.length) selectSession(sessions[0].id, false);
+        followSelectedStatus();
+        renderFilters();
+        renderList();
+        renderHeader();
+      }
+      if (data.type === 'snapshot') {
+        store[data.session] = data.events;
+        if (data.session === selected) renderFeed();
+      }
+      if (data.type === 'events') {
+        var existing = store[data.session] = store[data.session] || [];
+        existing.push.apply(existing, data.events);
+        if (existing.length > 500) existing.splice(0, existing.length - 500);
+        if (data.session === selected) {
+          var shouldFollow = prefs.autoScroll && nearBottom();
+          data.events.filter(eventVisible).forEach(function (event) {
+            var key = String(selected || '') + '|' + prefs.view;
+            var limit = renderLimits[key] || (prefs.view === 'raw' ? 80 : 160);
+            var rendered = feedInner.querySelectorAll('.event');
+            if (rendered.length >= limit && rendered.length) rendered[0].remove();
+            feedInner.appendChild(createEvent(event));
+          });
+          if (shouldFollow) requestAnimationFrame(scrollToLatest);
+          else jumpLatest.hidden = false;
+        } else {
+          unread.add(data.session);
+          renderList();
+        }
+      }
+    };
+
+    applyPrefs();
+    renderFilters();
+    renderList();
+    renderHeader();
+    renderFeed();
+    window.setInterval(function () { renderList(); renderHeader(); }, 10000);
+  </script>
+</body>
+</html>

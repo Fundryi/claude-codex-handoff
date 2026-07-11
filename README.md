@@ -21,6 +21,8 @@ Codex already writes its session events to `~/.codex/sessions/YYYY/MM/DD/rollout
 - The feed includes prompts, shell commands, command output, patches, reasoning summaries, agent messages, and completion events.
 - The newest live session opens automatically until you choose a session yourself.
 - Each session shows its thread ID and the matching `codex resume <id>` command.
+- The responsive dashboard includes search, human-readable status filters, Activity and Raw log views, a collapsible and resizable session list, and a safer task-actions menu.
+- Layout and display preferences are saved in the browser, including sidebar width, selected filter, feed view, density, auto-follow, and auto-scroll.
 - On Windows, you can inspect matching Codex processes and stop a stuck task after confirming the PID.
 - A small Rust tray app starts the Node viewer in the background on Windows and Linux.
 - The tray shows a native notification when a Codex task finishes.
