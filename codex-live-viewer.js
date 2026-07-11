@@ -80,9 +80,12 @@ function simplify(line) {
     const it = p.type || "";
     if (it === "message") {
       const role = p.role || "";
+      // user-role response_items are either injected context dumps (plugin lists,
+      // env blocks) or duplicates of event_msg user_message - skip them
+      if (role === "user") return null;
       const text = (p.content || []).map(c => c.text || c.input_text || c.output_text || "").join("");
       if (!text.trim()) return null;
-      return { kind: role === "user" ? "user" : "agent", ts, text };
+      return { kind: "agent", ts, text };
     }
     if (it === "function_call") {
       let args = p.arguments;
@@ -160,6 +163,12 @@ function ingest(file) {
       if (ev.id) s.meta.threadId = ev.id;
       continue;
     }
+    if (ev.kind === "user" && !s.meta.title) {
+      // first line that looks like an actual prompt - skip injected <context> tag lines
+      const line = String(ev.text).split("\n").map(l => l.trim())
+        .find(l => l && !l.startsWith("<") && !l.startsWith("</"));
+      if (line) s.meta.title = line.slice(0, 100);
+    }
     s.events.push(ev);
     fresh.push(ev);
     if (s.events.length > MAX_EVENTS_KEPT) s.events.splice(0, s.events.length - MAX_EVENTS_KEPT);
@@ -178,6 +187,7 @@ function sessionSummary(s) {
   return {
     id: s.id,
     threadId: s.meta.threadId || "",
+    title: s.meta.title || "",
     cwd: s.meta.cwd || "",
     model: s.meta.model || "",
     status,
@@ -197,6 +207,17 @@ function tick() {
   for (const f of files) ingest(f);
   for (const key of sessions.keys()) if (!files.includes(key)) sessions.delete(key);
   broadcast({ type: "sessions", sessions: files.map(f => sessions.get(f)).filter(Boolean).map(sessionSummary) });
+}
+
+// fs.watch makes updates near-instant (~50ms); the 1s poll stays as fallback
+let kickTimer = null;
+function kick() {
+  if (kickTimer) return;
+  kickTimer = setTimeout(() => { kickTimer = null; tick(); }, 50);
+}
+function watchSessions() {
+  try { fs.watch(SESSIONS_DIR, { recursive: true }, kick); }
+  catch { /* recursive watch unsupported on some platforms - poll covers it */ }
 }
 
 // ---------------- process control (kill stuck sessions) ----------------
@@ -242,6 +263,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Codex Live
 .IDLE{background:var(--yellow);color:#000}.DONE{background:#30363d;color:var(--dim)}
 .STALE{background:#6e2c2c;color:var(--fg)}
 @keyframes pulse{50%{opacity:.55}}
+.title{font-weight:bold;font-size:12px;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:4px}
 .cwd{color:var(--dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lastev{color:var(--dim);font-size:11px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #main{flex:1;display:flex;flex-direction:column}
@@ -264,6 +286,9 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Codex Live
 .k-err{background:var(--red);color:#000}.k-sys{background:#30363d;color:var(--dim)}
 .ev.cmd .t{color:var(--yellow)}.ev.out .t{color:var(--dim)}.ev.think .t{color:var(--dim);font-style:italic}
 .ev.patch .t{color:var(--purple)}
+.seccap{margin:16px 0 6px;font-size:10px;font-weight:bold;letter-spacing:1.5px;padding-bottom:3px;border-bottom:1px solid var(--border);color:var(--dim)}
+.seccap:first-child{margin-top:0}
+.seccap.user{color:var(--blue)}.seccap.agent{color:var(--green)}.seccap.work{color:var(--yellow)}
 details{margin-top:2px}summary{color:var(--dim);cursor:pointer;font-size:11px}
 #empty{color:var(--dim);padding:40px;text-align:center}
 </style></head><body>
@@ -290,7 +315,7 @@ function renderList(){
   renderTabs();
   const shown=sessions.filter(s=>filter==='ALL'||s.status===filter);
   // skip DOM rebuild when nothing visible changed (rebuilding every tick killed text selection)
-  const sig=JSON.stringify([filter,selected,shown.map(s=>[s.id,s.status,s.lastEvent,unread.has(s.id)])]);
+  const sig=JSON.stringify([filter,selected,shown.map(s=>[s.id,s.status,s.lastEvent,s.title,unread.has(s.id)])]);
   if(sig===lastSig)return;lastSig=sig;
   list.innerHTML='';
   for(const s of shown){
@@ -298,8 +323,10 @@ function renderList(){
     // session text (cwd, last message) comes from rollout files - never innerHTML it
     d.innerHTML='<div class="top"><span class="badge '+s.status+'">'+s.status+'</span>'
       +(unread.has(s.id)?'<span class="dot" title="new activity"></span>':'')
-      +'<span class="when"></span></div><div class="cwd"></div><div class="lastev"></div>';
+      +'<span class="when"></span></div><div class="title"></div><div class="cwd"></div><div class="lastev"></div>';
     d.querySelector('.when').textContent=new Date(s.lastGrow).toLocaleTimeString();
+    d.querySelector('.title').textContent=s.title||'(no prompt yet)';
+    d.querySelector('.title').title=s.title||'';
     d.querySelector('.cwd').textContent=s.cwd||s.id;
     d.querySelector('.lastev').textContent=s.lastEvent||'';
     d.onclick=()=>select(s.id,true);
@@ -380,13 +407,25 @@ stopbtn.onclick=async()=>{
     r.appendChild(b);r.appendChild(txt);stoplist.appendChild(r);
   }
 };
+// feed sections: caption row whenever the event category changes (user / agent / working / status)
+const CATS={user:'user',agent:'agent',cmd:'work',out:'work',patch:'work',tool:'work',think:'work',sys:'sys',done:'sys',err:'sys'};
+const CAPTION={user:'▸ USER',agent:'▸ AGENT',work:'▸ WORKING — commands / files / thinking',sys:'▸ STATUS'};
+let lastCat=null;
+function appendEv(e){
+  const c=CATS[e.kind]||'sys';
+  if(c!==lastCat){
+    const cap=document.createElement('div');cap.className='seccap '+c;cap.textContent=CAPTION[c];
+    feed.appendChild(cap);lastCat=c;
+  }
+  feed.appendChild(evHtml(e));
+}
 // full feed rebuild ONLY on session switch / snapshot; live events append incrementally,
-// so selecting text in the feed is never wiped by the 1s poll
+// so selecting text in the feed is never wiped by updates
 function renderFeed(){
-  feed.innerHTML='';const evs=store[selected]||[];
+  feed.innerHTML='';lastCat=null;const evs=store[selected]||[];
   renderHead();
   if(!evs.length){feed.innerHTML='<div id="empty">no displayable events yet</div>';return}
-  for(const e of evs)feed.appendChild(evHtml(e));
+  for(const e of evs)appendEv(e);
   feed.scrollTop=feed.scrollHeight;
 }
 const es=new EventSource('/events');
@@ -408,7 +447,7 @@ es.onmessage=m=>{
   if(d.type==='snapshot'){store[d.session]=d.events;if(d.session===selected)renderFeed()}
   if(d.type==='events'){(store[d.session]=store[d.session]||[]).push(...d.events);
     if(store[d.session].length>500)store[d.session].splice(0,store[d.session].length-500);
-    if(d.session===selected){for(const e of d.events)feed.appendChild(evHtml(e));feed.scrollTop=feed.scrollHeight}
+    if(d.session===selected){for(const e of d.events)appendEv(e);feed.scrollTop=feed.scrollHeight}
     else if(seeded){unread.add(d.session);lastSig='';renderList()}}
 };
 </script></body></html>`;
@@ -466,6 +505,7 @@ function serve() {
     console.log("[OK] Codex Live Viewer -> http://localhost:" + PORT);
     console.log("[OK] Watching: " + SESSIONS_DIR);
     tick();
+    watchSessions();
     setInterval(tick, POLL_MS);
   });
 }

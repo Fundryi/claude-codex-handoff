@@ -10,7 +10,9 @@ A read-only live dashboard for **all** [OpenAI Codex CLI](https://github.com/ope
 
 ## Features
 
-- **Live session list** with status tabs: LIVE (pulsing, actively writing) / IDLE / DONE / ALL
+- **Near-instant updates** — filesystem watch pushes events to the browser via SSE within ~50 ms of Codex writing them (1 s poll as fallback)
+- **Live session list** with task titles (first user prompt) and status tabs: LIVE (pulsing, actively writing) / IDLE / STALE / DONE / ALL
+- **Sectioned feed** — events grouped under USER / AGENT / WORKING / STATUS captions so you can scan what the AI is doing at a glance
 - **Unread markers** — a dot appears when a session you're not watching changes status or gets new events; click the session to mark it read
 - **Live event feed** — user prompts, shell commands, command output, file patches (expandable), reasoning summaries, agent messages, task completion
 - **Auto-follow** — newest LIVE session is selected automatically until you click one yourself
@@ -22,21 +24,21 @@ A read-only live dashboard for **all** [OpenAI Codex CLI](https://github.com/ope
 
 Requires [Node.js 18+](https://nodejs.org).
 
-**Windows:** double-click `codex-viewer.bat` — it starts the server in the background and opens your browser. No window stays open. From a terminal, the same file is a CLI:
+**Windows:** double-click `codex-viewer.bat` — it opens your browser and runs the server in that window. Close the window (or Ctrl+C) to stop. Prefer no window at all?
 
 ```bat
-codex-viewer start     &:: run in background, open browser
-codex-viewer stop      &:: stop the background server
-codex-viewer restart
-codex-viewer status
+codex-viewer.bat tray
 ```
 
-**Any platform** (same commands, no wrapper):
+runs the server hidden with a system-tray icon (double-click = open viewer, right-click = Open / Exit).
+
+**Any platform:**
 
 ```sh
-node codex-live-viewer.js start    # background + browser
-node codex-live-viewer.js stop
 node codex-live-viewer.js serve    # foreground (what npm start does)
+node codex-live-viewer.js start    # detached background + open browser
+node codex-live-viewer.js stop     # stop the background server
+node codex-live-viewer.js status
 ```
 
 ## Configuration
