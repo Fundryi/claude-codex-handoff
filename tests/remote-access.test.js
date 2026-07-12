@@ -105,3 +105,10 @@ test("origin: foreign host = untrusted", () => {
   assert.equal(ctx.trustedControlOrigin({ headers: { origin: "https://evil.example", host: "localhost:8377" } }), false);
   assert.equal(ctx.trustedControlOrigin({ headers: { origin: "not a url", host: "localhost:8377" } }), false);
 });
+
+test("parseTunnelUrl: finds trycloudflare URL in cloudflared stderr chatter", () => {
+  const ctx = extract("parseTunnelUrl");
+  const noise = "2026-07-12T10:00:01Z INF +--------+\nINF |  https://witty-fox-example.trycloudflare.com  |\nINF +--------+\n";
+  assert.equal(ctx.parseTunnelUrl(noise), "https://witty-fox-example.trycloudflare.com");
+  assert.equal(ctx.parseTunnelUrl("no url here"), null);
+});

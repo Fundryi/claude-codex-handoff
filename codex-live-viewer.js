@@ -72,6 +72,41 @@ function tunnelAuthDecision(headers, rawUrl, token, tunnelActive) {
   if (m && eq(m[1])) return { allow: true };
   return { allow: false };
 }
+
+function parseTunnelUrl(text) {
+  const m = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/.exec(text);
+  return m ? m[0] : null;
+}
+
+let tunnelChild = null;
+function startTunnel(token) {
+  const args = FLAGS.tunnelToken
+    ? ["tunnel", "run", "--token", FLAGS.tunnelToken]
+    : ["tunnel", "--url", "http://127.0.0.1:" + PORT];
+  tunnelChild = spawn("cloudflared", args, { stdio: ["ignore", "ignore", "pipe"] });
+  tunnelChild.on("error", () => {
+    tunnelChild = null;
+    console.error("[X] cloudflared not found on PATH - tunnel disabled, local serving continues.");
+    console.error("    Install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/");
+  });
+  if (FLAGS.tunnelToken) {
+    console.log("[OK] Named tunnel starting - open your configured hostname with /?token=" + token);
+    return;
+  }
+  let buf = "";
+  let printed = false;
+  tunnelChild.stderr.on("data", d => {
+    if (printed) return;
+    buf += d.toString();
+    const url = parseTunnelUrl(buf);
+    if (url) { printed = true; console.log("[OK] Tunnel -> " + url + "/?token=" + token); }
+  });
+}
+function stopTunnel() {
+  if (!tunnelChild) return;
+  try { tunnelChild.kill(); } catch {}
+  tunnelChild = null;
+}
 const SESSIONS_DIR = path.join(CODEX_HOME, "sessions");
 const ARCHIVED_DIR = path.join(CODEX_HOME, "archived_sessions");
 const POLL_MS = 1000;          // how often we check files for growth
@@ -729,6 +764,7 @@ function serve() {
         }
       }
     }
+    if (FLAGS.tunnel) startTunnel(TOKEN);
     console.log("[OK] Watching: " + SESSIONS_DIR);
     tick();
     watchSessions();
@@ -766,6 +802,8 @@ function serve() {
     }
   });
   server.listen(PORT, HOST);
+  process.on("exit", stopTunnel);
+  for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => process.exit(0));
 }
 
 function ping(cb) {
