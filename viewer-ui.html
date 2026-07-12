@@ -149,6 +149,7 @@
     .filter-button[data-filter="STALE"]::before { background: #ee964b; }
     .filter-button[data-filter="DONE"]::before { background: var(--green); }
     .filter-button[data-filter="ALL"]::before { background: #7b8794; }
+    .filter-button[data-filter="ARCHIVED"]::before { background: #9fb0c3; }
     .filter-button:hover, .view-button:hover { background: var(--hover); color: var(--fg); }
     .filter-button.on, .view-button.on {
       border-color: #36577c;
@@ -216,6 +217,7 @@
     .status.IDLE { background: #473a19; color: #f0cb6e; }
     .status.STALE { background: #4a2c12; color: #f0a254; }
     .status.DONE { background: #173923; color: #72dc8c; }
+    .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
 
@@ -540,6 +542,7 @@
         <button id="copy-continue" type="button" title="codex exec resume — continue this task headlessly where it left off">Copy continue command</button>
         <button id="copy-fork" type="button" title="codex fork — experiment on a copy; the original session stays untouched">Copy fork command</button>
         <button id="copy-archive" type="button" title="codex archive — move this session out of the list permanently (paste in your terminal)">Copy archive command</button>
+        <button id="copy-unarchive" type="button" title="codex unarchive — move this session back into the active list (paste in your terminal)">Copy unarchive command</button>
         <button id="dismiss-button" type="button" title="Hide this task from all filters except All. Viewer-only, undoable.">Dismiss task</button>
         <button id="stop-button" type="button">Stop task process&#x2026;</button>
       </div>
@@ -625,7 +628,8 @@
       LIVE: { label: 'Running', help: 'The session is actively writing new events.' },
       IDLE: { label: 'Waiting', help: 'No new events for 20 seconds. It may be thinking or running a quiet tool.' },
       STALE: { label: 'Possibly stuck', help: 'No new events for more than 10 minutes and no completion event.' },
-      DONE: { label: 'Finished', help: 'The session reported that the task completed.' }
+      DONE: { label: 'Finished', help: 'The session reported that the task completed.' },
+      ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' }
     };
     var FILTERS = [
       { id: 'ACTIVE', label: 'Active' },
@@ -633,6 +637,7 @@
       { id: 'IDLE', label: 'Waiting' },
       { id: 'STALE', label: 'Stuck' },
       { id: 'DONE', label: 'Finished' },
+      { id: 'ARCHIVED', label: 'Archived' },
       { id: 'ALL', label: 'All' }
     ];
 
@@ -814,7 +819,7 @@
         selected,
         Math.floor(Date.now() / 10000),
         shown.map(function (session) {
-          return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id), isDismissed(session.id)];
+          return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id), isDismissed(session.id), !!session.archived];
         })
       ]);
       if (signature === lastListSignature) return;
@@ -829,9 +834,10 @@
         var top = document.createElement('div');
         top.className = 'session-top';
         var badge = document.createElement('span');
-        badge.className = 'status ' + session.status;
-        badge.textContent = STATUS[session.status].label;
-        badge.title = waitReason(session) || STATUS[session.status].help;
+        var badgeStatus = session.archived ? 'ARCHIVED' : session.status;
+        badge.className = 'status ' + badgeStatus;
+        badge.textContent = STATUS[badgeStatus].label;
+        badge.title = waitReason(session) || STATUS[badgeStatus].help;
         top.appendChild(badge);
         if (unread.has(session.id)) {
           var marker = document.createElement('span');
@@ -881,16 +887,17 @@
         taskMeta.appendChild(hint);
         stopButton.hidden = true;
         document.getElementById('dismiss-button').hidden = true;
-        ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive'].forEach(function (id) {
+        ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive', 'copy-unarchive'].forEach(function (id) {
           document.getElementById(id).hidden = true;
         });
         return;
       }
 
       taskStatus.hidden = false;
-      taskStatus.className = 'status ' + session.status;
-      taskStatus.textContent = STATUS[session.status].label;
-      taskStatus.title = waitReason(session) || STATUS[session.status].help;
+      var headerStatus = session.archived ? 'ARCHIVED' : session.status;
+      taskStatus.className = 'status ' + headerStatus;
+      taskStatus.textContent = STATUS[headerStatus].label;
+      taskStatus.title = waitReason(session) || STATUS[headerStatus].help;
       taskTitle.textContent = session.title || 'Untitled Codex task';
       taskTitle.title = session.title || '';
 
@@ -925,13 +932,14 @@
         thread.addEventListener('click', function () { copyText(session.threadId, thread, 'Thread copied'); });
         taskMeta.appendChild(thread);
       }
-      stopButton.hidden = session.status === 'DONE';
+      stopButton.hidden = session.status === 'DONE' || !!session.archived;
       var dismissButton = document.getElementById('dismiss-button');
       dismissButton.hidden = false;
       dismissButton.textContent = isDismissed(session.id) ? 'Restore task' : 'Dismiss task';
       ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive'].forEach(function (id) {
-        document.getElementById(id).hidden = !session.threadId;
+        document.getElementById(id).hidden = !session.threadId || !!session.archived;
       });
+      document.getElementById('copy-unarchive').hidden = !session.threadId || !session.archived;
     }
 
     function isInternal(event) {
@@ -1218,7 +1226,8 @@
       { id: 'copy-resume', build: resumeCommand, done: 'Resume command copied' },
       { id: 'copy-continue', build: continueCommand, done: 'Continue command copied' },
       { id: 'copy-fork', build: forkCommand, done: 'Fork command copied' },
-      { id: 'copy-archive', build: archiveCommand, done: 'Archive command copied' }
+      { id: 'copy-archive', build: archiveCommand, done: 'Archive command copied' },
+      { id: 'copy-unarchive', build: unarchiveCommand, done: 'Unarchive command copied' }
     ].forEach(function (action) {
       document.getElementById(action.id).addEventListener('click', function () {
         var session = currentSession();
