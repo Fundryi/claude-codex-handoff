@@ -8,7 +8,7 @@ Read-only browser dashboard for local OpenAI Codex CLI sessions (including headl
 - `viewer-ui.html` — the entire frontend (HTML/CSS/JS in one file). Theme rules: `docs/UI-THEME.md`.
 - `tests/` — `node:test` suites. They extract functions from `codex-live-viewer.js` via regex + `vm.runInNewContext`, so keep function declarations self-contained (`function name(...) { ... }` at top level, no closures over outer state) or the extraction breaks.
 - `tray-launcher/` — Rust tray app that runs the Node server in the background (Windows/Linux).
-- `docs/superpowers/specs/` and `docs/superpowers/plans/` — active design specs and implementation plans. Finished ones move to `docs/superpowers/archive/` (gitignored, local only).
+- `docs/superpowers/` — design specs (`specs/`), implementation plans (`plans/`), finished ones in `archive/`. Whole dir is gitignored: plans/specs stay local, never committed.
 
 ## Hard rules
 
