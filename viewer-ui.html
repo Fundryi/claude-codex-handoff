@@ -687,7 +687,7 @@
       return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
     }
     function waitReason(session) {
-      if (!session || (session.status !== 'IDLE' && session.status !== 'STALE')) return '';
+      if (!session || session.archived || (session.status !== 'IDLE' && session.status !== 'STALE')) return '';
       var text = firstLine(session.lastText, 80);
       var phrase = ({
         cmd: 'running command "' + text + '"',
@@ -711,6 +711,7 @@
     }
     function forkCommand(threadId) { return 'codex fork ' + threadId; }
     function archiveCommand(threadId) { return 'codex archive ' + threadId; }
+    function unarchiveCommand(threadId) { return 'codex unarchive ' + threadId; }
     function dismissedHides(session, filter, dismissedIds) {
       return filter !== 'ALL' && (dismissedIds || []).indexOf(session.id) !== -1;
     }
@@ -739,8 +740,7 @@
     function statusCount(id) {
       if (id === 'ALL') return sessions.length;
       var pool = sessions.filter(function (s) { return !isDismissed(s.id); });
-      if (id === 'ACTIVE') return pool.filter(function (s) { return s.status !== 'DONE'; }).length;
-      return pool.filter(function (s) { return s.status === id; }).length;
+      return pool.filter(function (s) { return filterIncludes(s, id); }).length;
     }
 
     function renderFilters() {
@@ -769,9 +769,7 @@
       var query = String(prefs.query || '').trim().toLowerCase();
       return sessions.filter(function (session) {
         if (dismissedHides(session, prefs.filter, prefs.dismissed)) return false;
-        var statusMatch = prefs.filter === 'ALL' ||
-          (prefs.filter === 'ACTIVE' ? session.status !== 'DONE' : session.status === prefs.filter);
-        if (!statusMatch) return false;
+        if (!filterIncludes(session, prefs.filter)) return false;
         if (!query) return true;
         return [session.title, session.cwd, session.threadId, session.id, session.model]
           .some(function (value) { return String(value || '').toLowerCase().includes(query); });
@@ -779,6 +777,8 @@
     }
 
     function filterIncludes(session, filter) {
+      if (filter === 'ARCHIVED') return !!session.archived;
+      if (session.archived) return filter === 'ALL';
       return filter === 'ALL' ||
         (filter === 'ACTIVE' ? session.status !== 'DONE' : session.status === filter);
     }

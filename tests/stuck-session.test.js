@@ -90,3 +90,27 @@ test("dismissed sessions hide in every filter except All", () => {
   assert.equal(ctx.dismissedHides({ id: "b" }, "STALE", ["a"]), false);
   assert.equal(ctx.dismissedHides({ id: "a" }, "STALE", undefined), false);
 });
+
+const navigationSlice = script.match(/function filterIncludes[\s\S]*?\n    }/)[0];
+
+test("unarchive command builder", () => {
+  const ctx = helperContext();
+  assert.equal(ctx.unarchiveCommand("abc-123"), "codex unarchive abc-123");
+});
+
+test("archived sessions only appear in Archived and All filters", () => {
+  const ctx = {};
+  vm.runInNewContext(navigationSlice, ctx);
+  assert.equal(ctx.filterIncludes({ archived: true, status: "STALE" }, "ARCHIVED"), true);
+  assert.equal(ctx.filterIncludes({ archived: true, status: "STALE" }, "STALE"), false);
+  assert.equal(ctx.filterIncludes({ archived: true, status: "STALE" }, "ACTIVE"), false);
+  assert.equal(ctx.filterIncludes({ archived: true, status: "STALE" }, "ALL"), true);
+  assert.equal(ctx.filterIncludes({ archived: false, status: "STALE" }, "ARCHIVED"), false);
+  assert.equal(ctx.filterIncludes({ status: "LIVE" }, "ACTIVE"), true);
+  assert.equal(ctx.filterIncludes({ status: "DONE" }, "ACTIVE"), false);
+});
+
+test("waitReason stays silent for archived sessions", () => {
+  const ctx = helperContext();
+  assert.equal(ctx.waitReason({ status: "STALE", archived: true, quietMs: 60000, lastKind: "cmd", lastText: "x" }), "");
+});
