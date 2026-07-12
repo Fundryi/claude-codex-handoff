@@ -24,10 +24,11 @@ Codex already writes its session events to `~/.codex/sessions/YYYY/MM/DD/rollout
 - Sessions you are not watching get an unread dot when something changes.
 - The feed includes prompts, shell commands, command output, patches, reasoning summaries, agent messages, and completion events.
 - The newest live session opens automatically until you choose a session yourself.
-- Each session shows its thread ID and the matching `codex resume <id>` command.
+- The task menu copies ready-to-paste `codex resume`, `codex exec resume` (headless continue), and `codex fork` commands for the selected session.
+- Waiting and possibly-stuck sessions explain what they were last doing (running a command, thinking, waiting for a reply) and for how long.
 - The responsive dashboard includes search, human-readable status filters, Activity and Raw log views, a collapsible and resizable session list, and a safer task-actions menu.
 - Layout and display preferences are saved in the browser, including sidebar width, selected filter, feed view, auto-follow, and auto-scroll.
-- On Windows, you can inspect matching Codex processes and stop a stuck task after confirming the PID.
+- On Windows, you can inspect matching Codex processes and stop a stuck task through a detail dialog that shows the full command line and warns before touching shared `app-server`/MCP processes.
 - A small Rust tray app starts the Node viewer in the background on Windows and Linux.
 - The tray shows a native notification when a Codex task finishes.
 - The Node viewer itself has no npm dependencies.
@@ -95,12 +96,20 @@ The installer keeps the notifier that was already configured and calls it after 
 
 When the tray is connected, the hook keeps logging and calling the original notifier but suppresses its own toast. This prevents duplicate notifications. The viewer does not need the hook for normal operation.
 
+## Recovering a stuck session
+
+1. Check the status: a **Waiting** or **Possibly stuck** task shows what it was last doing (for example `running command "npm test"`) and for how long.
+2. If the process is truly stuck, open the task menu, choose `Stop task process…`, pick the matching PID, and review the confirmation dialog. It warns you when the process is a shared `app-server`/MCP host, because stopping one of those stops every task it hosts.
+3. Continue the work: `Copy continue command` gives you `codex exec resume <id> "…"`, which resumes the same thread headlessly and finishes the task. `Copy resume command` opens the thread interactively instead, and `Copy fork command` experiments on a copy while leaving the original session untouched. (Verified against codex-cli 0.144.1.)
+
+The viewer itself stays read-only: it never launches Codex or writes to session files. You paste the commands into your own terminal.
+
 ## Security notes
 
 - The server listens on `127.0.0.1`, so it is not exposed to the network.
 - The viewer never writes to Codex session files or sends instructions back to a session.
 - Control requests reject untrusted browser origins.
-- The Windows stop feature runs `taskkill` only after you choose and confirm a PID. It checks the process again immediately before killing it. Rollout files do not contain a PID, so the suggested match is based on start time. Check the command line before stopping `codex app-server`, since that process may host several handoffs.
+- The Windows stop feature runs `taskkill` only after you choose a PID and confirm it in a dialog that shows the full command line and start-time match. It checks the process again immediately before killing it. Rollout files do not contain a PID, so the suggested match is based on start time, and the dialog warns explicitly before stopping `codex app-server`/MCP processes that may host several handoffs.
 
 ## Limitations
 
