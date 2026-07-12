@@ -535,7 +535,9 @@
         </div>
       </div>
       <div id="action-menu" hidden>
-        <button id="copy-resume" type="button">Copy resume command</button>
+        <button id="copy-resume" type="button" title="codex resume — reopen this conversation interactively">Copy resume command</button>
+        <button id="copy-continue" type="button" title="codex exec resume — continue this task headlessly where it left off">Copy continue command</button>
+        <button id="copy-fork" type="button" title="codex fork — experiment on a copy; the original session stays untouched">Copy fork command</button>
         <button id="stop-button" type="button">Stop task process&#x2026;</button>
       </div>
       <div id="process-panel" hidden></div>
@@ -867,7 +869,9 @@
         hint.textContent = sessions.length ? 'Choose a task from the session list.' : 'New Codex tasks appear here automatically.';
         taskMeta.appendChild(hint);
         stopButton.hidden = true;
-        document.getElementById('copy-resume').hidden = true;
+        ['copy-resume', 'copy-continue', 'copy-fork'].forEach(function (id) {
+          document.getElementById(id).hidden = true;
+        });
         return;
       }
 
@@ -909,7 +913,9 @@
         taskMeta.appendChild(thread);
       }
       stopButton.hidden = session.status === 'DONE';
-      document.getElementById('copy-resume').hidden = !session.threadId;
+      ['copy-resume', 'copy-continue', 'copy-fork'].forEach(function (id) {
+        document.getElementById(id).hidden = !session.threadId;
+      });
     }
 
     function isInternal(event) {
@@ -1192,9 +1198,15 @@
       actionMenu.hidden = true;
       actionsButton.setAttribute('aria-expanded', 'false');
     });
-    document.getElementById('copy-resume').addEventListener('click', function () {
-      var session = currentSession();
-      if (session && session.threadId) copyText('codex resume ' + session.threadId, this, 'Resume command copied');
+    [
+      { id: 'copy-resume', build: resumeCommand, done: 'Resume command copied' },
+      { id: 'copy-continue', build: continueCommand, done: 'Continue command copied' },
+      { id: 'copy-fork', build: forkCommand, done: 'Fork command copied' }
+    ].forEach(function (action) {
+      document.getElementById(action.id).addEventListener('click', function () {
+        var session = currentSession();
+        if (session && session.threadId) copyText(action.build(session.threadId), this, action.done);
+      });
     });
 
     stopButton.addEventListener('click', async function () {
