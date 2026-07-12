@@ -37,6 +37,8 @@ const sessions = new Map();
 const sseClients = new Set();
 const notificationClients = new Set();
 const searchIndex = new Map(); // file -> { file, id, threadId, title, cwd, mtimeMs, archived }
+const pinnedFiles = new Map(); // file -> last-open timestamp (LRU, max 10)
+const MAX_PINNED = 10;
 let searchIndexReady = false;
 
 function collectRolloutFiles() {
@@ -287,6 +289,10 @@ function broadcastNotification(obj) {
 
 function tick() {
   const files = listRolloutFiles();
+  for (const [file] of pinnedFiles) {
+    if (!fs.existsSync(file)) { pinnedFiles.delete(file); continue; }
+    if (!files.includes(file)) files.push(file);
+  }
   for (const f of files) ingest(f);
   for (const key of sessions.keys()) if (!files.includes(key)) sessions.delete(key);
   broadcast({ type: "sessions", sessions: files.map(f => sessions.get(f)).filter(Boolean).map(sessionSummary) });
@@ -591,6 +597,22 @@ const server = http.createServer((req, res) => {
         res.end(err ? ("kill failed: " + String(se || err).slice(0, 300)) : "killed pid " + pid + " (+ child tree)");
       });
     });
+  } else if (req.url.startsWith("/open?id=")) {
+    if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    const id = decodeURIComponent(req.url.slice("/open?id=".length));
+    const entry = [...searchIndex.values()].find(e => e.id === id);
+    res.writeHead(entry ? 200 : 404, { "Content-Type": "application/json" });
+    if (!entry) return res.end(JSON.stringify({ ok: false, error: "unknown session id" }));
+    pinnedFiles.set(entry.file, Date.now());
+    while (pinnedFiles.size > MAX_PINNED) {
+      let oldestKey = null, oldestTs = Infinity;
+      for (const [file, ts] of pinnedFiles) if (ts < oldestTs) { oldestTs = ts; oldestKey = file; }
+      pinnedFiles.delete(oldestKey);
+    }
+    ingest(entry.file);
+    tick();
+    res.end(JSON.stringify({ ok: true, id }));
   } else if (req.url.startsWith("/search?q=")) {
     const q = decodeURIComponent(req.url.slice("/search?q=".length)).trim().toLowerCase();
     const terms = q.split(/\s+/).filter(Boolean).slice(0, 8);
