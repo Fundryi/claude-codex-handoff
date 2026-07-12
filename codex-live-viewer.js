@@ -21,6 +21,22 @@ const { execFile, spawn } = require("child_process");
 const APP_ID = "codex-live-viewer";
 const APP_VERSION = "1.2.0";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
+function parseFlags(argv) {
+  const flags = { cmd: null, host: null, tunnel: false, tunnelToken: null, token: null, flagArgv: [] };
+  const rest = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--host") { flags.host = argv[++i] || null; flags.flagArgv.push(a, flags.host); }
+    else if (a === "--tunnel") { flags.tunnel = true; flags.flagArgv.push(a); }
+    else if (a === "--tunnel-token") { flags.tunnelToken = argv[++i] || null; flags.tunnel = true; flags.flagArgv.push(a, flags.tunnelToken); }
+    else if (a === "--token") { flags.token = argv[++i] || null; flags.flagArgv.push(a, flags.token); }
+    else rest.push(a);
+  }
+  flags.cmd = rest[0] || "serve";
+  return flags;
+}
+const FLAGS = parseFlags(process.argv.slice(2));
+const HOST = FLAGS.host || process.env.CODEX_VIEWER_HOST || "127.0.0.1";
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_HOME, "sessions");
 const ARCHIVED_DIR = path.join(CODEX_HOME, "archived_sessions");
@@ -665,6 +681,15 @@ function serve() {
   let retries = 0;
   server.on("listening", () => {
     console.log("[OK] Codex Live Viewer -> http://localhost:" + PORT);
+    if (HOST !== "127.0.0.1") {
+      for (const list of Object.values(os.networkInterfaces())) {
+        for (const iface of list || []) {
+          if (iface.family === "IPv4" && !iface.internal) {
+            console.log("[OK] LAN -> http://" + iface.address + ":" + PORT);
+          }
+        }
+      }
+    }
     console.log("[OK] Watching: " + SESSIONS_DIR);
     tick();
     watchSessions();
@@ -685,23 +710,23 @@ function serve() {
         const req = http.request(BASE + "/shutdown", { method: "POST" }, r => {
           r.resume();
           retries++;
-          setTimeout(() => server.listen(PORT, "127.0.0.1"), 400);
+          setTimeout(() => server.listen(PORT, HOST), 400);
         });
         req.on("error", () => {
           retries++;
-          setTimeout(() => server.listen(PORT, "127.0.0.1"), 400);
+          setTimeout(() => server.listen(PORT, HOST), 400);
         });
         req.end();
       });
     } else if (retries < 5) {
       retries++;
-      setTimeout(() => server.listen(PORT, "127.0.0.1"), 400);
+      setTimeout(() => server.listen(PORT, HOST), 400);
     } else {
       console.error("[X] Could not take over port " + PORT + ".");
       process.exit(1);
     }
   });
-  server.listen(PORT, "127.0.0.1");
+  server.listen(PORT, HOST);
 }
 
 function ping(cb) {
@@ -732,7 +757,7 @@ function openBrowser() {
 function doStart() {
   ping(up => {
     if (up) { console.log("[OK] already running -> " + BASE); openBrowser(); return; }
-    spawn(process.execPath, [__filename, "serve"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    spawn(process.execPath, [__filename, "serve", ...FLAGS.flagArgv], { detached: true, stdio: "ignore", windowsHide: true }).unref();
     let tries = 0;
     const t = setInterval(() => ping(up2 => {
       if (up2) { clearInterval(t); console.log("[OK] Codex Live Viewer running -> " + BASE); openBrowser(); }
@@ -761,7 +786,7 @@ function doStop(cb) {
   });
 }
 
-const cmd = process.argv[2] || "serve";
+const cmd = FLAGS.cmd;
 if (cmd === "serve") serve();
 else if (cmd === "start") doStart();
 else if (cmd === "stop") doStop();
@@ -774,5 +799,10 @@ else {
   console.log("  restart  stop, then start");
   console.log("  status   is it running?");
   console.log("  serve    run in the foreground (default; what npm start does)");
+  console.log("Flags:");
+  console.log("  --host <addr>         bind address (default 127.0.0.1; 0.0.0.0 = LAN)");
+  console.log("  --tunnel              expose via Cloudflare quick tunnel (needs cloudflared)");
+  console.log("  --tunnel-token <t>    named Cloudflare tunnel (custom domain); implies --tunnel");
+  console.log("  --token <t>           fixed tunnel access token (default: auto-generated)");
   process.exit(cmd === "help" || cmd === "--help" ? 0 : 1);
 }
