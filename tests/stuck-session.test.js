@@ -114,3 +114,17 @@ test("waitReason stays silent for archived sessions", () => {
   const ctx = helperContext();
   assert.equal(ctx.waitReason({ status: "STALE", archived: true, quietMs: 60000, lastKind: "cmd", lastText: "x" }), "");
 });
+
+test("mergeHistoryResults drops sessions already shown live", () => {
+  const ctx = helperContext();
+  const results = [
+    { id: "a", title: "one" },
+    { id: "b", title: "two" },
+    { id: "c", title: "three" },
+  ];
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(ctx.mergeHistoryResults(results, ["b"]))),
+    [{ id: "a", title: "one" }, { id: "c", title: "three" }],
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.mergeHistoryResults(null, ["b"]))), []);
+});

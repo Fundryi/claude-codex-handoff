@@ -173,6 +173,15 @@
     .session:hover { background: var(--hover); }
     .session.selected { background: var(--selected); border-left-color: var(--blue); }
     .session.dismissed { opacity: .55; }
+    .history-caption {
+      padding: 10px 12px 4px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+    .status.HISTORY { background: #20262f; color: #8c9bab; }
     .session-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
     .session-title {
       margin-top: 7px;
@@ -598,6 +607,8 @@
     var lastListSignature = '';
     var lastFilterSignature = '';
     var renderLimits = {};
+    var historyResults = [];
+    var historySearchTimer = null;
 
     var side = document.getElementById('side');
     var splitter = document.getElementById('splitter');
@@ -720,6 +731,11 @@
     function dismissedHides(session, filter, dismissedIds) {
       return filter !== 'ALL' && (dismissedIds || []).indexOf(session.id) !== -1;
     }
+    function mergeHistoryResults(results, liveIds) {
+      return (results || []).filter(function (entry) {
+        return liveIds.indexOf(entry.id) === -1;
+      });
+    }
     function setConnection(state, label) {
       connection.className = state;
       connectionText.textContent = label;
@@ -820,7 +836,8 @@
         Math.floor(Date.now() / 10000),
         shown.map(function (session) {
           return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id), isDismissed(session.id), !!session.archived];
-        })
+        }),
+        historyResults.map(function (entry) { return entry.id; })
       ]);
       if (signature === lastListSignature) return;
       lastListSignature = signature;
@@ -872,6 +889,41 @@
         empty.className = 'empty-list';
         empty.textContent = sessions.length ? 'No tasks match this filter.' : 'Waiting for Codex sessions\u2026';
         list.appendChild(empty);
+      }
+      var history = String(prefs.query || '').trim()
+        ? mergeHistoryResults(historyResults, shown.map(function (session) { return session.id; }))
+        : [];
+      if (history.length) {
+        var caption = document.createElement('div');
+        caption.className = 'history-caption';
+        caption.textContent = 'History — older sessions (' + history.length + ')';
+        list.appendChild(caption);
+        history.forEach(function (entry) {
+          var row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'session';
+          var top = document.createElement('div');
+          top.className = 'session-top';
+          var badge = document.createElement('span');
+          badge.className = 'status ' + (entry.archived ? 'ARCHIVED' : 'HISTORY');
+          badge.textContent = entry.archived ? 'Archived' : 'History';
+          badge.title = 'Not in the live list. Click to load this session.';
+          top.appendChild(badge);
+          var time = document.createElement('span');
+          time.className = 'session-time';
+          time.textContent = relativeTime(entry.mtimeMs);
+          top.appendChild(time);
+          var title = document.createElement('div');
+          title.className = 'session-title';
+          title.textContent = entry.title || 'Untitled Codex task';
+          var project = document.createElement('div');
+          project.className = 'session-project';
+          project.textContent = projectName(entry.cwd);
+          project.title = entry.cwd || '';
+          row.append(top, title, project);
+          row.addEventListener('click', function () { openHistorySession(entry.id); });
+          list.appendChild(row);
+        });
       }
     }
 
@@ -1053,6 +1105,14 @@
       if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
     }
 
+    async function openHistorySession(id) {
+      try {
+        var response = await fetch('/open?id=' + encodeURIComponent(id), { method: 'POST' });
+        if (!response.ok) return;
+        selectSession(id, true);
+      } catch (_) {}
+    }
+
     function newestRunning() { return sessions.find(function (session) { return session.status === 'LIVE'; }); }
     function scrollToLatest() { feed.scrollTop = feed.scrollHeight; jumpLatest.hidden = true; }
     function nearBottom() { return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 90; }
@@ -1145,6 +1205,26 @@
       prefs.query = search.value;
       savePrefs();
       renderList();
+      window.clearTimeout(historySearchTimer);
+      var query = String(prefs.query || '').trim();
+      if (!query) {
+        historyResults = [];
+        lastListSignature = '';
+        renderList();
+        return;
+      }
+      historySearchTimer = window.setTimeout(async function () {
+        try {
+          var response = await fetch('/search?q=' + encodeURIComponent(query));
+          var data = await response.json();
+          if (String(prefs.query || '').trim() !== query) return; // stale response
+          historyResults = data.results || [];
+        } catch (_) {
+          historyResults = [];
+        }
+        lastListSignature = '';
+        renderList();
+      }, 250);
     });
     document.querySelectorAll('.view-button').forEach(function (button) {
       button.addEventListener('click', function () {
