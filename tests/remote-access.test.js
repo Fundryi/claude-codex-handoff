@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
+const crypto = require("node:crypto");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
 
@@ -39,4 +40,49 @@ test("parseFlags: --tunnel-token implies tunnel, --token pins auth token", () =>
   assert.equal(f.tunnel, true);
   assert.equal(f.tunnelToken, "eyJhbGc");
   assert.equal(f.token, "mysecret");
+});
+
+function authCtx() {
+  return extract("tunnelAuthDecision", { crypto, Buffer, URL });
+}
+const TOK = "aa11bb22cc33dd44ee55ff6677889900";
+
+test("auth: tunnel inactive = open", () => {
+  const ctx = authCtx();
+  assert.deepEqual({ ...ctx.tunnelAuthDecision({ "cf-connecting-ip": "1.2.3.4" }, "/", null, false) }, { allow: true });
+});
+
+test("auth: no cf-connecting-ip header = open (localhost/LAN)", () => {
+  const ctx = authCtx();
+  assert.deepEqual({ ...ctx.tunnelAuthDecision({}, "/procs", TOK, true) }, { allow: true });
+});
+
+test("auth: tunnel request without token = 401", () => {
+  const ctx = authCtx();
+  assert.equal(ctx.tunnelAuthDecision({ "cf-connecting-ip": "1.2.3.4" }, "/", TOK, true).allow, false);
+});
+
+test("auth: valid ?token= sets cookie and redirects to clean URL", () => {
+  const ctx = authCtx();
+  const d = ctx.tunnelAuthDecision({ "cf-connecting-ip": "1.2.3.4" }, "/?token=" + TOK, TOK, true);
+  assert.equal(d.allow, true);
+  assert.equal(d.setCookie, true);
+  assert.equal(d.redirect, "/");
+});
+
+test("auth: wrong ?token= = 401", () => {
+  const ctx = authCtx();
+  assert.equal(ctx.tunnelAuthDecision({ "cf-connecting-ip": "1.2.3.4" }, "/?token=wrong", TOK, true).allow, false);
+});
+
+test("auth: valid cookie = open, no redirect", () => {
+  const ctx = authCtx();
+  const headers = { "cf-connecting-ip": "1.2.3.4", cookie: "other=1; clv_token=" + TOK };
+  assert.deepEqual({ ...ctx.tunnelAuthDecision(headers, "/events", TOK, true) }, { allow: true });
+});
+
+test("auth: wrong cookie = 401", () => {
+  const ctx = authCtx();
+  const headers = { "cf-connecting-ip": "1.2.3.4", cookie: "clv_token=" + TOK.slice(0, -1) + "X" };
+  assert.equal(ctx.tunnelAuthDecision(headers, "/", TOK, true).allow, false);
 });

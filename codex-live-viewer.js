@@ -16,6 +16,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
@@ -38,6 +39,39 @@ function parseFlags(argv) {
 const FLAGS = parseFlags(process.argv.slice(2));
 const HOST = FLAGS.host || process.env.CODEX_VIEWER_HOST || "127.0.0.1";
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+const TOKEN_FILE = path.join(CODEX_HOME, "live-viewer-token");
+
+function loadToken() {
+  if (FLAGS.token) return FLAGS.token;
+  if (process.env.CODEX_VIEWER_TOKEN) return process.env.CODEX_VIEWER_TOKEN;
+  try {
+    const t = fs.readFileSync(TOKEN_FILE, "utf8").trim();
+    if (t) return t;
+  } catch {}
+  const t = crypto.randomBytes(16).toString("hex");
+  try { fs.writeFileSync(TOKEN_FILE, t, { mode: 0o600 }); } catch {}
+  return t;
+}
+const TOKEN = FLAGS.tunnel ? loadToken() : null;
+
+// Token auth for tunnel traffic only. cloudflared always sets cf-connecting-ip
+// and tunnel visitors cannot strip it; requests without it are local/LAN and trusted.
+function tunnelAuthDecision(headers, rawUrl, token, tunnelActive) {
+  if (!tunnelActive) return { allow: true };
+  if (!headers["cf-connecting-ip"]) return { allow: true };
+  if (!token) return { allow: false };
+  const eq = t => !!t && t.length === token.length && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(token));
+  const u = new URL(rawUrl, "http://local");
+  const qtoken = u.searchParams.get("token");
+  if (qtoken !== null) {
+    if (!eq(qtoken)) return { allow: false };
+    u.searchParams.delete("token");
+    return { allow: true, setCookie: true, redirect: u.pathname + u.search };
+  }
+  const m = /(?:^|;\s*)clv_token=([^;]*)/.exec(headers.cookie || "");
+  if (m && eq(m[1])) return { allow: true };
+  return { allow: false };
+}
 const SESSIONS_DIR = path.join(CODEX_HOME, "sessions");
 const ARCHIVED_DIR = path.join(CODEX_HOME, "archived_sessions");
 const POLL_MS = 1000;          // how often we check files for growth
@@ -574,6 +608,10 @@ try {
 }
 
 const server = http.createServer((req, res) => {
+  const auth = tunnelAuthDecision(req.headers, req.url, TOKEN, FLAGS.tunnel);
+  if (!auth.allow) { res.writeHead(401, { "Content-Type": "text/plain" }); return res.end("token required"); }
+  if (auth.setCookie) res.setHeader("Set-Cookie", "clv_token=" + TOKEN + "; HttpOnly; Path=/; SameSite=Lax; Secure");
+  if (auth.redirect) { res.writeHead(302, { Location: auth.redirect }); return res.end(); }
   if (req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(JSON.stringify({
