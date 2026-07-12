@@ -261,6 +261,16 @@
       font-size: 11px;
     }
     .meta-button:hover { color: var(--blue); }
+    #wait-reason {
+      flex-basis: 100%;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 11px;
+      color: var(--yellow);
+    }
+    #wait-reason.STALE { color: #f0a254; }
     #header-actions { display: flex; align-items: center; gap: 6px; flex: none; }
     #follow-button {
       height: 32px;
@@ -747,7 +757,7 @@
         var badge = document.createElement('span');
         badge.className = 'status ' + session.status;
         badge.textContent = STATUS[session.status].label;
-        badge.title = STATUS[session.status].help;
+        badge.title = waitReason(session) || STATUS[session.status].help;
         top.appendChild(badge);
         if (unread.has(session.id)) {
           var marker = document.createElement('span');
@@ -803,7 +813,7 @@
       taskStatus.hidden = false;
       taskStatus.className = 'status ' + session.status;
       taskStatus.textContent = STATUS[session.status].label;
-      taskStatus.title = STATUS[session.status].help;
+      taskStatus.title = waitReason(session) || STATUS[session.status].help;
       taskTitle.textContent = session.title || 'Untitled Codex task';
       taskTitle.title = session.title || '';
 
@@ -819,6 +829,15 @@
         span.title = item.title;
         taskMeta.appendChild(span);
       });
+      var reason = waitReason(session);
+      if (reason) {
+        var reasonLine = document.createElement('span');
+        reasonLine.id = 'wait-reason';
+        reasonLine.className = 'meta-item ' + session.status;
+        reasonLine.textContent = reason;
+        reasonLine.title = reason;
+        taskMeta.appendChild(reasonLine);
+      }
       if (session.threadId) {
         var thread = document.createElement('button');
         thread.type = 'button';
