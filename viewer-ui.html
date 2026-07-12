@@ -328,6 +328,51 @@
       font-weight: 700;
       flex: none;
     }
+    #stop-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: #000a;
+      display: grid;
+      place-items: center;
+    }
+    #stop-modal[hidden] { display: none; }
+    #stop-modal-box {
+      width: min(92vw, 560px);
+      max-height: 84vh;
+      overflow-y: auto;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 18px 50px #000c;
+    }
+    #stop-modal-box h2 { margin: 0 0 12px; font-size: 14px; }
+    .stop-modal-row { display: flex; gap: 10px; margin-bottom: 6px; font-size: 12px; }
+    .stop-modal-label { color: var(--muted); flex: none; width: 70px; }
+    .stop-modal-value { min-width: 0; overflow-wrap: anywhere; }
+    .stop-modal-warning {
+      border-radius: 7px;
+      padding: 8px 10px;
+      margin-top: 10px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .stop-modal-warning.red { background: #4a1512; color: #ffb3ad; border: 1px solid #7a2a24; }
+    .stop-modal-warning.yellow { background: #453a14; color: #f0cb6e; border: 1px solid #6d5a1e; }
+    .stop-modal-warning.ok { background: #14331e; color: #8fdca4; border: 1px solid #245c36; }
+    #stop-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    #stop-modal-actions button {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 12px;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #stop-modal-actions button:hover { background: var(--hover); }
+    #stop-modal-confirm { background: #6d2925; border-color: #8a3a34; color: #ffd0cc; font-weight: 700; }
+    #stop-modal-confirm:disabled { opacity: .6; cursor: default; }
 
     #feed-toolbar {
       min-height: 43px;
@@ -509,6 +554,17 @@
     </div>
   </main>
 
+  <div id="stop-modal" hidden>
+    <div id="stop-modal-box" role="dialog" aria-modal="true" aria-labelledby="stop-modal-title">
+      <h2 id="stop-modal-title">Stop Codex process?</h2>
+      <div id="stop-modal-body"></div>
+      <div id="stop-modal-actions">
+        <button id="stop-modal-cancel" type="button">Cancel</button>
+        <button id="stop-modal-confirm" type="button">Stop process</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     'use strict';
 
@@ -549,6 +605,11 @@
     var actionsButton = document.getElementById('actions-button');
     var stopButton = document.getElementById('stop-button');
     var processPanel = document.getElementById('process-panel');
+    var stopModal = document.getElementById('stop-modal');
+    var stopModalBody = document.getElementById('stop-modal-body');
+    var stopModalConfirm = document.getElementById('stop-modal-confirm');
+    var stopModalCancel = document.getElementById('stop-modal-cancel');
+    var pendingKillPid = null;
     var followButton = document.getElementById('follow-button');
     var autoscrollButton = document.getElementById('autoscroll-button');
     var connection = document.getElementById('connection');
@@ -977,6 +1038,79 @@
       }
     }
 
+    function modalRow(label, value, mono) {
+      var row = document.createElement('div');
+      row.className = 'stop-modal-row';
+      var name = document.createElement('span');
+      name.className = 'stop-modal-label';
+      name.textContent = label;
+      var val = document.createElement('span');
+      val.className = 'stop-modal-value' + (mono ? ' mono' : '');
+      val.textContent = value;
+      row.append(name, val);
+      return row;
+    }
+
+    function modalWarning(kind, text) {
+      var warning = document.createElement('div');
+      warning.className = 'stop-modal-warning ' + kind;
+      warning.textContent = text;
+      return warning;
+    }
+
+    function openStopModal(proc) {
+      var session = currentSession();
+      var startedMs = sessionStart(selected);
+      var warnings = processWarnings(proc, startedMs);
+      pendingKillPid = proc.pid;
+      stopModalBody.textContent = '';
+      stopModalBody.appendChild(modalRow('Task', (session && session.title) || 'Unknown task'));
+      stopModalBody.appendChild(modalRow('Project', session ? projectName(session.cwd) : 'Unknown'));
+      stopModalBody.appendChild(modalRow('PID', proc.pid + '  (' + proc.name + ')', true));
+      stopModalBody.appendChild(modalRow('Started', proc.started ? new Date(proc.started).toLocaleTimeString() : 'Unknown'));
+      stopModalBody.appendChild(modalRow('Command', String(proc.cmd || '(unknown command line)'), true));
+      if (warnings.shared) {
+        stopModalBody.appendChild(modalWarning('red',
+          'Shared Codex process (app-server / MCP). It can host several tasks at once — stopping it stops ALL of them, not just this one.'));
+      }
+      if (warnings.timeMatch) {
+        stopModalBody.appendChild(modalWarning('ok', 'Process start time matches this task’s start time.'));
+      } else {
+        stopModalBody.appendChild(modalWarning('yellow',
+          'This process does not match this task’s start time. The task’s own process may already have exited.'));
+      }
+      stopModalBody.appendChild(modalWarning('red', 'Stopping kills the process and its entire child tree. This cannot be undone.'));
+      stopModalConfirm.hidden = false;
+      stopModalConfirm.disabled = false;
+      stopModalCancel.textContent = 'Cancel';
+      stopModal.hidden = false;
+      stopModalCancel.focus();
+    }
+
+    stopModalConfirm.addEventListener('click', async function () {
+      if (pendingKillPid == null) return;
+      stopModalConfirm.disabled = true;
+      var message = '';
+      try { message = await (await fetch('/kill?pid=' + pendingKillPid, { method: 'POST' })).text(); }
+      catch (error) { message = 'Request failed: ' + error; }
+      pendingKillPid = null;
+      stopModalBody.textContent = '';
+      stopModalBody.appendChild(modalWarning(/^killed/i.test(message) ? 'ok' : 'yellow', message));
+      stopModalConfirm.hidden = true;
+      stopModalCancel.textContent = 'Close';
+      processPanel.hidden = true;
+    });
+    stopModalCancel.addEventListener('click', function () {
+      stopModal.hidden = true;
+      pendingKillPid = null;
+    });
+    stopModal.addEventListener('click', function (event) {
+      if (event.target === stopModal) { stopModal.hidden = true; pendingKillPid = null; }
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !stopModal.hidden) { stopModal.hidden = true; pendingKillPid = null; }
+    });
+
     search.addEventListener('input', function () {
       prefs.query = search.value;
       savePrefs();
@@ -1092,14 +1226,7 @@
         kill.type = 'button';
         kill.className = 'kill-button';
         kill.textContent = 'STOP';
-        kill.addEventListener('click', async function () {
-          if (!window.confirm('Stop PID ' + process.pid + ' (' + process.name + ') and its entire child process tree?\n\nThis cannot be undone.')) return;
-          var message = '';
-          try { message = await (await fetch('/kill?pid=' + process.pid, { method: 'POST' })).text(); }
-          catch (error) { message = 'Request failed: ' + error; }
-          window.alert(message);
-          processPanel.hidden = true;
-        });
+        kill.addEventListener('click', function () { openStopModal(process); });
         var description = document.createElement('span');
         description.className = 'mono';
         description.textContent = 'PID ' + process.pid + '  ' + process.name + '  ' + String(process.cmd || '').slice(0, 180);
