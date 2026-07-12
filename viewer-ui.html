@@ -171,6 +171,7 @@
     }
     .session:hover { background: var(--hover); }
     .session.selected { background: var(--selected); border-left-color: var(--blue); }
+    .session.dismissed { opacity: .55; }
     .session-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
     .session-title {
       margin-top: 7px;
@@ -538,6 +539,8 @@
         <button id="copy-resume" type="button" title="codex resume — reopen this conversation interactively">Copy resume command</button>
         <button id="copy-continue" type="button" title="codex exec resume — continue this task headlessly where it left off">Copy continue command</button>
         <button id="copy-fork" type="button" title="codex fork — experiment on a copy; the original session stays untouched">Copy fork command</button>
+        <button id="copy-archive" type="button" title="codex archive — move this session out of the list permanently (paste in your terminal)">Copy archive command</button>
+        <button id="dismiss-button" type="button" title="Hide this task from all filters except All. Viewer-only, undoable.">Dismiss task</button>
         <button id="stop-button" type="button">Stop task process&#x2026;</button>
       </div>
       <div id="process-panel" hidden></div>
@@ -579,7 +582,8 @@
       view: 'activity',
       autoFollow: true,
       autoScroll: true,
-      selected: null
+      selected: null,
+      dismissed: []
     };
     var prefs = loadPrefs();
     var sessions = [];
@@ -647,6 +651,7 @@
 
     function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
     function currentSession() { return sessions.find(function (session) { return session.id === selected; }); }
+    function isDismissed(id) { return (prefs.dismissed || []).indexOf(id) !== -1; }
     function projectName(cwd) {
       var parts = String(cwd || '').split(/[\\/]/).filter(Boolean);
       return parts.length ? parts[parts.length - 1] : 'Unknown project';
@@ -705,6 +710,10 @@
       return 'codex exec resume ' + threadId + ' "Continue the previous task where it left off and finish it."';
     }
     function forkCommand(threadId) { return 'codex fork ' + threadId; }
+    function archiveCommand(threadId) { return 'codex archive ' + threadId; }
+    function dismissedHides(session, filter, dismissedIds) {
+      return filter !== 'ALL' && (dismissedIds || []).indexOf(session.id) !== -1;
+    }
     function setConnection(state, label) {
       connection.className = state;
       connectionText.textContent = label;
@@ -729,8 +738,9 @@
 
     function statusCount(id) {
       if (id === 'ALL') return sessions.length;
-      if (id === 'ACTIVE') return sessions.filter(function (s) { return s.status !== 'DONE'; }).length;
-      return sessions.filter(function (s) { return s.status === id; }).length;
+      var pool = sessions.filter(function (s) { return !isDismissed(s.id); });
+      if (id === 'ACTIVE') return pool.filter(function (s) { return s.status !== 'DONE'; }).length;
+      return pool.filter(function (s) { return s.status === id; }).length;
     }
 
     function renderFilters() {
@@ -758,6 +768,7 @@
     function visibleSessions() {
       var query = String(prefs.query || '').trim().toLowerCase();
       return sessions.filter(function (session) {
+        if (dismissedHides(session, prefs.filter, prefs.dismissed)) return false;
         var statusMatch = prefs.filter === 'ALL' ||
           (prefs.filter === 'ACTIVE' ? session.status !== 'DONE' : session.status === prefs.filter);
         if (!statusMatch) return false;
@@ -803,7 +814,7 @@
         selected,
         Math.floor(Date.now() / 10000),
         shown.map(function (session) {
-          return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id)];
+          return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id), isDismissed(session.id)];
         })
       ]);
       if (signature === lastListSignature) return;
@@ -812,7 +823,7 @@
       shown.forEach(function (session) {
         var button = document.createElement('button');
         button.type = 'button';
-        button.className = 'session' + (session.id === selected ? ' selected' : '');
+        button.className = 'session' + (session.id === selected ? ' selected' : '') + (isDismissed(session.id) ? ' dismissed' : '');
         button.setAttribute('aria-pressed', session.id === selected ? 'true' : 'false');
 
         var top = document.createElement('div');
@@ -869,7 +880,8 @@
         hint.textContent = sessions.length ? 'Choose a task from the session list.' : 'New Codex tasks appear here automatically.';
         taskMeta.appendChild(hint);
         stopButton.hidden = true;
-        ['copy-resume', 'copy-continue', 'copy-fork'].forEach(function (id) {
+        document.getElementById('dismiss-button').hidden = true;
+        ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive'].forEach(function (id) {
           document.getElementById(id).hidden = true;
         });
         return;
@@ -887,6 +899,7 @@
         { text: session.model || 'Unknown model', title: 'Model' },
         { text: relativeTime(session.lastGrow), title: 'Last activity' }
       ];
+      if (isDismissed(session.id)) values.push({ text: 'Dismissed', title: 'Hidden from all filters except All' });
       values.forEach(function (item) {
         var span = document.createElement('span');
         span.className = 'meta-item';
@@ -913,7 +926,10 @@
         taskMeta.appendChild(thread);
       }
       stopButton.hidden = session.status === 'DONE';
-      ['copy-resume', 'copy-continue', 'copy-fork'].forEach(function (id) {
+      var dismissButton = document.getElementById('dismiss-button');
+      dismissButton.hidden = false;
+      dismissButton.textContent = isDismissed(session.id) ? 'Restore task' : 'Dismiss task';
+      ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive'].forEach(function (id) {
         document.getElementById(id).hidden = !session.threadId;
       });
     }
@@ -1201,12 +1217,28 @@
     [
       { id: 'copy-resume', build: resumeCommand, done: 'Resume command copied' },
       { id: 'copy-continue', build: continueCommand, done: 'Continue command copied' },
-      { id: 'copy-fork', build: forkCommand, done: 'Fork command copied' }
+      { id: 'copy-fork', build: forkCommand, done: 'Fork command copied' },
+      { id: 'copy-archive', build: archiveCommand, done: 'Archive command copied' }
     ].forEach(function (action) {
       document.getElementById(action.id).addEventListener('click', function () {
         var session = currentSession();
         if (session && session.threadId) copyText(action.build(session.threadId), this, action.done);
       });
+    });
+
+    document.getElementById('dismiss-button').addEventListener('click', function () {
+      if (!selected) return;
+      var ids = prefs.dismissed = prefs.dismissed || [];
+      var at = ids.indexOf(selected);
+      if (at === -1) ids.push(selected); else ids.splice(at, 1);
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+      savePrefs();
+      lastListSignature = '';
+      lastFilterSignature = '';
+      renderFilters();
+      renderList();
+      renderHeader();
     });
 
     stopButton.addEventListener('click', async function () {
@@ -1267,6 +1299,13 @@
         });
         sessions = data.sessions;
         seeded = true;
+        // forget dismissals for sessions that fell out of the tracked list
+        if (sessions.length && (prefs.dismissed || []).length) {
+          var kept = prefs.dismissed.filter(function (id) {
+            return sessions.some(function (session) { return session.id === id; });
+          });
+          if (kept.length !== prefs.dismissed.length) { prefs.dismissed = kept; savePrefs(); }
+        }
         if (selected && !sessions.some(function (session) { return session.id === selected; })) selected = null;
         followRunningSession(newestRunning());
         if (!selected && sessions.length) selectSession(sessions[0].id, false);

@@ -79,4 +79,14 @@ test("copy command builders produce exact codex CLI invocations", () => {
     'codex exec resume abc-123 "Continue the previous task where it left off and finish it."',
   );
   assert.equal(ctx.forkCommand("abc-123"), "codex fork abc-123");
+  assert.equal(ctx.archiveCommand("abc-123"), "codex archive abc-123");
+});
+
+test("dismissed sessions hide in every filter except All", () => {
+  const ctx = helperContext();
+  assert.equal(ctx.dismissedHides({ id: "a" }, "STALE", ["a"]), true);
+  assert.equal(ctx.dismissedHides({ id: "a" }, "ACTIVE", ["a"]), true);
+  assert.equal(ctx.dismissedHides({ id: "a" }, "ALL", ["a"]), false);
+  assert.equal(ctx.dismissedHides({ id: "b" }, "STALE", ["a"]), false);
+  assert.equal(ctx.dismissedHides({ id: "a" }, "STALE", undefined), false);
 });
