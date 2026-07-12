@@ -601,6 +601,37 @@
       var value = String(text || '').replace(/\s+/g, ' ').trim();
       return value.length > limit ? value.slice(0, limit - 1) + '\u2026' : value;
     }
+    function formatDuration(ms) {
+      var seconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+      if (seconds < 60) return seconds + 's';
+      var minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return minutes + 'm ' + (seconds % 60) + 's';
+      return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
+    }
+    function waitReason(session) {
+      if (!session || (session.status !== 'IDLE' && session.status !== 'STALE')) return '';
+      var text = firstLine(session.lastText, 80);
+      var phrase = ({
+        cmd: 'running command "' + text + '"',
+        out: 'processing command output',
+        think: 'thinking (reasoning summary in progress)',
+        tool: 'tool call "' + text + '"',
+        user: 'prompt sent, no agent response yet',
+        agent: 'agent replied — may be waiting for approval or next instruction'
+      })[session.lastKind] || (session.lastEvent || 'no displayable activity');
+      return 'Waiting ' + formatDuration(session.quietMs) + ' — last activity: ' + phrase;
+    }
+    function processWarnings(proc, sessionStartMs) {
+      return {
+        shared: /app-server|mcp/i.test(String(proc.cmd || '')),
+        timeMatch: !!(sessionStartMs && proc.started && Math.abs(proc.started - sessionStartMs) < 15000)
+      };
+    }
+    function resumeCommand(threadId) { return 'codex resume ' + threadId; }
+    function continueCommand(threadId) {
+      return 'codex exec resume ' + threadId + ' "Continue the previous task where it left off and finish it."';
+    }
+    function forkCommand(threadId) { return 'codex fork ' + threadId; }
     function setConnection(state, label) {
       connection.className = state;
       connectionText.textContent = label;
