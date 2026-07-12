@@ -64,6 +64,34 @@ node codex-live-viewer.js stop     # stop the background server
 node codex-live-viewer.js status
 ```
 
+## Remote access
+
+By default the viewer only listens on `127.0.0.1`. Three ways to open it up:
+
+### Home LAN
+
+    node codex-live-viewer.js serve --host 0.0.0.0
+
+Open `http://<server-ip>:8377` from any machine on your network. No auth — your LAN is trusted.
+
+### Internet, zero setup (Cloudflare quick tunnel)
+
+Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), then:
+
+    node codex-live-viewer.js serve --tunnel
+
+The viewer prints a ready-to-click `https://<random>.trycloudflare.com/?token=...` URL. Free, no Cloudflare account, new URL each start. Tunnel visitors need the token (auto-generated once, stored in `~/.codex/live-viewer-token`); local/LAN access stays tokenless.
+
+### Internet, custom domain (named tunnel)
+
+Create a named tunnel in the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/) pointing at `http://localhost:8377`, copy its token, then:
+
+    node codex-live-viewer.js serve --tunnel-token <TUNNEL_TOKEN>
+
+Stable URL on your own domain. Access token works the same as above.
+
+Pin a fixed access token with `--token <secret>` or `CODEX_VIEWER_TOKEN` instead of the auto-generated one.
+
 ### Build from source
 
 Requires stable Rust and Node.js 18+:
