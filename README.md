@@ -28,6 +28,7 @@ Codex already writes its session events to `~/.codex/sessions/YYYY/MM/DD/rollout
 - Sessions archived with `codex archive` appear under an Archived filter with a copy-paste `codex unarchive <id>` command to restore them.
 - Waiting and possibly-stuck sessions explain what they were last doing (running a command, thinking, waiting for a reply) and for how long.
 - The responsive dashboard includes search, human-readable status filters, Activity and Raw log views, a collapsible and resizable session list, and a safer task-actions menu.
+- Search covers ALL recorded sessions, not just the visible list: a metadata index (title, project, thread id) of every rollout file powers a History section, and clicking a result loads that session on demand.
 - Layout and display preferences are saved in the browser, including sidebar width, selected filter, feed view, auto-follow, and auto-scroll.
 - On Windows, you can inspect matching Codex processes and stop a stuck task through a detail dialog that shows the full command line and warns before touching shared `app-server`/MCP processes.
 - A small Rust tray app starts the Node viewer in the background on Windows and Linux.
@@ -118,6 +119,7 @@ The viewer itself stays read-only: it never launches Codex or writes to session 
 - The tray launcher supports Windows and Linux. The Node server and CLI also run on macOS, but there is no macOS tray build yet.
 - `Exit` stops Node only when that tray instance started it. If Node was already running, the tray leaves it alone.
 - Sessions are detected by file growth. A session whose file stops growing for 20 s shows as IDLE even if the process is still alive (e.g. long-running silent tool call).
+- Search matches session metadata (title, project, thread id) — not the full conversation text.
 - The rollout schema is not a public API. The parser is schema-tolerant and skips unknown shapes silently; if an event type renders as a gap, extend `simplify()` in `codex-live-viewer.js`.
 
 ## Project layout
