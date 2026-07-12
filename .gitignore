@@ -16,3 +16,6 @@ node_modules/
 *.log
 *.bak.*
 /*.lnk
+
+# done plans/specs, kept local only
+/docs/superpowers/archive/
