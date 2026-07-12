@@ -707,7 +707,8 @@ const BASE = "http://127.0.0.1:" + PORT;
 
 function trustedControlOrigin(req) {
   const origin = req.headers.origin;
-  return !origin || origin === "http://127.0.0.1:" + PORT || origin === "http://localhost:" + PORT;
+  if (!origin) return true;
+  try { return new URL(origin).host === req.headers.host; } catch { return false; }
 }
 
 function serve() {

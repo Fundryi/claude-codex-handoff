@@ -86,3 +86,22 @@ test("auth: wrong cookie = 401", () => {
   const headers = { "cf-connecting-ip": "1.2.3.4", cookie: "clv_token=" + TOK.slice(0, -1) + "X" };
   assert.equal(ctx.tunnelAuthDecision(headers, "/", TOK, true).allow, false);
 });
+
+function originCtx() { return extract("trustedControlOrigin", { URL }); }
+
+test("origin: absent = trusted", () => {
+  assert.equal(originCtx().trustedControlOrigin({ headers: {} }), true);
+});
+
+test("origin: same host as request = trusted (localhost, LAN, tunnel)", () => {
+  const ctx = originCtx();
+  assert.equal(ctx.trustedControlOrigin({ headers: { origin: "http://localhost:8377", host: "localhost:8377" } }), true);
+  assert.equal(ctx.trustedControlOrigin({ headers: { origin: "http://10.0.0.5:8377", host: "10.0.0.5:8377" } }), true);
+  assert.equal(ctx.trustedControlOrigin({ headers: { origin: "https://x.trycloudflare.com", host: "x.trycloudflare.com" } }), true);
+});
+
+test("origin: foreign host = untrusted", () => {
+  const ctx = originCtx();
+  assert.equal(ctx.trustedControlOrigin({ headers: { origin: "https://evil.example", host: "localhost:8377" } }), false);
+  assert.equal(ctx.trustedControlOrigin({ headers: { origin: "not a url", host: "localhost:8377" } }), false);
+});
