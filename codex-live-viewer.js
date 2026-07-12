@@ -204,6 +204,9 @@ function sessionSummary(s) {
     model: s.meta.model || "",
     status,
     lastGrow: s.lastGrow,
+    quietMs: quiet,
+    lastKind: last ? last.kind : "",
+    lastText: last ? String(last.text).slice(0, 120) : "",
     lastEvent: last ? (last.kind + ": " + String(last.text).slice(0, 90)) : "",
     eventCount: s.events.length,
   };
