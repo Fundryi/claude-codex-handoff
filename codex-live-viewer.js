@@ -23,6 +23,7 @@ const APP_VERSION = "1.1.1";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_HOME, "sessions");
+const ARCHIVED_DIR = path.join(CODEX_HOME, "archived_sessions");
 const POLL_MS = 1000;          // how often we check files for growth
 const LIVE_WINDOW_MS = 20000;  // file grew within this window => LIVE
 const STALE_AFTER_MS = 10 * 60 * 1000; // quiet this long without task_complete => STALE
@@ -48,6 +49,7 @@ function listRolloutFiles() {
     }
   };
   walk(SESSIONS_DIR, 0);
+  walk(ARCHIVED_DIR, 0);
   out.sort((a, b) => {
     try { return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs; } catch { return 0; }
   });
@@ -203,6 +205,7 @@ function sessionSummary(s) {
     cwd: s.meta.cwd || "",
     model: s.meta.model || "",
     status,
+    archived: s.file.startsWith(ARCHIVED_DIR),
     lastGrow: s.lastGrow,
     quietMs: quiet,
     lastKind: last ? last.kind : "",
@@ -238,6 +241,8 @@ function kick() {
 function watchSessions() {
   try { fs.watch(SESSIONS_DIR, { recursive: true }, kick); }
   catch { /* recursive watch unsupported on some platforms - poll covers it */ }
+  try { fs.watch(ARCHIVED_DIR, { recursive: true }, kick); }
+  catch { /* dir may not exist yet - the 1s poll covers it */ }
 }
 
 // ---------------- process control (kill stuck sessions) ----------------
