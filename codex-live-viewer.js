@@ -36,8 +36,10 @@ const MAX_EVENTS_KEPT = 500;   // per-session event ring buffer
 const sessions = new Map();
 const sseClients = new Set();
 const notificationClients = new Set();
+const searchIndex = new Map(); // file -> { file, id, threadId, title, cwd, mtimeMs, archived }
+let searchIndexReady = false;
 
-function listRolloutFiles() {
+function collectRolloutFiles() {
   const out = [];
   const walk = (dir, depth) => {
     let entries;
@@ -53,7 +55,11 @@ function listRolloutFiles() {
   out.sort((a, b) => {
     try { return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs; } catch { return 0; }
   });
-  return out.slice(0, MAX_SESSIONS);
+  return out;
+}
+
+function listRolloutFiles() {
+  return collectRolloutFiles().slice(0, MAX_SESSIONS);
 }
 
 // Turn one raw rollout line into a display event (schema-tolerant).
@@ -128,6 +134,60 @@ function simplify(line) {
     return { kind: "meta", ts, cwd: p.cwd || "", model: p.model || "" };
   }
   return null;
+}
+
+// ---------------- metadata search index (all sessions, not just top-40) ----------------
+function indexEntry(file) {
+  let st;
+  try { st = fs.statSync(file); } catch { return null; }
+  const cached = searchIndex.get(file);
+  if (cached && cached.mtimeMs === st.mtimeMs) return cached;
+  const entry = {
+    file,
+    id: path.basename(file, ".jsonl"),
+    threadId: "",
+    title: "",
+    cwd: "",
+    mtimeMs: st.mtimeMs,
+    archived: file.startsWith(ARCHIVED_DIR),
+  };
+  try {
+    const fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(Math.min(st.size, 64 * 1024));
+    fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    for (const line of buf.toString("utf8").split("\n")) {
+      if (!line.trim()) continue;
+      const ev = simplify(line);
+      if (!ev) continue;
+      if (ev.kind === "meta") {
+        if (ev.cwd) entry.cwd = ev.cwd;
+        if (ev.id) entry.threadId = ev.id;
+      } else if (ev.kind === "user" && !entry.title) {
+        const first = String(ev.text).split("\n").map(l => l.trim())
+          .find(l => l && !l.startsWith("<") && !l.startsWith("</"));
+        if (first) entry.title = first.slice(0, 100);
+      }
+      if (entry.title && entry.threadId && entry.cwd) break;
+    }
+  } catch { /* unreadable file - keep the bare entry so it is still findable by id */ }
+  searchIndex.set(file, entry);
+  return entry;
+}
+
+function buildSearchIndex() {
+  const files = collectRolloutFiles();
+  const live = new Set(files);
+  for (const f of files) indexEntry(f);
+  for (const key of searchIndex.keys()) if (!live.has(key)) searchIndex.delete(key);
+  searchIndexReady = true;
+}
+
+function searchMatch(entry, terms) {
+  if (!terms.length) return false;
+  const hay = ((entry.title || "") + " " + (entry.cwd || "") + " " +
+    (entry.threadId || "") + " " + (entry.id || "")).toLowerCase();
+  return terms.every(t => hay.includes(String(t).toLowerCase()));
 }
 
 function ingest(file) {
@@ -531,6 +591,23 @@ const server = http.createServer((req, res) => {
         res.end(err ? ("kill failed: " + String(se || err).slice(0, 300)) : "killed pid " + pid + " (+ child tree)");
       });
     });
+  } else if (req.url.startsWith("/search?q=")) {
+    const q = decodeURIComponent(req.url.slice("/search?q=".length)).trim().toLowerCase();
+    const terms = q.split(/\s+/).filter(Boolean).slice(0, 8);
+    const results = [];
+    for (const entry of searchIndex.values()) {
+      if (searchMatch(entry, terms)) results.push(entry);
+    }
+    results.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({
+      ready: searchIndexReady,
+      indexed: searchIndex.size,
+      results: results.slice(0, 50).map(e => ({
+        id: e.id, threadId: e.threadId, title: e.title, cwd: e.cwd,
+        mtimeMs: e.mtimeMs, archived: e.archived,
+      })),
+    }));
   } else if (req.url === "/events") {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     sseClients.add(res);
@@ -570,6 +647,8 @@ function serve() {
     tick();
     watchSessions();
     setInterval(tick, POLL_MS);
+    setTimeout(buildSearchIndex, 50);
+    setInterval(buildSearchIndex, 30000);
   });
   server.on("error", err => {
     if (err.code !== "EADDRINUSE") throw err;
