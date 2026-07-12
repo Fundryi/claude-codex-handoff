@@ -740,10 +740,33 @@ const server = http.createServer((req, res) => {
 // ---------------- CLI ----------------
 const BASE = "http://127.0.0.1:" + PORT;
 
+function controlHosts() {
+  const hosts = new Set(["localhost:" + PORT, "127.0.0.1:" + PORT, "[::1]:" + PORT]);
+  if (HOST !== "127.0.0.1") {
+    hosts.add(HOST + ":" + PORT);
+    for (const list of Object.values(os.networkInterfaces())) {
+      for (const iface of list || []) {
+        if (iface.family === "IPv4") hosts.add(iface.address + ":" + PORT);
+      }
+    }
+  }
+  return hosts;
+}
+
 function trustedControlOrigin(req) {
   const origin = req.headers.origin;
+  if (FLAGS.tunnel && req.headers["cf-connecting-ip"]) {
+    // Tunnel traffic is token-gated upstream and the tunnel hostname is not
+    // known to the server (named tunnels), so same-host is the strictest rule.
+    if (!origin) return true;
+    try { return new URL(origin).host === req.headers.host; } catch { return false; }
+  }
+  // Direct traffic: Host must be a name this server is actually reachable at,
+  // otherwise a DNS-rebound page becomes same-origin and bypasses Origin checks.
+  const hosts = controlHosts();
+  if (!hosts.has(req.headers.host)) return false;
   if (!origin) return true;
-  try { return new URL(origin).host === req.headers.host; } catch { return false; }
+  try { return hosts.has(new URL(origin).host); } catch { return false; }
 }
 
 function serve() {

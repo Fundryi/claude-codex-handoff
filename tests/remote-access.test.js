@@ -87,23 +87,58 @@ test("auth: wrong cookie = 401", () => {
   assert.equal(ctx.tunnelAuthDecision(headers, "/", TOK, true).allow, false);
 });
 
-function originCtx() { return extract("trustedControlOrigin", { URL }); }
+function originCtx(opts = {}) {
+  const hosts = new Set(opts.hosts || ["localhost:8377", "127.0.0.1:8377", "10.0.0.5:8377"]);
+  return extract("trustedControlOrigin", {
+    URL,
+    FLAGS: { tunnel: opts.tunnel || false },
+    controlHosts: () => hosts,
+  });
+}
 
-test("origin: absent = trusted", () => {
-  assert.equal(originCtx().trustedControlOrigin({ headers: {} }), true);
+test("origin: absent origin on known host = trusted", () => {
+  assert.equal(originCtx().trustedControlOrigin({ headers: { host: "localhost:8377" } }), true);
 });
 
-test("origin: same host as request = trusted (localhost, LAN, tunnel)", () => {
+test("origin: known host + matching origin = trusted (localhost, LAN)", () => {
   const ctx = originCtx();
   assert.equal(ctx.trustedControlOrigin({ headers: { origin: "http://localhost:8377", host: "localhost:8377" } }), true);
   assert.equal(ctx.trustedControlOrigin({ headers: { origin: "http://10.0.0.5:8377", host: "10.0.0.5:8377" } }), true);
-  assert.equal(ctx.trustedControlOrigin({ headers: { origin: "https://x.trycloudflare.com", host: "x.trycloudflare.com" } }), true);
 });
 
-test("origin: foreign host = untrusted", () => {
+test("origin: DNS-rebound Host = untrusted even without Origin", () => {
+  const ctx = originCtx();
+  assert.equal(ctx.trustedControlOrigin({ headers: { host: "rebind.attacker.com" } }), false);
+  assert.equal(ctx.trustedControlOrigin({ headers: { origin: "http://rebind.attacker.com", host: "rebind.attacker.com" } }), false);
+});
+
+test("origin: foreign or malformed Origin on known host = untrusted", () => {
   const ctx = originCtx();
   assert.equal(ctx.trustedControlOrigin({ headers: { origin: "https://evil.example", host: "localhost:8377" } }), false);
   assert.equal(ctx.trustedControlOrigin({ headers: { origin: "not a url", host: "localhost:8377" } }), false);
+});
+
+test("origin: tunnel-proxied request keeps same-host rule (domain unknown to server)", () => {
+  const ctx = originCtx({ tunnel: true });
+  const h = { "cf-connecting-ip": "1.2.3.4", origin: "https://x.trycloudflare.com", host: "x.trycloudflare.com" };
+  assert.equal(ctx.trustedControlOrigin({ headers: h }), true);
+  assert.equal(ctx.trustedControlOrigin({ headers: { ...h, origin: "https://evil.example" } }), false);
+});
+
+test("origin: forged cf-connecting-ip without --tunnel does not bypass allowlist", () => {
+  const ctx = originCtx({ tunnel: false });
+  const h = { "cf-connecting-ip": "1.2.3.4", origin: "http://rebind.attacker.com", host: "rebind.attacker.com" };
+  assert.equal(ctx.trustedControlOrigin({ headers: h }), false);
+});
+
+test("controlHosts: loopback always, LAN interfaces only when bound beyond loopback", () => {
+  const os = { networkInterfaces: () => ({ eth0: [{ family: "IPv4", address: "10.0.0.5", internal: false }] }) };
+  const lan = extract("controlHosts", { os, PORT: 8377, HOST: "0.0.0.0" }).controlHosts();
+  assert.equal(lan.has("localhost:8377"), true);
+  assert.equal(lan.has("127.0.0.1:8377"), true);
+  assert.equal(lan.has("10.0.0.5:8377"), true);
+  const loop = extract("controlHosts", { os, PORT: 8377, HOST: "127.0.0.1" }).controlHosts();
+  assert.equal(loop.has("10.0.0.5:8377"), false);
 });
 
 test("parseTunnelUrl: finds trycloudflare URL in cloudflared stderr chatter", () => {
