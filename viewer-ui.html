@@ -702,6 +702,16 @@
       if (minutes < 60) return minutes + 'm ' + (seconds % 60) + 's';
       return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
     }
+    function sessionMetaLine(meta) {
+      if (!meta) return '';
+      var parts = [meta.cwd || meta.id || ''];
+      parts.push('model: ' + (meta.model || '?'));
+      if (meta.effort) parts.push('effort: ' + meta.effort);
+      if (meta.sandbox) parts.push('sandbox: ' + meta.sandbox);
+      if (meta.tokensUsed) parts.push('tokens: ' + meta.tokensUsed.toLocaleString());
+      parts.push('thread: ' + (meta.threadId || '?'));
+      return parts.join('   |   ');
+    }
     function waitReason(session) {
       if (!session || session.archived || (session.status !== 'IDLE' && session.status !== 'STALE')) return '';
       var text = firstLine(session.lastText, 80);
@@ -873,8 +883,8 @@
         title.title = session.title || '';
         var project = document.createElement('div');
         project.className = 'session-project';
-        project.textContent = projectName(session.cwd);
-        project.title = session.cwd || '';
+        project.textContent = sessionMetaLine(session);
+        project.title = sessionMetaLine(session);
         var last = document.createElement('div');
         last.className = 'session-last';
         last.textContent = session.lastEvent || 'No displayable activity yet';
@@ -953,11 +963,14 @@
       taskTitle.textContent = session.title || 'Untitled Codex task';
       taskTitle.title = session.title || '';
 
-      var values = [
-        { text: projectName(session.cwd), title: session.cwd || '' },
-        { text: session.model || 'Unknown model', title: 'Model' },
-        { text: relativeTime(session.lastGrow), title: 'Last activity' }
-      ];
+      var metadata = document.createElement(session.threadId ? 'button' : 'span');
+      if (session.threadId) metadata.type = 'button';
+      metadata.className = 'meta-item' + (session.threadId ? ' meta-button' : '');
+      metadata.textContent = sessionMetaLine(session);
+      metadata.title = session.threadId ? 'Copy thread ID: ' + session.threadId : sessionMetaLine(session);
+      if (session.threadId) metadata.addEventListener('click', function () { copyText(session.threadId, metadata, 'Thread copied'); });
+      taskMeta.appendChild(metadata);
+      var values = [{ text: relativeTime(session.lastGrow), title: 'Last activity' }];
       if (isDismissed(session.id)) values.push({ text: 'Dismissed', title: 'Hidden from all filters except All' });
       values.forEach(function (item) {
         var span = document.createElement('span');
@@ -974,15 +987,6 @@
         reasonLine.textContent = reason;
         reasonLine.title = reason;
         taskMeta.appendChild(reasonLine);
-      }
-      if (session.threadId) {
-        var thread = document.createElement('button');
-        thread.type = 'button';
-        thread.className = 'meta-button mono';
-        thread.textContent = 'Thread ' + session.threadId.slice(0, 8) + '\u2026';
-        thread.title = 'Copy thread ID: ' + session.threadId;
-        thread.addEventListener('click', function () { copyText(session.threadId, thread, 'Thread copied'); });
-        taskMeta.appendChild(thread);
       }
       stopButton.hidden = session.status === 'DONE' || !!session.archived;
       var dismissButton = document.getElementById('dismiss-button');
