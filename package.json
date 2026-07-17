@@ -8,6 +8,7 @@
     "start": "node codex-live-viewer.js serve",
     "stop": "node codex-live-viewer.js stop",
     "test": "node --test tests/*.test.js",
+    "sync:viewer": "node -e \"const fs=require('fs');fs.mkdirSync('plugin/viewer',{recursive:true});for(const f of['codex-live-viewer.js','viewer-ui.html'])fs.copyFileSync(f,'plugin/viewer/'+f)\"",
     "tray": "cargo run --manifest-path tray-launcher/Cargo.toml",
     "build:tray": "cargo build --release --locked --manifest-path tray-launcher/Cargo.toml"
   },

@@ -1,0 +1,1993 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Live Viewer</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: #111720;
+      --panel-2: #171e28;
+      --hover: #1b2531;
+      --selected: #16263a;
+      --border: #293241;
+      --fg: #e6edf3;
+      --muted: #8c9bab;
+      --faint: #637083;
+      --blue: #67a8ff;
+      --green: #4ac26b;
+      --yellow: #e5b849;
+      --red: #ff6b63;
+      --purple: #c49cff;
+      --sidebar-width: 340px;
+      font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      overflow: hidden;
+      min-width: 0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [role="separator"]:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+    .icon-button {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: transparent;
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+    }
+    .icon-button:hover { background: var(--hover); }
+    .muted { color: var(--muted); }
+    .mono { font-family: "Cascadia Code", Consolas, monospace; }
+
+    #side {
+      width: var(--sidebar-width);
+      min-width: 240px;
+      max-width: 55vw;
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex: none;
+    }
+    body.side-collapsed #side { display: none; }
+    #brand {
+      min-height: 57px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    #brand-mark {
+      width: 30px;
+      height: 30px;
+      object-fit: contain;
+      flex: none;
+    }
+    #brand-copy { min-width: 0; flex: 1; }
+    #brand-title { font-size: 14px; font-weight: 650; letter-spacing: .1px; }
+    #brand-subtitle { color: var(--muted); font-size: 11px; margin-top: 1px; }
+    #new-task-button, #resume-session-button { height: 32px; white-space: nowrap; }
+    #connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #connection-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--yellow);
+    }
+    #connection.connected #connection-dot { background: var(--green); }
+    #connection.disconnected #connection-dot { background: var(--red); }
+
+    #side-controls { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); }
+    #search {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--fg);
+      background: var(--bg);
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+    #search::placeholder { color: var(--faint); }
+    #filters { display: grid; gap: 2px; margin-top: 8px; }
+    #jobs-actions { display: flex; gap: 6px; margin-top: 8px; }
+    #jobs-actions[hidden] { display: none; }
+    #jobs-actions button { flex: 1; }
+    .filter-button, .view-button {
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .filter-button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; }
+    .filter-button, .view-button, .toolbar-button {
+      transition: color .14s ease, background-color .14s ease, border-color .14s ease;
+    }
+    .filter-button::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #7b8794;
+      flex: none;
+    }
+    .filter-button[data-filter="ACTIVE"]::before { background: var(--blue); }
+    .filter-button[data-filter="LIVE"]::before { background: var(--blue); }
+    .filter-button[data-filter="LIVE"].has-sessions::before {
+      width: 9px;
+      height: 9px;
+      border: 2px solid var(--blue);
+      border-top-color: transparent;
+      background: transparent;
+      animation: spin .8s linear infinite;
+    }
+    .filter-button[data-filter="IDLE"]::before { background: var(--yellow); }
+    .filter-button[data-filter="STALE"]::before { background: #ee964b; }
+    .filter-button[data-filter="DONE"]::before { background: var(--green); }
+    .filter-button[data-filter="ALL"]::before { background: #7b8794; }
+    .filter-button[data-filter="ARCHIVED"]::before { background: #9fb0c3; }
+    .filter-button:hover, .view-button:hover { background: var(--hover); color: var(--fg); }
+    .filter-button.on, .view-button.on {
+      border-color: #36577c;
+      background: #172a40;
+      color: #b9d8ff;
+    }
+    .count { opacity: .7; margin-left: auto; }
+    #list { overflow-y: auto; min-height: 0; flex: 1; }
+    .session {
+      width: 100%;
+      display: block;
+      text-align: left;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      border-left: 3px solid transparent;
+      background: transparent;
+      padding: 7px 12px 7px 10px;
+      cursor: pointer;
+      transition: background-color .14s ease, border-color .14s ease;
+    }
+    .session:hover { background: var(--hover); }
+    .session.selected { background: var(--selected); border-left-color: var(--blue); }
+    .session.dismissed { opacity: .55; }
+    .history-caption {
+      padding: 10px 12px 4px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+    .status.HISTORY { background: #20262f; color: #8c9bab; }
+    .session-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .session-title {
+      margin-top: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-project, .session-last {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-last { display: none; }
+    .session.job .session-last { display: block; white-space: normal; }
+    .job-open {
+      width: 100%;
+      display: block;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .job-actions { display: flex; gap: 6px; margin-top: 7px; }
+    .job-actions button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .job-actions button:hover { background: var(--hover); color: var(--fg); }
+    .job-actions .cancel-job { color: #ff8f88; }
+    .session-time { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
+    .unread { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 7px var(--blue); }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      transition: color .15s ease, background-color .15s ease;
+    }
+    .status.LIVE { background: #172f4d; color: #80bdff; }
+    .status.LIVE::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      margin-right: 5px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    .status.IDLE { background: #473a19; color: #f0cb6e; }
+    .status.STALE { background: #4a2c12; color: #f0a254; }
+    .status.DONE { background: #173923; color: #72dc8c; }
+    .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
+
+    #splitter {
+      width: 5px;
+      flex: none;
+      cursor: col-resize;
+      background: var(--border);
+      border: 0;
+      padding: 0;
+      touch-action: none;
+    }
+    #splitter:hover, #splitter.dragging { background: var(--blue); }
+    body.side-collapsed #splitter { display: none; }
+
+    #main { min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #task-header {
+      position: relative;
+      padding: 11px 15px 10px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex: none;
+    }
+    #header-top { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    #show-side { display: none; flex: none; }
+    body.side-collapsed #show-side { display: inline-grid; }
+    #task-copy { flex: 1; min-width: 0; }
+    #task-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    #task-title {
+      font-weight: 650;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #task-meta { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    .meta-item { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meta-button {
+      border: 0;
+      padding: 0;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .meta-button:hover { color: var(--blue); }
+    #wait-reason {
+      flex-basis: 100%;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 11px;
+      color: var(--yellow);
+    }
+    #wait-reason.STALE { color: #f0a254; }
+    #header-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+    #follow-button {
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: transparent;
+      padding: 0 10px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    #follow-button:hover, #follow-button.on { color: var(--fg); background: var(--hover); }
+    #action-menu {
+      position: absolute;
+      right: 14px;
+      top: 48px;
+      width: 190px;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-2);
+      box-shadow: 0 12px 30px #0008;
+      z-index: 5;
+    }
+    #action-menu button {
+      width: 100%;
+      border: 0;
+      border-radius: 5px;
+      padding: 8px 9px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #action-menu button:hover { background: var(--hover); }
+    #stop-button { color: #ff8f88; }
+    #process-panel {
+      margin-top: 9px;
+      padding-top: 9px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .process { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; overflow-wrap: anywhere; }
+    .kill-button {
+      border: 0;
+      border-radius: 5px;
+      padding: 3px 7px;
+      background: #6d2925;
+      color: #ffd0cc;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+      flex: none;
+    }
+    #stop-modal, #job-modal, #control-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: #000a;
+      display: grid;
+      place-items: center;
+    }
+    #stop-modal[hidden], #job-modal[hidden], #control-modal[hidden] { display: none; }
+    #stop-modal-box, #job-modal-box, #control-modal-box {
+      width: min(92vw, 560px);
+      max-height: 84vh;
+      overflow-y: auto;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 18px 50px #000c;
+    }
+    #stop-modal-box h2, #job-modal-box h2, #control-modal-box h2 { margin: 0 0 12px; font-size: 14px; }
+    .stop-modal-row { display: flex; gap: 10px; margin-bottom: 6px; font-size: 12px; }
+    .stop-modal-label { color: var(--muted); flex: none; width: 70px; }
+    .stop-modal-value { min-width: 0; overflow-wrap: anywhere; }
+    .stop-modal-warning {
+      border-radius: 7px;
+      padding: 8px 10px;
+      margin-top: 10px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .stop-modal-warning.red { background: #4a1512; color: #ffb3ad; border: 1px solid #7a2a24; }
+    .stop-modal-warning.yellow { background: #453a14; color: #f0cb6e; border: 1px solid #6d5a1e; }
+    .stop-modal-warning.ok { background: #14331e; color: #8fdca4; border: 1px solid #245c36; }
+    #stop-modal-actions, #job-modal-actions, #control-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    #stop-modal-actions button, #job-modal-actions button, #control-modal-actions button {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 12px;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #stop-modal-actions button:hover, #job-modal-actions button:hover, #control-modal-actions button:hover { background: var(--hover); }
+    #stop-modal-confirm { background: #6d2925; border-color: #8a3a34; color: #ffd0cc; font-weight: 700; }
+    #stop-modal-confirm:disabled { opacity: .6; cursor: default; }
+    #job-modal-box { width: min(92vw, 760px); }
+    #job-modal-result {
+      max-height: 55vh;
+      overflow: auto;
+      margin: 12px 0 0;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg);
+      color: #b8c5d1;
+      font: 11px/1.55 "Cascadia Code", Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    #control-modal-box { width: min(92vw, 640px); }
+    #control-modal-body { display: grid; gap: 11px; }
+    .control-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+    .control-field input:not([type="checkbox"]), .control-field select, .control-field textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 9px;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    .control-field textarea { min-height: 90px; resize: vertical; }
+    .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .control-checkbox { display: flex; align-items: center; gap: 7px; color: var(--fg); font-size: 12px; }
+    #control-modal-error { min-height: 18px; margin-top: 10px; color: #ff9b95; font-size: 12px; white-space: pre-wrap; }
+    #control-modal-confirm { background: #17375a; border-color: #36577c; color: #c2ddff; font-weight: 700; }
+    #control-modal-confirm.danger { background: #6d2925; border-color: #8a3a34; color: #ffd0cc; }
+    #control-modal-confirm:disabled { opacity: .6; cursor: default; }
+
+    #feed-toolbar {
+      min-height: 43px;
+      padding: 7px 14px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      border-bottom: 1px solid var(--border);
+      background: #0e141c;
+      flex: none;
+    }
+    #feed-toolbar .spacer { flex: 1; }
+    .toolbar-button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .toolbar-button:hover, .toolbar-button.on { background: var(--hover); color: var(--fg); }
+    #feed-wrap { min-height: 0; flex: 1; position: relative; overflow: hidden; }
+    #feed {
+      height: 100%;
+      overflow: auto;
+      padding: 11px clamp(14px, 3vw, 36px) 50px;
+      scroll-behavior: smooth;
+    }
+    #feed-inner { width: min(100%, 1080px); margin: 0 auto; min-width: 0; }
+    #jump-latest {
+      position: absolute;
+      right: 20px;
+      bottom: 16px;
+      border: 1px solid #416891;
+      border-radius: 999px;
+      background: #172b42;
+      color: #c2ddff;
+      padding: 7px 12px;
+      cursor: pointer;
+      box-shadow: 0 8px 20px #0008;
+      font-size: 11px;
+    }
+    .event { min-width: 0; margin-bottom: 7px; }
+    .event-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+    .event-kind { font-weight: 700; font-size: 10px; letter-spacing: .45px; }
+    .event-time { color: var(--faint); font-size: 10px; }
+    .event-body {
+      border-left: 2px solid var(--border);
+      padding: 4px 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      line-height: 1.55;
+      font-size: 13px;
+    }
+    .event.user .event-kind { color: var(--blue); }
+    .event.user .event-body { border-left-color: #376da8; background: #101b28; }
+    .event.agent .event-kind { color: var(--green); }
+    .event.agent .event-body { border-left-color: #2f7341; }
+    .event.done .event-kind { color: var(--green); }
+    .event.err .event-kind { color: var(--red); }
+    .event.sys .event-kind { color: var(--muted); }
+    .event.internal .event-kind { color: var(--purple); }
+    details.technical {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #0e141c;
+      overflow: hidden;
+    }
+    details.technical summary {
+      padding: 7px 10px;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    details.technical pre {
+      margin: 0;
+      border-top: 1px solid var(--border);
+      padding: 10px;
+      color: #b8c5d1;
+      font: 11px/1.55 "Cascadia Code", Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .feed-empty { color: var(--muted); text-align: center; padding: 70px 25px; }
+    .feed-empty strong { display: block; color: var(--fg); font-size: 15px; margin-bottom: 7px; }
+    .load-earlier {
+      width: 100%;
+      margin: 0 0 16px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 10px;
+      background: var(--panel);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .load-earlier:hover { background: var(--hover); color: var(--fg); }
+    @media (max-width: 760px) {
+      #side {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 20;
+        width: min(88vw, 360px) !important;
+        max-width: none;
+        min-width: 0;
+        transform: translateX(-102%);
+        transition: transform .18s ease;
+        box-shadow: 15px 0 40px #000a;
+      }
+      body.mobile-side-open #side { transform: translateX(0); display: flex; }
+      body.side-collapsed #side { display: flex; }
+      #splitter { display: none !important; }
+      #show-side { display: inline-grid; }
+      #hide-side { display: inline-grid; }
+      #task-header { padding-left: 10px; padding-right: 10px; }
+      #task-meta { gap: 4px 9px; }
+      #follow-button { display: none; }
+      #feed-toolbar { padding-left: 8px; padding-right: 8px; overflow-x: auto; }
+      #feed { padding-left: 12px; padding-right: 12px; }
+      .control-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <aside id="side" aria-label="Codex sessions">
+    <div id="brand">
+      <img id="brand-mark" src="/logo.svg" alt="">
+      <div id="brand-copy">
+        <div id="brand-title">Codex Live Viewer</div>
+        <div id="brand-subtitle"><span id="connection"><span id="connection-dot"></span><span id="connection-text">Connecting</span></span></div>
+      </div>
+      <button id="new-task-button" class="toolbar-button" type="button">New task</button>
+      <button id="hide-side" class="icon-button" type="button" title="Collapse session list" aria-label="Collapse session list">&#x2039;</button>
+    </div>
+    <div id="side-controls">
+      <input id="search" type="search" placeholder="Search tasks, projects, or IDs" aria-label="Search sessions">
+      <div id="filters" aria-label="Filter sessions"></div>
+      <div id="jobs-actions" hidden>
+        <button id="review-button" class="toolbar-button" type="button">Review</button>
+        <button id="adversarial-review-button" class="toolbar-button" type="button">Adversarial</button>
+      </div>
+    </div>
+    <div id="list"></div>
+  </aside>
+
+  <div id="splitter" role="separator" aria-label="Resize session list" aria-orientation="vertical" tabindex="0"></div>
+
+  <main id="main">
+    <header id="task-header">
+      <div id="header-top">
+        <button id="show-side" class="icon-button" type="button" title="Show session list" aria-label="Show session list">&#x2630;</button>
+        <div id="task-copy">
+          <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-title">Select a task</span></div>
+          <div id="task-meta"><span class="meta-item">Running tasks are selected automatically</span></div>
+        </div>
+        <div id="header-actions">
+          <button id="resume-session-button" class="toolbar-button" type="button" hidden>Resume</button>
+          <button id="follow-button" type="button" title="Automatically select the newest running task">Follow newest</button>
+          <button id="actions-button" class="icon-button" type="button" title="Task actions" aria-label="Task actions" aria-expanded="false">&#x22EF;</button>
+        </div>
+      </div>
+      <div id="action-menu" hidden>
+        <button id="copy-resume" type="button" title="codex resume — reopen this conversation interactively">Copy resume command</button>
+        <button id="copy-continue" type="button" title="codex exec resume — continue this task headlessly where it left off">Copy continue command</button>
+        <button id="copy-fork" type="button" title="codex fork — experiment on a copy; the original session stays untouched">Copy fork command</button>
+        <button id="copy-archive" type="button" title="codex archive — move this session out of the list permanently (paste in your terminal)">Copy archive command</button>
+        <button id="copy-unarchive" type="button" title="codex unarchive — move this session back into the active list (paste in your terminal)">Copy unarchive command</button>
+        <button id="dismiss-button" type="button" title="Hide this task from all filters except All. Viewer-only, undoable.">Dismiss task</button>
+        <button id="stop-button" type="button">Stop task process&#x2026;</button>
+      </div>
+      <div id="process-panel" hidden></div>
+    </header>
+
+    <div id="feed-toolbar">
+      <button class="view-button" data-view="activity" type="button">Activity</button>
+      <button class="view-button" data-view="raw" type="button">Raw log</button>
+      <span class="spacer"></span>
+      <button id="autoscroll-button" class="toolbar-button" type="button">Auto-scroll</button>
+    </div>
+
+    <div id="feed-wrap">
+      <div id="feed"><div id="feed-inner"></div></div>
+      <button id="jump-latest" type="button" hidden>Jump to latest</button>
+    </div>
+  </main>
+
+  <div id="stop-modal" hidden>
+    <div id="stop-modal-box" role="dialog" aria-modal="true" aria-labelledby="stop-modal-title">
+      <h2 id="stop-modal-title">Stop Codex process?</h2>
+      <div id="stop-modal-body"></div>
+      <div id="stop-modal-actions">
+        <button id="stop-modal-cancel" type="button">Cancel</button>
+        <button id="stop-modal-confirm" type="button">Stop process</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="job-modal" hidden>
+    <div id="job-modal-box" role="dialog" aria-modal="true" aria-labelledby="job-modal-title">
+      <h2 id="job-modal-title">Job result</h2>
+      <div id="job-modal-meta"></div>
+      <pre id="job-modal-result"></pre>
+      <div id="job-modal-actions">
+        <button id="job-modal-close" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="control-modal" hidden>
+    <div id="control-modal-box" role="dialog" aria-modal="true" aria-labelledby="control-modal-title">
+      <h2 id="control-modal-title">Codex action</h2>
+      <form id="control-modal-form">
+        <div id="control-modal-body"></div>
+        <div id="control-modal-error" role="status" aria-live="polite"></div>
+        <div id="control-modal-actions">
+          <button id="control-modal-cancel" type="button">Back</button>
+          <button id="control-modal-confirm" type="submit">Continue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    var STORAGE_KEY = 'codex-live-viewer-ui-v1';
+    var defaults = {
+      sideWidth: 340,
+      sideCollapsed: false,
+      filter: 'ACTIVE',
+      query: '',
+      view: 'activity',
+      autoFollow: true,
+      autoScroll: true,
+      selected: null,
+      dismissed: []
+    };
+    var prefs = loadPrefs();
+    var sessions = [];
+    var jobs = [];
+    var selected = prefs.selected;
+    var store = {};
+    var seeded = false;
+    var unread = new Set();
+    var previousStatus = {};
+    var lastListSignature = '';
+    var lastFilterSignature = '';
+    var renderLimits = {};
+    var historyResults = [];
+    var historySearchTimer = null;
+
+    var side = document.getElementById('side');
+    var splitter = document.getElementById('splitter');
+    var list = document.getElementById('list');
+    var filters = document.getElementById('filters');
+    var search = document.getElementById('search');
+    var feed = document.getElementById('feed');
+    var feedInner = document.getElementById('feed-inner');
+    var jumpLatest = document.getElementById('jump-latest');
+    var taskTitle = document.getElementById('task-title');
+    var taskStatus = document.getElementById('task-status');
+    var taskMeta = document.getElementById('task-meta');
+    var actionMenu = document.getElementById('action-menu');
+    var actionsButton = document.getElementById('actions-button');
+    var stopButton = document.getElementById('stop-button');
+    var processPanel = document.getElementById('process-panel');
+    var stopModal = document.getElementById('stop-modal');
+    var stopModalBody = document.getElementById('stop-modal-body');
+    var stopModalConfirm = document.getElementById('stop-modal-confirm');
+    var stopModalCancel = document.getElementById('stop-modal-cancel');
+    var jobModal = document.getElementById('job-modal');
+    var jobModalTitle = document.getElementById('job-modal-title');
+    var jobModalMeta = document.getElementById('job-modal-meta');
+    var jobModalResult = document.getElementById('job-modal-result');
+    var jobModalClose = document.getElementById('job-modal-close');
+    var controlModal = document.getElementById('control-modal');
+    var controlModalTitle = document.getElementById('control-modal-title');
+    var controlModalForm = document.getElementById('control-modal-form');
+    var controlModalBody = document.getElementById('control-modal-body');
+    var controlModalError = document.getElementById('control-modal-error');
+    var controlModalConfirm = document.getElementById('control-modal-confirm');
+    var controlModalCancel = document.getElementById('control-modal-cancel');
+    var jobsActions = document.getElementById('jobs-actions');
+    var resumeSessionButton = document.getElementById('resume-session-button');
+    var controlAction = null;
+    var pendingKillPid = null;
+    var followButton = document.getElementById('follow-button');
+    var autoscrollButton = document.getElementById('autoscroll-button');
+    var connection = document.getElementById('connection');
+    var connectionText = document.getElementById('connection-text');
+
+    var STATUS = {
+      LIVE: { label: 'Running', help: 'The session is actively writing new events.' },
+      IDLE: { label: 'Waiting', help: 'No new events for 20 seconds. It may be thinking or running a quiet tool.' },
+      STALE: { label: 'Possibly stuck', help: 'No new events for more than 10 minutes and no completion event.' },
+      DONE: { label: 'Finished', help: 'The session reported that the task completed.' },
+      ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' }
+    };
+    var FILTERS = [
+      { id: 'ACTIVE', label: 'Active' },
+      { id: 'JOBS', label: 'Jobs' },
+      { id: 'LIVE', label: 'Running' },
+      { id: 'IDLE', label: 'Waiting' },
+      { id: 'STALE', label: 'Stuck' },
+      { id: 'DONE', label: 'Finished' },
+      { id: 'ARCHIVED', label: 'Archived' },
+      { id: 'ALL', label: 'All' }
+    ];
+
+    function loadPrefs() {
+      try {
+        var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        return Object.assign({}, defaults, saved);
+      } catch (_) {
+        return Object.assign({}, defaults);
+      }
+    }
+
+    function savePrefs() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch (_) {}
+    }
+
+    function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+    function currentSession() { return sessions.find(function (session) { return session.id === selected; }); }
+    function isDismissed(id) { return (prefs.dismissed || []).indexOf(id) !== -1; }
+    function projectName(cwd) {
+      var parts = String(cwd || '').split(/[\\/]/).filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : 'Unknown project';
+    }
+    function sessionStart(id) {
+      var match = String(id || '').match(/rollout-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/);
+      return match ? new Date(+match[1], match[2] - 1, +match[3], +match[4], +match[5], +match[6]).getTime() : 0;
+    }
+    function relativeTime(timestamp) {
+      if (!timestamp) return '';
+      var seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+      if (seconds < 5) return 'now';
+      if (seconds < 60) return seconds + 's ago';
+      var minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return minutes + 'm ago';
+      var hours = Math.floor(minutes / 60);
+      if (hours < 24) return hours + 'h ago';
+      return Math.floor(hours / 24) + 'd ago';
+    }
+    function eventTime(timestamp) {
+      try { return timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''; }
+      catch (_) { return ''; }
+    }
+    function firstLine(text, limit) {
+      var value = String(text || '').replace(/\s+/g, ' ').trim();
+      return value.length > limit ? value.slice(0, limit - 1) + '\u2026' : value;
+    }
+    function formatDuration(ms) {
+      var seconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+      if (seconds < 60) return seconds + 's';
+      var minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return minutes + 'm ' + (seconds % 60) + 's';
+      return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
+    }
+    function sessionMetaLine(meta) {
+      if (!meta) return '';
+      var parts = [meta.cwd || meta.id || ''];
+      parts.push('model: ' + (meta.model || '?'));
+      if (meta.effort) parts.push('effort: ' + meta.effort);
+      if (meta.sandbox) parts.push('sandbox: ' + meta.sandbox);
+      if (meta.tokensUsed) parts.push('tokens: ' + meta.tokensUsed.toLocaleString());
+      parts.push('thread: ' + (meta.threadId || '?'));
+      return parts.join('   |   ');
+    }
+    function jobStatusLabel(job) {
+      var map = {
+        working: 'RUNNING',
+        'possibly-stuck': 'QUIET \u2014 process alive',
+        dead: 'DEAD \u2014 resumable',
+        completed: 'DONE',
+        failed: 'FAILED',
+        cancelled: 'CANCELLED'
+      };
+      return map[job.live] || String(job.status || '').toUpperCase() || '?';
+    }
+    function jobDetailLine(job, now) {
+      function duration(ms) {
+        var seconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+        if (seconds < 60) return seconds + 's';
+        var minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return minutes + 'm ' + (seconds % 60) + 's';
+        return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
+      }
+      var parts = [];
+      if (job.phase) parts.push(job.phase);
+      if (job.heartbeatAt) parts.push('last activity ' + duration(now - Date.parse(job.heartbeatAt)) + ' ago');
+      if (job.model) parts.push(job.model);
+      if (job.effort) parts.push(job.effort);
+      if (job.sandbox) parts.push(job.sandbox);
+      if (job.diedReason) parts.push(job.diedReason);
+      return parts.join(' \u00b7 ');
+    }
+    function taskFormBody(f) {
+      const b = { cwd: String(f.cwd || '').trim(), prompt: String(f.prompt || '').trim() };
+      if (f.effort) b.effort = f.effort;
+      if (f.model && String(f.model).trim()) b.model = String(f.model).trim();
+      if (f.write) b.write = true;
+      if (f.sandbox) b.sandbox = f.sandbox;
+      return b;
+    }
+    function resumeBody(session, opts) {
+      const b = { threadId: session.threadId, cwd: session.cwd };
+      if (opts.prompt) b.prompt = opts.prompt;
+      if (opts.effort) b.effort = opts.effort;
+      if (opts.model) b.model = opts.model;
+      if (opts.write) b.write = true;
+      if (opts.sandbox) b.sandbox = opts.sandbox;
+      return b;
+    }
+    function knownCwds(sessions, jobs) {
+      const seen = [];
+      for (const s of sessions || []) if (s.cwd && !seen.includes(s.cwd)) seen.push(s.cwd);
+      for (const j of jobs || []) if (j.workspaceRoot && !seen.includes(j.workspaceRoot)) seen.push(j.workspaceRoot);
+      return seen;
+    }
+    function waitReason(session) {
+      if (!session || session.archived || (session.status !== 'IDLE' && session.status !== 'STALE')) return '';
+      var text = firstLine(session.lastText, 80);
+      var phrase = ({
+        cmd: 'running command "' + text + '"',
+        out: 'processing command output',
+        think: 'thinking (reasoning summary in progress)',
+        tool: 'tool call "' + text + '"',
+        user: 'prompt sent, no agent response yet',
+        agent: 'agent replied — may be waiting for approval or next instruction'
+      })[session.lastKind] || (session.lastEvent || 'no displayable activity');
+      return 'Waiting ' + formatDuration(session.quietMs) + ' — last activity: ' + phrase;
+    }
+    function processWarnings(proc, sessionStartMs) {
+      return {
+        shared: /app-server|mcp/i.test(String(proc.cmd || '')),
+        timeMatch: !!(sessionStartMs && proc.started && Math.abs(proc.started - sessionStartMs) < 15000)
+      };
+    }
+    function resumeCommand(threadId) { return 'codex resume ' + threadId; }
+    function continueCommand(threadId) {
+      return 'codex exec resume ' + threadId + ' "Continue the previous task where it left off and finish it."';
+    }
+    function forkCommand(threadId) { return 'codex fork ' + threadId; }
+    function archiveCommand(threadId) { return 'codex archive ' + threadId; }
+    function unarchiveCommand(threadId) { return 'codex unarchive ' + threadId; }
+    function dismissedHides(session, filter, dismissedIds) {
+      return filter !== 'ALL' && (dismissedIds || []).indexOf(session.id) !== -1;
+    }
+    function mergeHistoryResults(results, liveIds) {
+      return (results || []).filter(function (entry) {
+        return liveIds.indexOf(entry.id) === -1;
+      });
+    }
+    function setConnection(state, label) {
+      connection.className = state;
+      connectionText.textContent = label;
+    }
+
+    function applyPrefs() {
+      var savedWidth = Math.max(240, Number(prefs.sideWidth) || 340);
+      prefs.sideWidth = window.innerWidth > 760
+        ? clamp(savedWidth, 240, Math.max(260, window.innerWidth * .55))
+        : savedWidth;
+      document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
+      document.body.classList.toggle('side-collapsed', !!prefs.sideCollapsed);
+      search.value = prefs.query || '';
+      followButton.classList.toggle('on', !!prefs.autoFollow);
+      followButton.textContent = prefs.autoFollow ? 'Following newest' : 'Follow newest';
+      autoscrollButton.classList.toggle('on', !!prefs.autoScroll);
+      autoscrollButton.textContent = prefs.autoScroll ? 'Auto-scroll on' : 'Auto-scroll off';
+      document.querySelectorAll('.view-button').forEach(function (button) {
+        button.classList.toggle('on', button.dataset.view === prefs.view);
+      });
+    }
+
+    function statusCount(id) {
+      if (id === 'JOBS') return jobs.length;
+      if (id === 'ALL') return sessions.length;
+      var pool = sessions.filter(function (s) { return !isDismissed(s.id); });
+      return pool.filter(function (s) { return filterIncludes(s, id); }).length;
+    }
+
+    function renderFilters() {
+      jobsActions.hidden = prefs.filter !== 'JOBS';
+      var signature = JSON.stringify([prefs.filter, FILTERS.map(function (item) { return [item.id, statusCount(item.id)]; })]);
+      if (signature === lastFilterSignature) return;
+      lastFilterSignature = signature;
+      filters.textContent = '';
+      FILTERS.forEach(function (item) {
+        var itemCount = statusCount(item.id);
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.filter = item.id;
+        button.className = 'filter-button' + (prefs.filter === item.id ? ' on' : '') + (item.id === 'LIVE' && itemCount > 0 ? ' has-sessions' : '');
+        button.setAttribute('aria-pressed', prefs.filter === item.id ? 'true' : 'false');
+        button.append(document.createTextNode(item.label + ' '));
+        var count = document.createElement('span');
+        count.className = 'count';
+        count.textContent = itemCount;
+        button.appendChild(count);
+        button.addEventListener('click', function () { chooseFilter(item.id); });
+        filters.appendChild(button);
+      });
+    }
+
+    function visibleSessions() {
+      var query = String(prefs.query || '').trim().toLowerCase();
+      return sessions.filter(function (session) {
+        if (dismissedHides(session, prefs.filter, prefs.dismissed)) return false;
+        if (!filterIncludes(session, prefs.filter)) return false;
+        if (!query) return true;
+        return [session.title, session.cwd, session.threadId, session.id, session.model]
+          .some(function (value) { return String(value || '').toLowerCase().includes(query); });
+      });
+    }
+
+    function filterIncludes(session, filter) {
+      if (filter === 'ARCHIVED') return !!session.archived;
+      if (session.archived) return filter === 'ALL';
+      return filter === 'ALL' ||
+        (filter === 'ACTIVE' ? session.status !== 'DONE' : session.status === filter);
+    }
+
+    function chooseFilter(filter) {
+      prefs.filter = filter;
+      prefs.autoFollow = false;
+      savePrefs();
+      applyPrefs();
+      renderFilters();
+      renderList();
+      if (filter === 'JOBS') refreshJobs();
+    }
+
+    function followSelectedStatus(previousStatus) {
+      var session = currentSession();
+      if (!session || !previousStatus || session.status === previousStatus || prefs.filter === 'ALL' || prefs.filter === 'JOBS' || filterIncludes(session, prefs.filter)) return;
+      prefs.filter = session.status;
+      savePrefs();
+    }
+
+    function followRunningSession(running) {
+      if (!prefs.autoFollow || !running) return;
+      if (!filterIncludes(running, prefs.filter)) prefs.filter = 'LIVE';
+      if (running.id !== selected) selectSession(running.id, false);
+      else savePrefs();
+    }
+
+    function visibleJobs() {
+      var query = String(prefs.query || '').trim().toLowerCase();
+      if (!query) return jobs;
+      return jobs.filter(function (job) {
+        return [job.title, job.workspaceRoot, job.id, job.threadId, job.kindLabel, job.phase]
+          .some(function (value) { return String(value || '').toLowerCase().includes(query); });
+      });
+    }
+
+    function renderJobList() {
+      var shown = visibleJobs();
+      var signature = JSON.stringify([
+        'JOBS',
+        prefs.query,
+        Math.floor(Date.now() / 10000),
+        shown.map(function (job) {
+          return [job.id, job.live, job.updatedAt, job.heartbeatAt, job.title, job.phase, job.diedReason, job.threadId];
+        })
+      ]);
+      if (signature === lastListSignature) return;
+      lastListSignature = signature;
+      list.textContent = '';
+      shown.forEach(function (job) {
+        var row = document.createElement('div');
+        row.className = 'session job';
+        var open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'job-open';
+
+        var top = document.createElement('div');
+        top.className = 'session-top';
+        var badge = document.createElement('span');
+        var badgeStatus = job.live === 'working' ? 'LIVE'
+          : job.live === 'possibly-stuck' ? 'IDLE'
+          : job.live === 'dead' || job.live === 'failed' ? 'STALE' : 'DONE';
+        badge.className = 'status ' + badgeStatus;
+        badge.textContent = jobStatusLabel(job);
+        top.appendChild(badge);
+        var time = document.createElement('span');
+        time.className = 'session-time';
+        time.textContent = relativeTime(Date.parse(job.updatedAt || ''));
+        top.appendChild(time);
+
+        var title = document.createElement('div');
+        title.className = 'session-title';
+        title.textContent = job.title || job.kindLabel || 'Untitled Codex job';
+        title.title = job.title || '';
+        var project = document.createElement('div');
+        project.className = 'session-project';
+        project.textContent = job.workspaceRoot || '';
+        project.title = job.workspaceRoot || '';
+        var detail = document.createElement('div');
+        detail.className = 'session-last';
+        var detailText = jobDetailLine(job, Date.now());
+        var matchingSession = sessions.find(function (session) { return session.threadId && session.threadId === job.threadId; });
+        if (matchingSession && matchingSession.tokensUsed) {
+          detailText += (detailText ? ' \u00b7 ' : '') + 'tokens: ' + matchingSession.tokensUsed.toLocaleString();
+        }
+        detail.textContent = detailText;
+
+        open.append(top, title, project, detail);
+        open.addEventListener('click', function () { openJob(job); });
+        row.appendChild(open);
+
+        var actions = document.createElement('div');
+        actions.className = 'job-actions';
+        if (job.threadId && (job.live === 'dead' || job.live === 'failed')) {
+          var resume = document.createElement('button');
+          resume.type = 'button';
+          resume.textContent = 'RESUME';
+          resume.addEventListener('click', function () { openResumeModal({ threadId: job.threadId, cwd: job.workspaceRoot }, job.title); });
+          actions.appendChild(resume);
+        }
+        if (job.live === 'working' || job.live === 'possibly-stuck') {
+          var cancel = document.createElement('button');
+          cancel.type = 'button';
+          cancel.className = 'cancel-job';
+          cancel.textContent = 'CANCEL';
+          cancel.addEventListener('click', function () { openCancelModal(job); });
+          actions.appendChild(cancel);
+        }
+        if (actions.childNodes.length) row.appendChild(actions);
+        list.appendChild(row);
+      });
+      if (!shown.length) {
+        var empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.textContent = jobs.length ? 'No jobs match this search.' : 'No companion jobs yet.';
+        list.appendChild(empty);
+      }
+    }
+
+    function renderList() {
+      if (prefs.filter === 'JOBS') {
+        renderJobList();
+        return;
+      }
+      var shown = visibleSessions();
+      var signature = JSON.stringify([
+        prefs.filter,
+        prefs.query,
+        selected,
+        Math.floor(Date.now() / 10000),
+        shown.map(function (session) {
+          return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id), isDismissed(session.id), !!session.archived];
+        }),
+        historyResults.map(function (entry) { return entry.id; })
+      ]);
+      if (signature === lastListSignature) return;
+      lastListSignature = signature;
+      list.textContent = '';
+      shown.forEach(function (session) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'session' + (session.id === selected ? ' selected' : '') + (isDismissed(session.id) ? ' dismissed' : '');
+        button.setAttribute('aria-pressed', session.id === selected ? 'true' : 'false');
+
+        var top = document.createElement('div');
+        top.className = 'session-top';
+        var badge = document.createElement('span');
+        var badgeStatus = session.archived ? 'ARCHIVED' : session.status;
+        badge.className = 'status ' + badgeStatus;
+        badge.textContent = STATUS[badgeStatus].label;
+        badge.title = waitReason(session) || STATUS[badgeStatus].help;
+        top.appendChild(badge);
+        if (unread.has(session.id)) {
+          var marker = document.createElement('span');
+          marker.className = 'unread';
+          marker.title = 'New activity';
+          top.appendChild(marker);
+        }
+        var time = document.createElement('span');
+        time.className = 'session-time';
+        time.textContent = relativeTime(session.lastGrow);
+        top.appendChild(time);
+
+        var title = document.createElement('div');
+        title.className = 'session-title';
+        title.textContent = session.title || 'Untitled Codex task';
+        title.title = session.title || '';
+        var project = document.createElement('div');
+        project.className = 'session-project';
+        project.textContent = sessionMetaLine(session);
+        project.title = sessionMetaLine(session);
+        var last = document.createElement('div');
+        last.className = 'session-last';
+        last.textContent = session.lastEvent || 'No displayable activity yet';
+
+        button.append(top, title, project, last);
+        button.addEventListener('click', function () { selectSession(session.id, true); });
+        list.appendChild(button);
+      });
+
+      if (!shown.length) {
+        var empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.textContent = sessions.length ? 'No tasks match this filter.' : 'Waiting for Codex sessions\u2026';
+        list.appendChild(empty);
+      }
+      var history = String(prefs.query || '').trim()
+        ? mergeHistoryResults(historyResults, shown.map(function (session) { return session.id; }))
+        : [];
+      if (history.length) {
+        var caption = document.createElement('div');
+        caption.className = 'history-caption';
+        caption.textContent = 'History — older sessions (' + history.length + ')';
+        list.appendChild(caption);
+        history.forEach(function (entry) {
+          var row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'session';
+          var top = document.createElement('div');
+          top.className = 'session-top';
+          var badge = document.createElement('span');
+          badge.className = 'status ' + (entry.archived ? 'ARCHIVED' : 'HISTORY');
+          badge.textContent = entry.archived ? 'Archived' : 'History';
+          badge.title = 'Not in the live list. Click to load this session.';
+          top.appendChild(badge);
+          var time = document.createElement('span');
+          time.className = 'session-time';
+          time.textContent = relativeTime(entry.mtimeMs);
+          top.appendChild(time);
+          var title = document.createElement('div');
+          title.className = 'session-title';
+          title.textContent = entry.title || 'Untitled Codex task';
+          var project = document.createElement('div');
+          project.className = 'session-project';
+          project.textContent = projectName(entry.cwd);
+          project.title = entry.cwd || '';
+          row.append(top, title, project);
+          row.addEventListener('click', function () { openHistorySession(entry.id); });
+          list.appendChild(row);
+        });
+      }
+    }
+
+    function renderHeader() {
+      var session = currentSession();
+      taskMeta.textContent = '';
+      if (!session) {
+        taskStatus.hidden = true;
+        taskTitle.textContent = 'Select a task';
+        var hint = document.createElement('span');
+        hint.className = 'meta-item';
+        hint.textContent = sessions.length ? 'Choose a task from the session list.' : 'New Codex tasks appear here automatically.';
+        taskMeta.appendChild(hint);
+        stopButton.hidden = true;
+        resumeSessionButton.hidden = true;
+        document.getElementById('dismiss-button').hidden = true;
+        ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive', 'copy-unarchive'].forEach(function (id) {
+          document.getElementById(id).hidden = true;
+        });
+        return;
+      }
+
+      taskStatus.hidden = false;
+      var headerStatus = session.archived ? 'ARCHIVED' : session.status;
+      taskStatus.className = 'status ' + headerStatus;
+      taskStatus.textContent = STATUS[headerStatus].label;
+      taskStatus.title = waitReason(session) || STATUS[headerStatus].help;
+      taskTitle.textContent = session.title || 'Untitled Codex task';
+      taskTitle.title = session.title || '';
+      var pluginSession = jobs.some(function (job) { return job.threadId && job.threadId === session.threadId; });
+      resumeSessionButton.hidden = session.status !== 'STALE' || !session.threadId || !!session.archived || pluginSession;
+
+      var metadata = document.createElement(session.threadId ? 'button' : 'span');
+      if (session.threadId) metadata.type = 'button';
+      metadata.className = 'meta-item' + (session.threadId ? ' meta-button' : '');
+      metadata.textContent = sessionMetaLine(session);
+      metadata.title = session.threadId ? 'Copy thread ID: ' + session.threadId : sessionMetaLine(session);
+      if (session.threadId) metadata.addEventListener('click', function () { copyText(session.threadId, metadata, 'Thread copied'); });
+      taskMeta.appendChild(metadata);
+      var values = [{ text: relativeTime(session.lastGrow), title: 'Last activity' }];
+      if (isDismissed(session.id)) values.push({ text: 'Dismissed', title: 'Hidden from all filters except All' });
+      values.forEach(function (item) {
+        var span = document.createElement('span');
+        span.className = 'meta-item';
+        span.textContent = item.text;
+        span.title = item.title;
+        taskMeta.appendChild(span);
+      });
+      var reason = waitReason(session);
+      if (reason) {
+        var reasonLine = document.createElement('span');
+        reasonLine.id = 'wait-reason';
+        reasonLine.className = 'meta-item ' + session.status;
+        reasonLine.textContent = reason;
+        reasonLine.title = reason;
+        taskMeta.appendChild(reasonLine);
+      }
+      stopButton.hidden = session.status === 'DONE' || !!session.archived;
+      var dismissButton = document.getElementById('dismiss-button');
+      dismissButton.hidden = false;
+      dismissButton.textContent = isDismissed(session.id) ? 'Restore task' : 'Dismiss task';
+      ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive'].forEach(function (id) {
+        document.getElementById(id).hidden = !session.threadId || !!session.archived;
+      });
+      document.getElementById('copy-unarchive').hidden = !session.threadId || !session.archived;
+    }
+
+    function isInternal(event) {
+      if (event.kind !== 'agent') return false;
+      var text = String(event.text || '').trim();
+      return /^<(permissions|skills|apps|plugins|recommended_plugins|environment_context|developer|multi_agent_mode)/i.test(text) ||
+        text.includes('You are `/root`, the primary agent') ||
+        text.includes('<collaboration_mode>');
+    }
+
+    function eventVisible(event) {
+      return prefs.view === 'raw' || !isInternal(event);
+    }
+
+    function technicalEvent(event) {
+      return ['cmd', 'out', 'patch', 'tool', 'think'].includes(event.kind);
+    }
+
+    function eventLabel(event) {
+      if (isInternal(event)) return 'INTERNAL';
+      return ({ user: 'USER', agent: 'CODEX', cmd: 'COMMAND', out: 'OUTPUT', patch: 'PATCH', tool: 'TOOL', think: 'THINKING', done: 'COMPLETE', err: 'ERROR', sys: 'STATUS' })[event.kind] || 'EVENT';
+    }
+
+    function createEvent(event) {
+      var isLongMessage = ['user', 'agent'].includes(event.kind) && String(event.text || '').length > 3000;
+      if (technicalEvent(event) || isLongMessage) {
+        var details = document.createElement('details');
+        details.className = 'event technical ' + event.kind;
+        if (prefs.view === 'raw') details.open = event.kind === 'patch';
+        var summary = document.createElement('summary');
+        summary.textContent = eventLabel(event) + '  ' + eventTime(event.ts) + '  ' + firstLine(event.text, 150) + (isLongMessage ? '  (expand)' : '');
+        var pre = document.createElement('pre');
+        pre.textContent = event.detail || event.text || '';
+        details.append(summary, pre);
+        return details;
+      }
+
+      var article = document.createElement('article');
+      article.className = 'event ' + event.kind + (isInternal(event) ? ' internal' : '');
+      var head = document.createElement('div');
+      head.className = 'event-head';
+      var kind = document.createElement('span');
+      kind.className = 'event-kind';
+      kind.textContent = eventLabel(event);
+      var time = document.createElement('span');
+      time.className = 'event-time';
+      time.textContent = eventTime(event.ts);
+      head.append(kind, time);
+      var body = document.createElement('div');
+      body.className = 'event-body';
+      body.textContent = event.text || '';
+      article.append(head, body);
+      return article;
+    }
+
+    function renderFeed(preservePosition) {
+      feedInner.textContent = '';
+      var allEvents = (store[selected] || []).filter(eventVisible);
+      var renderKey = String(selected || '') + '|' + prefs.view;
+      var defaultLimit = prefs.view === 'raw' ? 80 : 160;
+      var limit = renderLimits[renderKey] || defaultLimit;
+      var hiddenCount = Math.max(0, allEvents.length - limit);
+      var events = hiddenCount ? allEvents.slice(hiddenCount) : allEvents;
+      if (!selected || !allEvents.length) {
+        var empty = document.createElement('div');
+        empty.className = 'feed-empty';
+        var strong = document.createElement('strong');
+        strong.textContent = selected ? 'No activity to show' : 'Choose a task to inspect';
+        var detail = document.createElement('span');
+        detail.textContent = selected && prefs.view === 'activity'
+          ? 'Switch to Raw log to inspect internal events.'
+          : 'Running tasks are selected automatically unless Follow newest is paused.';
+        empty.append(strong, detail);
+        feedInner.appendChild(empty);
+      } else {
+        var fragment = document.createDocumentFragment();
+        if (hiddenCount) {
+          var earlier = document.createElement('button');
+          earlier.type = 'button';
+          earlier.className = 'load-earlier';
+          earlier.textContent = 'Show earlier activity (' + hiddenCount + ' hidden)';
+          earlier.addEventListener('click', function () {
+            var oldHeight = feed.scrollHeight;
+            var oldTop = feed.scrollTop;
+            renderLimits[renderKey] = limit + 100;
+            renderFeed(true);
+            requestAnimationFrame(function () { feed.scrollTop = oldTop + (feed.scrollHeight - oldHeight); });
+          });
+          fragment.appendChild(earlier);
+        }
+        events.forEach(function (event) { fragment.appendChild(createEvent(event)); });
+        feedInner.appendChild(fragment);
+      }
+      if (prefs.autoScroll && !preservePosition) requestAnimationFrame(scrollToLatest);
+      jumpLatest.hidden = true;
+    }
+
+    function selectSession(id, byUser) {
+      if (byUser) prefs.autoFollow = false;
+      selected = id;
+      prefs.selected = id;
+      unread.delete(id);
+      processPanel.hidden = true;
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+      savePrefs();
+      applyPrefs();
+      renderList();
+      renderHeader();
+      renderFeed();
+      if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
+    }
+
+    async function openHistorySession(id) {
+      try {
+        var response = await fetch('/open?id=' + encodeURIComponent(id), { method: 'POST' });
+        if (!response.ok) return;
+        selectSession(id, true);
+      } catch (_) {}
+    }
+
+    async function refreshJobs() {
+      try {
+        var response = await fetch('/jobs');
+        var data = await response.json();
+        if (!response.ok) return;
+        jobs = data.jobs || [];
+        lastListSignature = '';
+        lastFilterSignature = '';
+        renderFilters();
+        if (prefs.filter === 'JOBS') renderList();
+        renderHeader();
+      } catch (_) {}
+    }
+
+    async function openJob(job) {
+      jobModalTitle.textContent = job.title || job.kindLabel || 'Job result';
+      jobModalMeta.textContent = '';
+      jobModalMeta.appendChild(modalRow('Summary', job.summary || ''));
+      jobModalMeta.appendChild(modalRow('Thread', job.threadId || '', true));
+      jobModalResult.textContent = 'Loading job result\u2026';
+      jobModal.hidden = false;
+      jobModalClose.focus();
+      try {
+        var response = await fetch('/job?dir=' + encodeURIComponent(job.stateDir) + '&id=' + encodeURIComponent(job.id));
+        var detail = await response.json();
+        if (!response.ok) throw new Error(detail.error || 'Job not found');
+        jobModalTitle.textContent = detail.title || job.title || 'Job result';
+        jobModalMeta.textContent = '';
+        jobModalMeta.appendChild(modalRow('Summary', detail.summary || ''));
+        jobModalMeta.appendChild(modalRow('Thread', detail.threadId || '', true));
+        jobModalResult.textContent = detail.rendered
+          || [detail.errorMessage, detail.stderrTail].filter(Boolean).join('\n\n')
+          || 'No rendered result is available.';
+      } catch (error) {
+        jobModalResult.textContent = 'Could not load job result: ' + error.message;
+      }
+    }
+
+    function newestRunning() { return sessions.find(function (session) { return session.status === 'LIVE'; }); }
+    function scrollToLatest() { feed.scrollTop = feed.scrollHeight; jumpLatest.hidden = true; }
+    function nearBottom() { return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 90; }
+
+    async function copyText(text, button, successLabel) {
+      var old = button.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = successLabel;
+        window.setTimeout(function () { button.textContent = old; }, 1200);
+      } catch (_) {
+        window.prompt('Copy this value:', text);
+      }
+    }
+
+    function controlField(labelText, control) {
+      var label = document.createElement('label');
+      label.className = 'control-field';
+      var text = document.createElement('span');
+      text.textContent = labelText;
+      label.append(text, control);
+      return label;
+    }
+
+    function controlSelect(options) {
+      var select = document.createElement('select');
+      options.forEach(function (item) {
+        var option = document.createElement('option');
+        option.value = item[0];
+        option.textContent = item[1];
+        select.appendChild(option);
+      });
+      return select;
+    }
+
+    function workspaceControls(initialCwd) {
+      var select = controlSelect([['', 'Choose a known workspace']]);
+      knownCwds(sessions, jobs).forEach(function (cwd) {
+        var option = document.createElement('option');
+        option.value = cwd;
+        option.textContent = cwd;
+        select.appendChild(option);
+      });
+      if (initialCwd && Array.from(select.options).some(function (option) { return option.value === initialCwd; })) {
+        select.value = initialCwd;
+      }
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Or enter a workspace path';
+      if (initialCwd && !select.value) input.value = initialCwd;
+      var field = controlField('Workspace', select);
+      field.appendChild(input);
+      controlModalBody.appendChild(field);
+      return function () { return input.value.trim() || select.value; };
+    }
+
+    function effortSelect() {
+      return controlSelect([
+        ['', 'Default'], ['none', 'None'], ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'],
+        ['high', 'High'], ['xhigh', 'XHigh']
+      ]);
+    }
+
+    function sandboxSelect() {
+      return controlSelect([
+        ['', 'Default'], ['danger-full-access', 'danger-full-access'],
+        ['workspace-write', 'workspace-write'], ['read-only', 'read-only']
+      ]);
+    }
+
+    function textInput(placeholder) {
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = placeholder || '';
+      return input;
+    }
+
+    function writeCheckbox() {
+      var label = document.createElement('label');
+      label.className = 'control-checkbox';
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      var text = document.createElement('span');
+      text.textContent = 'Allow writes';
+      label.append(input, text);
+      return { label: label, input: input };
+    }
+
+    function showControlModal(title, confirmText) {
+      controlModalTitle.textContent = title;
+      controlModalBody.textContent = '';
+      controlModalError.textContent = '';
+      controlModalConfirm.textContent = confirmText;
+      controlModalConfirm.disabled = false;
+      controlModalConfirm.classList.remove('danger');
+      controlAction = null;
+      controlModal.hidden = false;
+    }
+
+    function closeControlModal() {
+      controlModal.hidden = true;
+      controlAction = null;
+    }
+
+    function openTaskModal() {
+      showControlModal('Start a new Codex task', 'Start task');
+      var session = currentSession();
+      var cwd = workspaceControls(session ? session.cwd : '');
+      var prompt = document.createElement('textarea');
+      prompt.placeholder = 'What should Codex do?';
+      controlModalBody.appendChild(controlField('Prompt', prompt));
+      var effort = effortSelect();
+      var model = textInput('default');
+      var sandbox = sandboxSelect();
+      var write = writeCheckbox();
+      var grid = document.createElement('div');
+      grid.className = 'control-grid';
+      grid.append(controlField('Effort', effort), controlField('Model', model), controlField('Sandbox', sandbox), write.label);
+      controlModalBody.appendChild(grid);
+      controlAction = function () {
+        return {
+          endpoint: '/task',
+          body: taskFormBody({ cwd: cwd(), prompt: prompt.value, effort: effort.value, model: model.value, write: write.input.checked, sandbox: sandbox.value }),
+          onSuccess: function () { chooseFilter('JOBS'); }
+        };
+      };
+      prompt.focus();
+    }
+
+    function openReviewModal(initialKind) {
+      showControlModal('Launch a Codex review', 'Start review');
+      var session = currentSession();
+      var cwd = workspaceControls(session ? session.cwd : '');
+      var kind = controlSelect([['review', 'Review'], ['adversarial-review', 'Adversarial']]);
+      kind.value = initialKind === 'adversarial-review' ? 'adversarial-review' : 'review';
+      var model = textInput('default');
+      var focus = document.createElement('textarea');
+      focus.placeholder = 'Adversarial focus';
+      var grid = document.createElement('div');
+      grid.className = 'control-grid';
+      grid.append(controlField('Kind', kind), controlField('Model', model));
+      controlModalBody.append(grid, controlField('Focus', focus));
+      function updateFocus() {
+        focus.disabled = kind.value !== 'adversarial-review';
+        if (focus.disabled) focus.value = '';
+      }
+      kind.addEventListener('change', updateFocus);
+      updateFocus();
+      controlAction = function () {
+        var body = { cwd: cwd(), kind: kind.value };
+        if (model.value.trim()) body.model = model.value.trim();
+        if (kind.value === 'adversarial-review' && focus.value.trim()) body.focus = focus.value.trim();
+        return { endpoint: '/review', body: body, onSuccess: function () { chooseFilter('JOBS'); } };
+      };
+      kind.focus();
+    }
+
+    function openResumeModal(session, title) {
+      showControlModal('Resume Codex thread?', 'Resume');
+      controlModalBody.appendChild(modalRow('Task', title || 'Codex task'));
+      controlModalBody.appendChild(modalRow('Project', session.cwd || ''));
+      controlModalBody.appendChild(modalRow('Thread', session.threadId || '', true));
+      var prompt = document.createElement('textarea');
+      prompt.placeholder = 'Optional prompt override';
+      controlModalBody.appendChild(controlField('Prompt override', prompt));
+      var effort = effortSelect();
+      var model = textInput('default');
+      var sandbox = sandboxSelect();
+      var write = writeCheckbox();
+      var grid = document.createElement('div');
+      grid.className = 'control-grid';
+      grid.append(controlField('Effort', effort), controlField('Model', model), controlField('Sandbox', sandbox), write.label);
+      controlModalBody.appendChild(grid);
+      controlAction = function () {
+        return {
+          endpoint: '/resume',
+          body: resumeBody(session, {
+            prompt: prompt.value.trim(), effort: effort.value, model: model.value.trim(),
+            write: write.input.checked, sandbox: sandbox.value
+          }),
+          onSuccess: function () { chooseFilter('JOBS'); }
+        };
+      };
+      prompt.focus();
+    }
+
+    function openCancelModal(job) {
+      showControlModal('Cancel running job?', 'Cancel job');
+      controlModalConfirm.classList.add('danger');
+      controlModalBody.appendChild(modalRow('Task', job.title || job.id || 'Codex job'));
+      controlModalBody.appendChild(modalRow('Project', job.workspaceRoot || ''));
+      controlModalBody.appendChild(modalRow('Job ID', job.id || '', true));
+      controlModalBody.appendChild(modalWarning('red', 'Cancelling stops this job and cannot be undone.'));
+      controlAction = function () {
+        return {
+          endpoint: '/cancel',
+          body: { cwd: job.workspaceRoot, jobId: job.id },
+          onSuccess: refreshJobs
+        };
+      };
+      controlModalCancel.focus();
+    }
+
+    function modalRow(label, value, mono) {
+      var row = document.createElement('div');
+      row.className = 'stop-modal-row';
+      var name = document.createElement('span');
+      name.className = 'stop-modal-label';
+      name.textContent = label;
+      var val = document.createElement('span');
+      val.className = 'stop-modal-value' + (mono ? ' mono' : '');
+      val.textContent = value;
+      row.append(name, val);
+      return row;
+    }
+
+    function modalWarning(kind, text) {
+      var warning = document.createElement('div');
+      warning.className = 'stop-modal-warning ' + kind;
+      warning.textContent = text;
+      return warning;
+    }
+
+    function openStopModal(proc) {
+      var session = currentSession();
+      var startedMs = sessionStart(selected);
+      var warnings = processWarnings(proc, startedMs);
+      pendingKillPid = proc.pid;
+      stopModalBody.textContent = '';
+      stopModalBody.appendChild(modalRow('Task', (session && session.title) || 'Unknown task'));
+      stopModalBody.appendChild(modalRow('Project', session ? projectName(session.cwd) : 'Unknown'));
+      stopModalBody.appendChild(modalRow('PID', proc.pid + '  (' + proc.name + ')', true));
+      stopModalBody.appendChild(modalRow('Started', proc.started ? new Date(proc.started).toLocaleTimeString() : 'Unknown'));
+      stopModalBody.appendChild(modalRow('Command', String(proc.cmd || '(unknown command line)'), true));
+      if (warnings.shared) {
+        stopModalBody.appendChild(modalWarning('red',
+          'Shared Codex process (app-server / MCP). It can host several tasks at once — stopping it stops ALL of them, not just this one.'));
+      }
+      if (warnings.timeMatch) {
+        stopModalBody.appendChild(modalWarning('ok', 'Process start time matches this task’s start time.'));
+      } else {
+        stopModalBody.appendChild(modalWarning('yellow',
+          'This process does not match this task’s start time. The task’s own process may already have exited.'));
+      }
+      stopModalBody.appendChild(modalWarning('red', 'Stopping kills the process and its entire child tree. This cannot be undone.'));
+      stopModalConfirm.hidden = false;
+      stopModalConfirm.disabled = false;
+      stopModalCancel.textContent = 'Cancel';
+      stopModal.hidden = false;
+      stopModalCancel.focus();
+    }
+
+    controlModalForm.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      if (!controlAction) return;
+      controlModalError.textContent = '';
+      controlModalConfirm.disabled = true;
+      try {
+        var action = controlAction();
+        var response = await fetch(action.endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(action.body)
+        });
+        var data = {};
+        try { data = await response.json(); } catch (_) {}
+        if (!response.ok || data.ok === false) {
+          controlModalError.textContent = data.error || ('Request failed with HTTP ' + response.status);
+          if (response.status === 409) {
+            controlModalError.textContent += '\nUse the existing Stop task process dialog first.';
+          }
+          return;
+        }
+        var onSuccess = action.onSuccess;
+        closeControlModal();
+        if (onSuccess) onSuccess(data);
+      } catch (error) {
+        controlModalError.textContent = 'Request failed: ' + error.message;
+      } finally {
+        if (!controlModal.hidden) controlModalConfirm.disabled = false;
+      }
+    });
+    controlModalCancel.addEventListener('click', closeControlModal);
+    controlModal.addEventListener('click', function (event) {
+      if (event.target === controlModal) closeControlModal();
+    });
+
+    stopModalConfirm.addEventListener('click', async function () {
+      if (pendingKillPid == null) return;
+      stopModalConfirm.disabled = true;
+      var message = '';
+      try { message = await (await fetch('/kill?pid=' + pendingKillPid, { method: 'POST' })).text(); }
+      catch (error) { message = 'Request failed: ' + error; }
+      pendingKillPid = null;
+      stopModalBody.textContent = '';
+      stopModalBody.appendChild(modalWarning(/^killed/i.test(message) ? 'ok' : 'yellow', message));
+      stopModalConfirm.hidden = true;
+      stopModalCancel.textContent = 'Close';
+      processPanel.hidden = true;
+    });
+    stopModalCancel.addEventListener('click', function () {
+      stopModal.hidden = true;
+      pendingKillPid = null;
+    });
+    stopModal.addEventListener('click', function (event) {
+      if (event.target === stopModal) { stopModal.hidden = true; pendingKillPid = null; }
+    });
+    jobModalClose.addEventListener('click', function () { jobModal.hidden = true; });
+    jobModal.addEventListener('click', function (event) {
+      if (event.target === jobModal) jobModal.hidden = true;
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !stopModal.hidden) { stopModal.hidden = true; pendingKillPid = null; }
+      if (event.key === 'Escape' && !jobModal.hidden) jobModal.hidden = true;
+      if (event.key === 'Escape' && !controlModal.hidden) closeControlModal();
+    });
+
+    document.getElementById('new-task-button').addEventListener('click', openTaskModal);
+    document.getElementById('review-button').addEventListener('click', function () { openReviewModal('review'); });
+    document.getElementById('adversarial-review-button').addEventListener('click', function () { openReviewModal('adversarial-review'); });
+    resumeSessionButton.addEventListener('click', function () {
+      var session = currentSession();
+      if (session) openResumeModal(session, session.title);
+    });
+
+    search.addEventListener('input', function () {
+      prefs.query = search.value;
+      savePrefs();
+      window.clearTimeout(historySearchTimer);
+      lastListSignature = '';
+      renderList();
+      if (prefs.filter === 'JOBS') return;
+      var query = String(prefs.query || '').trim();
+      if (!query) {
+        historyResults = [];
+        lastListSignature = '';
+        renderList();
+        return;
+      }
+      historySearchTimer = window.setTimeout(async function () {
+        try {
+          var response = await fetch('/search?q=' + encodeURIComponent(query));
+          var data = await response.json();
+          if (String(prefs.query || '').trim() !== query) return; // stale response
+          historyResults = data.results || [];
+        } catch (_) {
+          historyResults = [];
+        }
+        lastListSignature = '';
+        renderList();
+      }, 250);
+    });
+    document.querySelectorAll('.view-button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        prefs.view = button.dataset.view;
+        savePrefs();
+        applyPrefs();
+        renderFeed();
+      });
+    });
+    autoscrollButton.addEventListener('click', function () {
+      prefs.autoScroll = !prefs.autoScroll;
+      savePrefs();
+      applyPrefs();
+      if (prefs.autoScroll) scrollToLatest();
+    });
+    followButton.addEventListener('click', function () {
+      prefs.autoFollow = true;
+      var running = newestRunning();
+      followRunningSession(running);
+      savePrefs();
+      applyPrefs();
+      renderFilters();
+      renderList();
+    });
+    jumpLatest.addEventListener('click', scrollToLatest);
+    feed.addEventListener('scroll', function () {
+      jumpLatest.hidden = nearBottom();
+    }, { passive: true });
+
+    document.getElementById('hide-side').addEventListener('click', function () {
+      if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
+      else {
+        prefs.sideCollapsed = true;
+        savePrefs();
+        applyPrefs();
+      }
+    });
+    document.getElementById('show-side').addEventListener('click', function () {
+      if (window.innerWidth <= 760) document.body.classList.add('mobile-side-open');
+      else {
+        prefs.sideCollapsed = false;
+        savePrefs();
+        applyPrefs();
+      }
+    });
+
+    splitter.addEventListener('pointerdown', function (event) {
+      splitter.setPointerCapture(event.pointerId);
+      splitter.classList.add('dragging');
+    });
+    splitter.addEventListener('pointermove', function (event) {
+      if (!splitter.hasPointerCapture(event.pointerId)) return;
+      prefs.sideWidth = clamp(event.clientX, 240, window.innerWidth * .55);
+      document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
+    });
+    splitter.addEventListener('pointerup', function (event) {
+      if (splitter.hasPointerCapture(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
+      splitter.classList.remove('dragging');
+      savePrefs();
+    });
+    splitter.addEventListener('keydown', function (event) {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      prefs.sideWidth = clamp(prefs.sideWidth + (event.key === 'ArrowRight' ? 16 : -16), 240, window.innerWidth * .55);
+      savePrefs();
+      applyPrefs();
+    });
+
+    actionsButton.addEventListener('click', function () {
+      actionMenu.hidden = !actionMenu.hidden;
+      actionsButton.setAttribute('aria-expanded', actionMenu.hidden ? 'false' : 'true');
+    });
+    document.addEventListener('click', function (event) {
+      if (actionMenu.hidden || actionMenu.contains(event.target) || actionsButton.contains(event.target)) return;
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+    });
+    [
+      { id: 'copy-resume', build: resumeCommand, done: 'Resume command copied' },
+      { id: 'copy-continue', build: continueCommand, done: 'Continue command copied' },
+      { id: 'copy-fork', build: forkCommand, done: 'Fork command copied' },
+      { id: 'copy-archive', build: archiveCommand, done: 'Archive command copied' },
+      { id: 'copy-unarchive', build: unarchiveCommand, done: 'Unarchive command copied' }
+    ].forEach(function (action) {
+      document.getElementById(action.id).addEventListener('click', function () {
+        var session = currentSession();
+        if (session && session.threadId) copyText(action.build(session.threadId), this, action.done);
+      });
+    });
+
+    document.getElementById('dismiss-button').addEventListener('click', function () {
+      if (!selected) return;
+      var ids = prefs.dismissed = prefs.dismissed || [];
+      var at = ids.indexOf(selected);
+      if (at === -1) ids.push(selected); else ids.splice(at, 1);
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+      savePrefs();
+      lastListSignature = '';
+      lastFilterSignature = '';
+      renderFilters();
+      renderList();
+      renderHeader();
+    });
+
+    stopButton.addEventListener('click', async function () {
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+      processPanel.hidden = false;
+      processPanel.textContent = 'Looking for matching Codex processes\u2026';
+      var processes = [];
+      try { processes = await (await fetch('/procs')).json(); } catch (_) {}
+      processPanel.textContent = '';
+      if (!processes.length) {
+        processPanel.textContent = 'No matching Codex processes were found. The task may already have exited.';
+        return;
+      }
+      var started = sessionStart(selected);
+      processes.sort(function (a, b) { return Math.abs(a.started - started) - Math.abs(b.started - started); });
+      var closeMatch = processes.some(function (process) { return started && Math.abs(process.started - started) < 15000; });
+      if (started && !closeMatch) {
+        var warning = document.createElement('div');
+        warning.style.color = 'var(--yellow)';
+        warning.style.marginBottom = '8px';
+        warning.textContent = 'No process closely matches this task start time. Shared app-server processes can host several tasks; stopping one may affect all of them.';
+        processPanel.appendChild(warning);
+      }
+      processes.forEach(function (process) {
+        var row = document.createElement('div');
+        row.className = 'process';
+        var kill = document.createElement('button');
+        kill.type = 'button';
+        kill.className = 'kill-button';
+        kill.textContent = 'STOP';
+        kill.addEventListener('click', function () { openStopModal(process); });
+        var description = document.createElement('span');
+        description.className = 'mono';
+        description.textContent = 'PID ' + process.pid + '  ' + process.name + '  ' + String(process.cmd || '').slice(0, 180);
+        row.append(kill, description);
+        processPanel.appendChild(row);
+      });
+    });
+
+    window.addEventListener('resize', function () {
+      applyPrefs();
+      if (window.innerWidth > 760) document.body.classList.remove('mobile-side-open');
+    });
+
+    var events = new EventSource('/events');
+    events.onopen = function () { setConnection('connected', 'Live updates connected'); };
+    events.onerror = function () { setConnection('disconnected', 'Reconnecting\u2026'); };
+    events.onmessage = function (message) {
+      var data = JSON.parse(message.data);
+      if (data.type === 'sessions') {
+        var previousSelectedSession = currentSession();
+        var previousSelectedStatus = previousSelectedSession ? previousSelectedSession.status : null;
+        data.sessions.forEach(function (session) {
+          var oldStatus = previousStatus[session.id];
+          if (seeded && session.id !== selected && oldStatus !== session.status) unread.add(session.id);
+          previousStatus[session.id] = session.status;
+        });
+        sessions = data.sessions;
+        seeded = true;
+        // forget dismissals for sessions that fell out of the tracked list
+        if (sessions.length && (prefs.dismissed || []).length) {
+          var kept = prefs.dismissed.filter(function (id) {
+            return sessions.some(function (session) { return session.id === id; });
+          });
+          if (kept.length !== prefs.dismissed.length) { prefs.dismissed = kept; savePrefs(); }
+        }
+        if (selected && !sessions.some(function (session) { return session.id === selected; })) selected = null;
+        followRunningSession(newestRunning());
+        if (!selected && sessions.length) selectSession(sessions[0].id, false);
+        followSelectedStatus(previousSelectedStatus);
+        renderFilters();
+        renderList();
+        renderHeader();
+      }
+      if (data.type === 'snapshot') {
+        store[data.session] = data.events;
+        if (data.session === selected) renderFeed();
+      }
+      if (data.type === 'events') {
+        var existing = store[data.session] = store[data.session] || [];
+        existing.push.apply(existing, data.events);
+        if (existing.length > 500) existing.splice(0, existing.length - 500);
+        if (data.session === selected) {
+          var shouldFollow = prefs.autoScroll && nearBottom();
+          data.events.filter(eventVisible).forEach(function (event) {
+            var key = String(selected || '') + '|' + prefs.view;
+            var limit = renderLimits[key] || (prefs.view === 'raw' ? 80 : 160);
+            var rendered = feedInner.querySelectorAll('.event');
+            if (rendered.length >= limit && rendered.length) rendered[0].remove();
+            feedInner.appendChild(createEvent(event));
+          });
+          if (shouldFollow) requestAnimationFrame(scrollToLatest);
+          else jumpLatest.hidden = false;
+        } else {
+          unread.add(data.session);
+          renderList();
+        }
+      }
+    };
+
+    var notifications = new EventSource('/notifications');
+    notifications.onmessage = function (message) {
+      try {
+        var data = JSON.parse(message.data);
+        if (data.type === 'job') refreshJobs();
+      } catch (_) {}
+    };
+
+    applyPrefs();
+    renderFilters();
+    renderList();
+    renderHeader();
+    renderFeed();
+    refreshJobs();
+    window.setInterval(function () { renderList(); renderHeader(); }, 10000);
+    window.setInterval(function () { if (prefs.filter === 'JOBS') refreshJobs(); }, 5000);
+  </script>
+</body>
+</html>
