@@ -22,6 +22,12 @@ const PLUGIN_MANIFEST = JSON.parse(fs.readFileSync(PLUGIN_MANIFEST_URL, "utf8"))
 export const BROKER_ENDPOINT_ENV = "CODEX_COMPANION_APP_SERVER_ENDPOINT";
 export const BROKER_BUSY_RPC_CODE = -32001;
 
+export function buildAppServerArgs(configOverrides = []) {
+  const args = ["app-server"];
+  for (const kv of configOverrides) args.push("-c", String(kv));
+  return args;
+}
+
 /** @type {ClientInfo} */
 const DEFAULT_CLIENT_INFO = {
   title: "Codex Plugin",
@@ -187,7 +193,7 @@ class SpawnedCodexAppServerClient extends AppServerClientBase {
   }
 
   async initialize() {
-    this.proc = spawn("codex", ["app-server"], {
+    this.proc = spawn("codex", buildAppServerArgs(this.options.configOverrides), {
       cwd: this.cwd,
       env: this.options.env ?? process.env,
       stdio: ["pipe", "pipe", "pipe"],
