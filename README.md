@@ -55,6 +55,8 @@ This repo IS a Claude Code marketplace. In Claude Code:
 
 (Working from a local clone instead? `/plugin marketplace add <path-to-clone>` works the same.)
 
+The installed plugin bundles the viewer and starts it automatically on each Claude Code session start. Set `CODEX_VIEWER_AUTOSTART=0` to opt out. Autostart leaves the browser closed; run `/codex:viewer` to start or reuse the viewer and open its dashboard.
+
 Uninstall the OpenAI-marketplace copy of `codex` first so `/codex:*` resolves to ours. All command names stay identical (`/codex:rescue`, `/codex:review`, `/codex:status`, ...). What our fork changes:
 
 - **Sandbox**: defaults to `danger-full-access` (see [Sandbox](#sandbox) below) instead of the broken-on-Store-pwsh sandboxed modes — and it survives plugin updates, because the plugin is this repo.
@@ -88,6 +90,10 @@ Download and extract `Codex-Live-Viewer-Linux-x64.zip`, then run:
 ```
 
 The Linux tray requires GTK 3 and Ayatana AppIndicator (for example `libgtk-3-0` and `libayatana-appindicator3-1` on Ubuntu/Debian).
+
+### macOS
+
+There is no macOS tray build. The bundled Claude Code plugin autostarts the Node viewer on session start; run `/codex:viewer` to open it.
 
 ### Node CLI
 
