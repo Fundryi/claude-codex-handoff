@@ -23,6 +23,12 @@ test("taskFormBody trims and omits empty optionals", () => {
   );
 });
 
+test("taskFormBody includes fast only when enabled", () => {
+  const { taskFormBody } = ctx();
+  assert.deepEqual(plain(taskFormBody({ cwd: "D:\\x", prompt: "p", fast: true })), { cwd: "D:\\x", prompt: "p", fast: true });
+  assert.deepEqual(plain(taskFormBody({ cwd: "D:\\x", prompt: "p", fast: false })), { cwd: "D:\\x", prompt: "p" });
+});
+
 test("resumeBody carries thread, cwd and adjustments", () => {
   const { resumeBody } = ctx();
   assert.deepEqual(
@@ -30,6 +36,15 @@ test("resumeBody carries thread, cwd and adjustments", () => {
     { threadId: "th-1", cwd: "D:\\x", effort: "high", write: true },
   );
   assert.deepEqual(plain(resumeBody({ threadId: "th-1", cwd: "D:\\x" }, {})), { threadId: "th-1", cwd: "D:\\x" });
+});
+
+test("resumeBody includes fast only when enabled", () => {
+  const { resumeBody } = ctx();
+  assert.deepEqual(
+    plain(resumeBody({ threadId: "th-1", cwd: "D:\\x" }, { fast: true })),
+    { threadId: "th-1", cwd: "D:\\x", fast: true },
+  );
+  assert.deepEqual(plain(resumeBody({ threadId: "th-1", cwd: "D:\\x" }, { fast: false })), { threadId: "th-1", cwd: "D:\\x" });
 });
 
 test("knownCwds dedupes sessions and jobs, newest first, skips blanks", () => {
