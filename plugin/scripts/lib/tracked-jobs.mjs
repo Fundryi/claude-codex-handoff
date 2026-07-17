@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import http from "node:http";
 import process from "node:process";
 
 import { mapDeathReason } from "./death-reasons.mjs";
@@ -8,6 +9,21 @@ export const SESSION_ID_ENV = "CODEX_COMPANION_SESSION_ID";
 
 export function nowIso() {
   return new Date().toISOString();
+}
+
+export function notifyViewer(payload) {
+  try {
+    const port = Number(process.env.CODEX_VIEWER_PORT) || 8377;
+    const req = http.request(
+      { host: "127.0.0.1", port, path: "/notify", method: "POST", headers: { "Content-Type": "application/json" }, timeout: 1000 },
+      (res) => res.resume()
+    );
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => {});
+    req.end(JSON.stringify(payload));
+  } catch {
+    // viewer not running - completion push is best-effort by design
+  }
 }
 
 function normalizeProgressEvent(value) {
@@ -195,6 +211,7 @@ export async function runTrackedJob(job, runner, options = {}) {
         ? mapDeathReason(execution.payload?.codex?.stderr ?? execution.rendered ?? "")
         : null
     });
+    notifyViewer({ jobId: job.id, status: completionStatus, title: job.title ?? "", workspaceRoot: job.workspaceRoot });
     appendLogBlock(options.logFile ?? job.logFile ?? null, "Final output", execution.rendered);
     return execution;
   } catch (error) {
@@ -226,6 +243,7 @@ export async function runTrackedJob(job, runner, options = {}) {
       diedReason,
       completedAt
     });
+    notifyViewer({ jobId: job.id, status: "failed", title: job.title ?? "", workspaceRoot: job.workspaceRoot });
     throw error;
   }
 }
