@@ -88,6 +88,7 @@
     #brand-copy { min-width: 0; flex: 1; }
     #brand-title { font-size: 14px; font-weight: 650; letter-spacing: .1px; }
     #brand-subtitle { color: var(--muted); font-size: 11px; margin-top: 1px; }
+    #new-task-button, #resume-session-button { height: 32px; white-space: nowrap; }
     #connection {
       display: inline-flex;
       align-items: center;
@@ -114,6 +115,9 @@
     }
     #search::placeholder { color: var(--faint); }
     #filters { display: grid; gap: 2px; margin-top: 8px; }
+    #jobs-actions { display: flex; gap: 6px; margin-top: 8px; }
+    #jobs-actions[hidden] { display: none; }
+    #jobs-actions button { flex: 1; }
     .filter-button, .view-button {
       border: 1px solid transparent;
       border-radius: 6px;
@@ -201,6 +205,29 @@
     }
     .session-last { display: none; }
     .session.job .session-last { display: block; white-space: normal; }
+    .job-open {
+      width: 100%;
+      display: block;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .job-actions { display: flex; gap: 6px; margin-top: 7px; }
+    .job-actions button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .job-actions button:hover { background: var(--hover); color: var(--fg); }
+    .job-actions .cancel-job { color: #ff8f88; }
     .session-time { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
     .unread { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 7px var(--blue); }
     .status {
@@ -341,7 +368,7 @@
       font-weight: 700;
       flex: none;
     }
-    #stop-modal, #job-modal {
+    #stop-modal, #job-modal, #control-modal {
       position: fixed;
       inset: 0;
       z-index: 50;
@@ -349,8 +376,8 @@
       display: grid;
       place-items: center;
     }
-    #stop-modal[hidden], #job-modal[hidden] { display: none; }
-    #stop-modal-box, #job-modal-box {
+    #stop-modal[hidden], #job-modal[hidden], #control-modal[hidden] { display: none; }
+    #stop-modal-box, #job-modal-box, #control-modal-box {
       width: min(92vw, 560px);
       max-height: 84vh;
       overflow-y: auto;
@@ -360,7 +387,7 @@
       padding: 16px;
       box-shadow: 0 18px 50px #000c;
     }
-    #stop-modal-box h2, #job-modal-box h2 { margin: 0 0 12px; font-size: 14px; }
+    #stop-modal-box h2, #job-modal-box h2, #control-modal-box h2 { margin: 0 0 12px; font-size: 14px; }
     .stop-modal-row { display: flex; gap: 10px; margin-bottom: 6px; font-size: 12px; }
     .stop-modal-label { color: var(--muted); flex: none; width: 70px; }
     .stop-modal-value { min-width: 0; overflow-wrap: anywhere; }
@@ -374,8 +401,8 @@
     .stop-modal-warning.red { background: #4a1512; color: #ffb3ad; border: 1px solid #7a2a24; }
     .stop-modal-warning.yellow { background: #453a14; color: #f0cb6e; border: 1px solid #6d5a1e; }
     .stop-modal-warning.ok { background: #14331e; color: #8fdca4; border: 1px solid #245c36; }
-    #stop-modal-actions, #job-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-    #stop-modal-actions button, #job-modal-actions button {
+    #stop-modal-actions, #job-modal-actions, #control-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    #stop-modal-actions button, #job-modal-actions button, #control-modal-actions button {
       border: 1px solid var(--border);
       border-radius: 7px;
       padding: 7px 12px;
@@ -383,7 +410,7 @@
       cursor: pointer;
       font-size: 12px;
     }
-    #stop-modal-actions button:hover, #job-modal-actions button:hover { background: var(--hover); }
+    #stop-modal-actions button:hover, #job-modal-actions button:hover, #control-modal-actions button:hover { background: var(--hover); }
     #stop-modal-confirm { background: #6d2925; border-color: #8a3a34; color: #ffd0cc; font-weight: 700; }
     #stop-modal-confirm:disabled { opacity: .6; cursor: default; }
     #job-modal-box { width: min(92vw, 760px); }
@@ -400,6 +427,24 @@
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
+    #control-modal-box { width: min(92vw, 640px); }
+    #control-modal-body { display: grid; gap: 11px; }
+    .control-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+    .control-field input:not([type="checkbox"]), .control-field select, .control-field textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 9px;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    .control-field textarea { min-height: 90px; resize: vertical; }
+    .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .control-checkbox { display: flex; align-items: center; gap: 7px; color: var(--fg); font-size: 12px; }
+    #control-modal-error { min-height: 18px; margin-top: 10px; color: #ff9b95; font-size: 12px; white-space: pre-wrap; }
+    #control-modal-confirm { background: #17375a; border-color: #36577c; color: #c2ddff; font-weight: 700; }
+    #control-modal-confirm.danger { background: #6d2925; border-color: #8a3a34; color: #ffd0cc; }
+    #control-modal-confirm:disabled { opacity: .6; cursor: default; }
 
     #feed-toolbar {
       min-height: 43px;
@@ -526,6 +571,7 @@
       #follow-button { display: none; }
       #feed-toolbar { padding-left: 8px; padding-right: 8px; overflow-x: auto; }
       #feed { padding-left: 12px; padding-right: 12px; }
+      .control-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -537,11 +583,16 @@
         <div id="brand-title">Codex Live Viewer</div>
         <div id="brand-subtitle"><span id="connection"><span id="connection-dot"></span><span id="connection-text">Connecting</span></span></div>
       </div>
+      <button id="new-task-button" class="toolbar-button" type="button">New task</button>
       <button id="hide-side" class="icon-button" type="button" title="Collapse session list" aria-label="Collapse session list">&#x2039;</button>
     </div>
     <div id="side-controls">
       <input id="search" type="search" placeholder="Search tasks, projects, or IDs" aria-label="Search sessions">
       <div id="filters" aria-label="Filter sessions"></div>
+      <div id="jobs-actions" hidden>
+        <button id="review-button" class="toolbar-button" type="button">Review</button>
+        <button id="adversarial-review-button" class="toolbar-button" type="button">Adversarial</button>
+      </div>
     </div>
     <div id="list"></div>
   </aside>
@@ -557,6 +608,7 @@
           <div id="task-meta"><span class="meta-item">Running tasks are selected automatically</span></div>
         </div>
         <div id="header-actions">
+          <button id="resume-session-button" class="toolbar-button" type="button" hidden>Resume</button>
           <button id="follow-button" type="button" title="Automatically select the newest running task">Follow newest</button>
           <button id="actions-button" class="icon-button" type="button" title="Task actions" aria-label="Task actions" aria-expanded="false">&#x22EF;</button>
         </div>
@@ -605,6 +657,20 @@
       <div id="job-modal-actions">
         <button id="job-modal-close" type="button">Close</button>
       </div>
+    </div>
+  </div>
+
+  <div id="control-modal" hidden>
+    <div id="control-modal-box" role="dialog" aria-modal="true" aria-labelledby="control-modal-title">
+      <h2 id="control-modal-title">Codex action</h2>
+      <form id="control-modal-form">
+        <div id="control-modal-body"></div>
+        <div id="control-modal-error" role="status" aria-live="polite"></div>
+        <div id="control-modal-actions">
+          <button id="control-modal-cancel" type="button">Back</button>
+          <button id="control-modal-confirm" type="submit">Continue</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -661,6 +727,16 @@
     var jobModalMeta = document.getElementById('job-modal-meta');
     var jobModalResult = document.getElementById('job-modal-result');
     var jobModalClose = document.getElementById('job-modal-close');
+    var controlModal = document.getElementById('control-modal');
+    var controlModalTitle = document.getElementById('control-modal-title');
+    var controlModalForm = document.getElementById('control-modal-form');
+    var controlModalBody = document.getElementById('control-modal-body');
+    var controlModalError = document.getElementById('control-modal-error');
+    var controlModalConfirm = document.getElementById('control-modal-confirm');
+    var controlModalCancel = document.getElementById('control-modal-cancel');
+    var jobsActions = document.getElementById('jobs-actions');
+    var resumeSessionButton = document.getElementById('resume-session-button');
+    var controlAction = null;
     var pendingKillPid = null;
     var followButton = document.getElementById('follow-button');
     var autoscrollButton = document.getElementById('autoscroll-button');
@@ -773,6 +849,29 @@
       if (job.diedReason) parts.push(job.diedReason);
       return parts.join(' \u00b7 ');
     }
+    function taskFormBody(f) {
+      const b = { cwd: String(f.cwd || '').trim(), prompt: String(f.prompt || '').trim() };
+      if (f.effort) b.effort = f.effort;
+      if (f.model && String(f.model).trim()) b.model = String(f.model).trim();
+      if (f.write) b.write = true;
+      if (f.sandbox) b.sandbox = f.sandbox;
+      return b;
+    }
+    function resumeBody(session, opts) {
+      const b = { threadId: session.threadId, cwd: session.cwd };
+      if (opts.prompt) b.prompt = opts.prompt;
+      if (opts.effort) b.effort = opts.effort;
+      if (opts.model) b.model = opts.model;
+      if (opts.write) b.write = true;
+      if (opts.sandbox) b.sandbox = opts.sandbox;
+      return b;
+    }
+    function knownCwds(sessions, jobs) {
+      const seen = [];
+      for (const s of sessions || []) if (s.cwd && !seen.includes(s.cwd)) seen.push(s.cwd);
+      for (const j of jobs || []) if (j.workspaceRoot && !seen.includes(j.workspaceRoot)) seen.push(j.workspaceRoot);
+      return seen;
+    }
     function waitReason(session) {
       if (!session || session.archived || (session.status !== 'IDLE' && session.status !== 'STALE')) return '';
       var text = firstLine(session.lastText, 80);
@@ -837,6 +936,7 @@
     }
 
     function renderFilters() {
+      jobsActions.hidden = prefs.filter !== 'JOBS';
       var signature = JSON.stringify([prefs.filter, FILTERS.map(function (item) { return [item.id, statusCount(item.id)]; })]);
       if (signature === lastFilterSignature) return;
       lastFilterSignature = signature;
@@ -916,16 +1016,18 @@
         prefs.query,
         Math.floor(Date.now() / 10000),
         shown.map(function (job) {
-          return [job.id, job.live, job.updatedAt, job.heartbeatAt, job.title, job.phase, job.diedReason];
+          return [job.id, job.live, job.updatedAt, job.heartbeatAt, job.title, job.phase, job.diedReason, job.threadId];
         })
       ]);
       if (signature === lastListSignature) return;
       lastListSignature = signature;
       list.textContent = '';
       shown.forEach(function (job) {
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'session job';
+        var row = document.createElement('div');
+        row.className = 'session job';
+        var open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'job-open';
 
         var top = document.createElement('div');
         top.className = 'session-top';
@@ -958,9 +1060,29 @@
         }
         detail.textContent = detailText;
 
-        button.append(top, title, project, detail);
-        button.addEventListener('click', function () { openJob(job); });
-        list.appendChild(button);
+        open.append(top, title, project, detail);
+        open.addEventListener('click', function () { openJob(job); });
+        row.appendChild(open);
+
+        var actions = document.createElement('div');
+        actions.className = 'job-actions';
+        if (job.threadId && (job.live === 'dead' || job.live === 'failed')) {
+          var resume = document.createElement('button');
+          resume.type = 'button';
+          resume.textContent = 'RESUME';
+          resume.addEventListener('click', function () { openResumeModal({ threadId: job.threadId, cwd: job.workspaceRoot }, job.title); });
+          actions.appendChild(resume);
+        }
+        if (job.live === 'working' || job.live === 'possibly-stuck') {
+          var cancel = document.createElement('button');
+          cancel.type = 'button';
+          cancel.className = 'cancel-job';
+          cancel.textContent = 'CANCEL';
+          cancel.addEventListener('click', function () { openCancelModal(job); });
+          actions.appendChild(cancel);
+        }
+        if (actions.childNodes.length) row.appendChild(actions);
+        list.appendChild(row);
       });
       if (!shown.length) {
         var empty = document.createElement('div');
@@ -1085,6 +1207,7 @@
         hint.textContent = sessions.length ? 'Choose a task from the session list.' : 'New Codex tasks appear here automatically.';
         taskMeta.appendChild(hint);
         stopButton.hidden = true;
+        resumeSessionButton.hidden = true;
         document.getElementById('dismiss-button').hidden = true;
         ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive', 'copy-unarchive'].forEach(function (id) {
           document.getElementById(id).hidden = true;
@@ -1099,6 +1222,8 @@
       taskStatus.title = waitReason(session) || STATUS[headerStatus].help;
       taskTitle.textContent = session.title || 'Untitled Codex task';
       taskTitle.title = session.title || '';
+      var pluginSession = jobs.some(function (job) { return job.threadId && job.threadId === session.threadId; });
+      resumeSessionButton.hidden = session.status !== 'STALE' || !session.threadId || !!session.archived || pluginSession;
 
       var metadata = document.createElement(session.threadId ? 'button' : 'span');
       if (session.threadId) metadata.type = 'button';
@@ -1264,6 +1389,7 @@
         lastFilterSignature = '';
         renderFilters();
         if (prefs.filter === 'JOBS') renderList();
+        renderHeader();
       } catch (_) {}
     }
 
@@ -1304,6 +1430,194 @@
       } catch (_) {
         window.prompt('Copy this value:', text);
       }
+    }
+
+    function controlField(labelText, control) {
+      var label = document.createElement('label');
+      label.className = 'control-field';
+      var text = document.createElement('span');
+      text.textContent = labelText;
+      label.append(text, control);
+      return label;
+    }
+
+    function controlSelect(options) {
+      var select = document.createElement('select');
+      options.forEach(function (item) {
+        var option = document.createElement('option');
+        option.value = item[0];
+        option.textContent = item[1];
+        select.appendChild(option);
+      });
+      return select;
+    }
+
+    function workspaceControls(initialCwd) {
+      var select = controlSelect([['', 'Choose a known workspace']]);
+      knownCwds(sessions, jobs).forEach(function (cwd) {
+        var option = document.createElement('option');
+        option.value = cwd;
+        option.textContent = cwd;
+        select.appendChild(option);
+      });
+      if (initialCwd && Array.from(select.options).some(function (option) { return option.value === initialCwd; })) {
+        select.value = initialCwd;
+      }
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Or enter a workspace path';
+      if (initialCwd && !select.value) input.value = initialCwd;
+      var field = controlField('Workspace', select);
+      field.appendChild(input);
+      controlModalBody.appendChild(field);
+      return function () { return input.value.trim() || select.value; };
+    }
+
+    function effortSelect() {
+      return controlSelect([
+        ['', 'Default'], ['none', 'None'], ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'],
+        ['high', 'High'], ['xhigh', 'XHigh']
+      ]);
+    }
+
+    function sandboxSelect() {
+      return controlSelect([
+        ['', 'Default'], ['danger-full-access', 'danger-full-access'],
+        ['workspace-write', 'workspace-write'], ['read-only', 'read-only']
+      ]);
+    }
+
+    function textInput(placeholder) {
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = placeholder || '';
+      return input;
+    }
+
+    function writeCheckbox() {
+      var label = document.createElement('label');
+      label.className = 'control-checkbox';
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      var text = document.createElement('span');
+      text.textContent = 'Allow writes';
+      label.append(input, text);
+      return { label: label, input: input };
+    }
+
+    function showControlModal(title, confirmText) {
+      controlModalTitle.textContent = title;
+      controlModalBody.textContent = '';
+      controlModalError.textContent = '';
+      controlModalConfirm.textContent = confirmText;
+      controlModalConfirm.disabled = false;
+      controlModalConfirm.classList.remove('danger');
+      controlAction = null;
+      controlModal.hidden = false;
+    }
+
+    function closeControlModal() {
+      controlModal.hidden = true;
+      controlAction = null;
+    }
+
+    function openTaskModal() {
+      showControlModal('Start a new Codex task', 'Start task');
+      var session = currentSession();
+      var cwd = workspaceControls(session ? session.cwd : '');
+      var prompt = document.createElement('textarea');
+      prompt.placeholder = 'What should Codex do?';
+      controlModalBody.appendChild(controlField('Prompt', prompt));
+      var effort = effortSelect();
+      var model = textInput('default');
+      var sandbox = sandboxSelect();
+      var write = writeCheckbox();
+      var grid = document.createElement('div');
+      grid.className = 'control-grid';
+      grid.append(controlField('Effort', effort), controlField('Model', model), controlField('Sandbox', sandbox), write.label);
+      controlModalBody.appendChild(grid);
+      controlAction = function () {
+        return {
+          endpoint: '/task',
+          body: taskFormBody({ cwd: cwd(), prompt: prompt.value, effort: effort.value, model: model.value, write: write.input.checked, sandbox: sandbox.value }),
+          onSuccess: function () { chooseFilter('JOBS'); }
+        };
+      };
+      prompt.focus();
+    }
+
+    function openReviewModal(initialKind) {
+      showControlModal('Launch a Codex review', 'Start review');
+      var session = currentSession();
+      var cwd = workspaceControls(session ? session.cwd : '');
+      var kind = controlSelect([['review', 'Review'], ['adversarial-review', 'Adversarial']]);
+      kind.value = initialKind === 'adversarial-review' ? 'adversarial-review' : 'review';
+      var model = textInput('default');
+      var focus = document.createElement('textarea');
+      focus.placeholder = 'Adversarial focus';
+      var grid = document.createElement('div');
+      grid.className = 'control-grid';
+      grid.append(controlField('Kind', kind), controlField('Model', model));
+      controlModalBody.append(grid, controlField('Focus', focus));
+      function updateFocus() {
+        focus.disabled = kind.value !== 'adversarial-review';
+        if (focus.disabled) focus.value = '';
+      }
+      kind.addEventListener('change', updateFocus);
+      updateFocus();
+      controlAction = function () {
+        var body = { cwd: cwd(), kind: kind.value };
+        if (model.value.trim()) body.model = model.value.trim();
+        if (kind.value === 'adversarial-review' && focus.value.trim()) body.focus = focus.value.trim();
+        return { endpoint: '/review', body: body, onSuccess: function () { chooseFilter('JOBS'); } };
+      };
+      kind.focus();
+    }
+
+    function openResumeModal(session, title) {
+      showControlModal('Resume Codex thread?', 'Resume');
+      controlModalBody.appendChild(modalRow('Task', title || 'Codex task'));
+      controlModalBody.appendChild(modalRow('Project', session.cwd || ''));
+      controlModalBody.appendChild(modalRow('Thread', session.threadId || '', true));
+      var prompt = document.createElement('textarea');
+      prompt.placeholder = 'Optional prompt override';
+      controlModalBody.appendChild(controlField('Prompt override', prompt));
+      var effort = effortSelect();
+      var model = textInput('default');
+      var sandbox = sandboxSelect();
+      var write = writeCheckbox();
+      var grid = document.createElement('div');
+      grid.className = 'control-grid';
+      grid.append(controlField('Effort', effort), controlField('Model', model), controlField('Sandbox', sandbox), write.label);
+      controlModalBody.appendChild(grid);
+      controlAction = function () {
+        return {
+          endpoint: '/resume',
+          body: resumeBody(session, {
+            prompt: prompt.value.trim(), effort: effort.value, model: model.value.trim(),
+            write: write.input.checked, sandbox: sandbox.value
+          }),
+          onSuccess: function () { chooseFilter('JOBS'); }
+        };
+      };
+      prompt.focus();
+    }
+
+    function openCancelModal(job) {
+      showControlModal('Cancel running job?', 'Cancel job');
+      controlModalConfirm.classList.add('danger');
+      controlModalBody.appendChild(modalRow('Task', job.title || job.id || 'Codex job'));
+      controlModalBody.appendChild(modalRow('Project', job.workspaceRoot || ''));
+      controlModalBody.appendChild(modalRow('Job ID', job.id || '', true));
+      controlModalBody.appendChild(modalWarning('red', 'Cancelling stops this job and cannot be undone.'));
+      controlAction = function () {
+        return {
+          endpoint: '/cancel',
+          body: { cwd: job.workspaceRoot, jobId: job.id },
+          onSuccess: refreshJobs
+        };
+      };
+      controlModalCancel.focus();
     }
 
     function modalRow(label, value, mono) {
@@ -1355,6 +1669,41 @@
       stopModalCancel.focus();
     }
 
+    controlModalForm.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      if (!controlAction) return;
+      controlModalError.textContent = '';
+      controlModalConfirm.disabled = true;
+      try {
+        var action = controlAction();
+        var response = await fetch(action.endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(action.body)
+        });
+        var data = {};
+        try { data = await response.json(); } catch (_) {}
+        if (!response.ok || data.ok === false) {
+          controlModalError.textContent = data.error || ('Request failed with HTTP ' + response.status);
+          if (response.status === 409) {
+            controlModalError.textContent += '\nUse the existing Stop task process dialog first.';
+          }
+          return;
+        }
+        var onSuccess = action.onSuccess;
+        closeControlModal();
+        if (onSuccess) onSuccess(data);
+      } catch (error) {
+        controlModalError.textContent = 'Request failed: ' + error.message;
+      } finally {
+        if (!controlModal.hidden) controlModalConfirm.disabled = false;
+      }
+    });
+    controlModalCancel.addEventListener('click', closeControlModal);
+    controlModal.addEventListener('click', function (event) {
+      if (event.target === controlModal) closeControlModal();
+    });
+
     stopModalConfirm.addEventListener('click', async function () {
       if (pendingKillPid == null) return;
       stopModalConfirm.disabled = true;
@@ -1382,6 +1731,15 @@
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape' && !stopModal.hidden) { stopModal.hidden = true; pendingKillPid = null; }
       if (event.key === 'Escape' && !jobModal.hidden) jobModal.hidden = true;
+      if (event.key === 'Escape' && !controlModal.hidden) closeControlModal();
+    });
+
+    document.getElementById('new-task-button').addEventListener('click', openTaskModal);
+    document.getElementById('review-button').addEventListener('click', function () { openReviewModal('review'); });
+    document.getElementById('adversarial-review-button').addEventListener('click', function () { openReviewModal('adversarial-review'); });
+    resumeSessionButton.addEventListener('click', function () {
+      var session = currentSession();
+      if (session) openResumeModal(session, session.title);
     });
 
     search.addEventListener('input', function () {
