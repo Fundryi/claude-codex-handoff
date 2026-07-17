@@ -57,6 +57,14 @@ export function companionSandbox() {
   return process.env.CODEX_PLUGIN_SANDBOX || "danger-full-access";
 }
 
+export function fastTier() {
+  return process.env.CODEX_PLUGIN_FAST_TIER || "priority";
+}
+
+export function fastConnectOptions(fast) {
+  return fast ? { disableBroker: true, configOverrides: [`service_tier=${fastTier()}`] } : {};
+}
+
 function cleanCodexStderr(stderr) {
   return stderr
     .split(/\r?\n/)
@@ -616,10 +624,10 @@ async function captureTurn(client, threadId, startRequest, options = {}) {
   }
 }
 
-async function withAppServer(cwd, fn) {
+async function withAppServer(cwd, fn, connectOptions = {}) {
   let client = null;
   try {
-    client = await CodexAppServerClient.connect(cwd);
+    client = await CodexAppServerClient.connect(cwd, connectOptions);
     const result = await fn(client);
     await client.close();
     return result;
@@ -638,7 +646,7 @@ async function withAppServer(cwd, fn) {
       throw error;
     }
 
-    const directClient = await CodexAppServerClient.connect(cwd, { disableBroker: true });
+    const directClient = await CodexAppServerClient.connect(cwd, { ...connectOptions, disableBroker: true });
     try {
       return await fn(directClient);
     } finally {
@@ -1058,7 +1066,7 @@ export async function runAppServerReview(cwd, options = {}) {
       error: turnState.error,
       stderr: cleanCodexStderr(client.stderr)
     };
-  });
+  }, fastConnectOptions(options.fast));
 }
 
 export async function importExternalAgentSession(cwd, options = {}) {
@@ -1162,7 +1170,7 @@ export async function runAppServerTurn(cwd, options = {}) {
       touchedFiles: collectTouchedFiles(turnState.fileChanges),
       commandExecutions: turnState.commandExecutions
     };
-  });
+  }, fastConnectOptions(options.fast));
 }
 
 export async function findLatestTaskThread(cwd) {
