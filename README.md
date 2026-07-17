@@ -49,9 +49,11 @@ Codex writes its session events to `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
 This repo IS a Claude Code marketplace. In Claude Code:
 
 ```
-/plugin marketplace add d:\GIT\Claude-Handoff-Improvment   (or the GitHub URL)
+/plugin marketplace add Fundryi/codex-live-viewer
 /plugin install codex@fundryi
 ```
+
+(Working from a local clone instead? `/plugin marketplace add <path-to-clone>` works the same.)
 
 Uninstall the OpenAI-marketplace copy of `codex` first so `/codex:*` resolves to ours. All command names stay identical (`/codex:rescue`, `/codex:review`, `/codex:status`, ...). What our fork changes:
 
@@ -199,4 +201,4 @@ Recovery is always flag-only: the viewer marks, you click. It never auto-resumes
 
 ## License
 
-MIT
+MIT for the viewer, tray, and scripts. `plugin/` is a fork of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) and keeps its original Apache-2.0 license and NOTICE.
