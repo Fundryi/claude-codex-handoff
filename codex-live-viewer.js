@@ -433,7 +433,17 @@ function codexProcs(cb) {
 // ---------------- companion job state (shared with the plugin) ----------------
 const COMPANION_STATE_ROOT = process.env.CODEX_COMPANION_STATE_ROOT
   || path.join(os.homedir(), ".codex-companion", "state");
-const COMPANION_SCRIPT = path.join(__dirname, "plugin", "scripts", "codex-companion.mjs");
+function resolveCompanionScript(baseDir) {
+  const candidates = [
+    path.join(baseDir, "plugin", "scripts", "codex-companion.mjs"), // repo layout
+    path.join(baseDir, "..", "scripts", "codex-companion.mjs"),     // bundled: plugin/viewer/
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch {}
+  }
+  return candidates[0];
+}
+const COMPANION_SCRIPT = resolveCompanionScript(__dirname);
 const STUCK_AFTER_MS = 5 * 60 * 1000; // alive but no heartbeat this long => possibly stuck
 
 function classifyJobLiveness(job, pidIsAlive, now) {
