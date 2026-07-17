@@ -78,9 +78,9 @@ function printUsage() {
     [
       "Usage:",
       "  node scripts/codex-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--json]",
-      "  node scripts/codex-companion.mjs review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>]",
-      "  node scripts/codex-companion.mjs adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]",
-      "  node scripts/codex-companion.mjs task [--background] [--write] [--resume-last|--resume|--fresh] [--model <model|spark>] [--effort <none|minimal|low|medium|high|xhigh>] [prompt]",
+      "  node scripts/codex-companion.mjs review [--wait|--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>]",
+      "  node scripts/codex-companion.mjs adversarial-review [--wait|--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]",
+      "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|spark>] [--effort <none|minimal|low|medium|high|xhigh>] [prompt]",
       "  node scripts/codex-companion.mjs transfer [--source <claude-jsonl>] [--json]",
       "  node scripts/codex-companion.mjs status [job-id] [--all] [--json]",
       "  node scripts/codex-companion.mjs result [job-id] [--json]",
@@ -371,6 +371,7 @@ async function executeReviewRun(request) {
     const result = await runAppServerReview(request.cwd, {
       target: reviewTarget,
       model: request.model,
+      fast: request.fast,
       onProgress: request.onProgress
     });
     const payload = {
@@ -412,6 +413,7 @@ async function executeReviewRun(request) {
   const result = await runAppServerTurn(context.repoRoot, {
     prompt,
     model: request.model,
+    fast: request.fast,
     sandbox: companionSandbox(),
     outputSchema: readOutputSchema(REVIEW_SCHEMA),
     onProgress: request.onProgress
@@ -489,6 +491,7 @@ async function executeTaskRun(request) {
     defaultPrompt: resumeThreadId ? DEFAULT_CONTINUE_PROMPT : "",
     model: request.model,
     effort: request.effort,
+    fast: request.fast,
     sandbox: companionSandbox(),
     onProgress: request.onProgress,
     persistThread: true,
@@ -565,7 +568,7 @@ function getJobKindLabel(kind, jobClass) {
   return jobClass === "review" ? "review" : "rescue";
 }
 
-function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false, model = null, effort = null }) {
+function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false, model = null, effort = null, fast = false }) {
   return createJobRecord({
     id: generateJobId(prefix),
     kind,
@@ -577,6 +580,7 @@ function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summ
     write,
     model,
     effort,
+    fast,
     sandbox: companionSandbox()
   });
 }
@@ -593,7 +597,7 @@ function createTrackedProgress(job, options = {}) {
   };
 }
 
-function buildTaskJob(workspaceRoot, taskMetadata, write, model, effort) {
+function buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast) {
   return createCompanionJob({
     prefix: "task",
     kind: "task",
@@ -603,11 +607,12 @@ function buildTaskJob(workspaceRoot, taskMetadata, write, model, effort) {
     summary: taskMetadata.summary,
     write,
     model,
-    effort
+    effort,
+    fast
   });
 }
 
-function buildTaskRequest({ cwd, model, effort, prompt, write, resumeLast, resumeThreadId, jobId }) {
+function buildTaskRequest({ cwd, model, effort, prompt, write, resumeLast, resumeThreadId, jobId, fast }) {
   return {
     cwd,
     model,
@@ -616,7 +621,8 @@ function buildTaskRequest({ cwd, model, effort, prompt, write, resumeLast, resum
     write,
     resumeLast,
     resumeThreadId,
-    jobId
+    jobId,
+    fast
   };
 }
 
@@ -719,7 +725,7 @@ function enqueueBackgroundTask(cwd, job, request) {
 async function handleReviewCommand(argv, config) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["base", "scope", "model", "cwd"],
-    booleanOptions: ["json", "background", "wait"],
+    booleanOptions: ["json", "background", "wait", "fast"],
     aliasMap: {
       m: "model"
     }
@@ -742,7 +748,8 @@ async function handleReviewCommand(argv, config) {
     workspaceRoot,
     jobClass: "review",
     summary: metadata.summary,
-    model: options.model ?? null
+    model: options.model ?? null,
+    fast: Boolean(options.fast)
   });
   if (options.background) {
     ensureCodexAvailable(cwd);
@@ -752,7 +759,8 @@ async function handleReviewCommand(argv, config) {
       scope: options.scope ?? null,
       model: options.model ?? null,
       focusText,
-      reviewName: config.reviewName
+      reviewName: config.reviewName,
+      fast: Boolean(options.fast)
     };
     const { payload } = enqueueBackgroundTask(cwd, job, request);
     outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
@@ -768,6 +776,7 @@ async function handleReviewCommand(argv, config) {
         model: options.model,
         focusText,
         reviewName: config.reviewName,
+        fast: Boolean(options.fast),
         onProgress: progress
       }),
     { json: options.json }
@@ -784,7 +793,7 @@ async function handleReview(argv) {
 async function handleTask(argv) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["model", "effort", "cwd", "prompt-file", "resume-thread"],
-    booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background"],
+    booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background", "fast"],
     aliasMap: {
       m: "model"
     }
@@ -803,6 +812,7 @@ async function handleTask(argv) {
     throw new Error("Choose either --resume/--resume-last or --fresh.");
   }
   const write = Boolean(options.write);
+  const fast = Boolean(options.fast);
   const taskMetadata = buildTaskRunMetadata({
     prompt,
     resumeLast
@@ -812,7 +822,7 @@ async function handleTask(argv) {
     ensureCodexAvailable(cwd);
     requireTaskRequest(prompt, resumeLast, resumeThreadId);
 
-    const job = buildTaskJob(workspaceRoot, taskMetadata, write, model, effort);
+    const job = buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast);
     const request = buildTaskRequest({
       cwd,
       model,
@@ -821,7 +831,8 @@ async function handleTask(argv) {
       write,
       resumeLast,
       resumeThreadId,
-      jobId: job.id
+      jobId: job.id,
+      fast
     });
     const { payload } = enqueueBackgroundTask(cwd, job, request);
     outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
@@ -829,7 +840,7 @@ async function handleTask(argv) {
   }
 
   requireTaskRequest(prompt, resumeLast, resumeThreadId);
-  const job = buildTaskJob(workspaceRoot, taskMetadata, write, model, effort);
+  const job = buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast);
   await runForegroundCommand(
     job,
     (progress) =>
@@ -842,6 +853,7 @@ async function handleTask(argv) {
         resumeLast,
         resumeThreadId,
         jobId: job.id,
+        fast,
         onProgress: progress
       }),
     { json: options.json }

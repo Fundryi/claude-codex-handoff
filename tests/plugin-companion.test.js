@@ -18,3 +18,19 @@ test("job records carry model, effort, sandbox", () => {
   assert.match(src, /sandbox:\s*companionSandbox\(\)/);
   assert.match(src, /model,\s*\n?\s*effort,/);
 });
+
+test("task and review commands accept --fast", () => {
+  assert.match(src, /async function handleTask\(argv\)[\s\S]*?booleanOptions:\s*\[[^\]]*"fast"/);
+  assert.match(src, /async function handleReviewCommand\(argv, config\)[\s\S]*?booleanOptions:\s*\[[^\]]*"fast"/);
+});
+
+test("fast reaches task and review requests", () => {
+  assert.match(src, /const fast = Boolean\(options\.fast\);/);
+  assert.match(src, /function buildTaskRequest\(\{[^}]*fast[^}]*\}\)[\s\S]*?return \{[^}]*fast/);
+  assert.match(src, /reviewName: config\.reviewName,\s*\n?\s*fast: Boolean\(options\.fast\)/);
+});
+
+test("job records carry fast", () => {
+  assert.match(src, /function createCompanionJob\(\{[^}]*fast = false[^}]*\}\)/);
+  assert.match(src, /createJobRecord\(\{[\s\S]*?fast,/);
+});
