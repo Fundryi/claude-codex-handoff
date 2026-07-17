@@ -1,6 +1,6 @@
 {
   "name": "codex",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Codex handoffs with full-access sandbox, reliable job tracking, and the Codex Live Viewer web control panel. Fork of openai/codex-plugin-cc.",
   "author": {
     "name": "Fundryi"

@@ -39,6 +39,7 @@ Codex writes its session events to `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
 
 - **Start handoffs from the browser**: New task form with project directory, prompt, effort (none→xhigh), model, write access, and sandbox override. One code path with the CLI — `/codex:status` in Claude Code and the JOBS tab always show the same jobs.
 - **Reviews from the browser**: run `review` or `adversarial-review` against any project's working tree; findings render in the UI and stay on disk for `/codex:result`.
+- **Fast mode**: opt in per task, review, or resume for priority processing; fast jobs are marked in the JOBS tab and normal mode remains the default.
 - **Ground-truth stuck detection**: jobs are classified **RUNNING** (heartbeat fresh or process alive on a long task), **QUIET — process alive** (heartbeat stale past 5 min), or **DEAD — resumable** (process gone). Long-running commands are never misflagged: liveness is checked against the real PID, not just file quiet-time.
 - **Death reasons**: when a job dies, the UI shows *why* — including the Windows sandbox `1312` cluster, expired Codex auth, and rate limits — with a fix hint.
 - **One-click resume**: dead jobs (and stale sessions with a thread id) get a Resume button — optionally with a different effort, model, or write access. Refuses to resume while the job's process is still alive; recovery is always flag-only, never automatic.
@@ -56,6 +57,8 @@ This repo IS a Claude Code marketplace. In Claude Code:
 (Working from a local clone instead? `/plugin marketplace add <path-to-clone>` works the same.)
 
 The installed plugin bundles the viewer and starts it automatically on each Claude Code session start. Set `CODEX_VIEWER_AUTOSTART=0` to opt out. Autostart leaves the browser closed; run `/codex:viewer` to start or reuse the viewer and open its dashboard.
+
+Fast mode is opt-in per job, uses `service_tier=priority` and more quota, and can use a different tier value through `CODEX_PLUGIN_FAST_TIER`.
 
 Uninstall the OpenAI-marketplace copy of `codex` first so `/codex:*` resolves to ours. All command names stay identical (`/codex:rescue`, `/codex:review`, `/codex:status`, ...). What our fork changes:
 

@@ -26,6 +26,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 | Variable | Default | Purpose |
 |---|---|---|
 | `CODEX_PLUGIN_SANDBOX` | `danger-full-access` | Sandbox for all companion runs (full access by default: Store-pwsh breaks sandboxed spawns on this machine with error 1312) |
+| `CODEX_PLUGIN_FAST_TIER` | `priority` | Service tier used by `--fast` runs |
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state root (plugin CLI + viewer) |
 | `CODEX_VIEWER_PORT` | `8377` | Viewer HTTP port; also where the companion POSTs job completions (`/notify`) |
 | `CODEX_VIEWER_AUTOSTART` | `1` | Set to `0` to disable SessionStart viewer autostart |
