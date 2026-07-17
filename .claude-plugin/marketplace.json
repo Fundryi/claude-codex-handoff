@@ -1,0 +1,11 @@
+{
+  "name": "fundryi",
+  "owner": { "name": "Fundryi" },
+  "plugins": [
+    {
+      "name": "codex",
+      "source": "./plugin",
+      "description": "Codex handoffs with full-access sandbox, reliable job tracking, and the Codex Live Viewer web control panel."
+    }
+  ]
+}
