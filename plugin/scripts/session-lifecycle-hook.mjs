@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
+import { spawn } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
+import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 import { terminateProcessTree } from "./lib/process.mjs";
 import { BROKER_ENDPOINT_ENV } from "./lib/app-server.mjs";
@@ -19,6 +23,46 @@ import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
 export const SESSION_ID_ENV = "CODEX_COMPANION_SESSION_ID";
 const PLUGIN_DATA_ENV = "CLAUDE_PLUGIN_DATA";
+
+export function viewerPort(env = process.env) {
+  return Number(env.CODEX_VIEWER_PORT) || 8377;
+}
+
+export function checkViewerHealth(port, timeoutMs = 700) {
+  return new Promise((resolve) => {
+    const req = http.get({ host: "127.0.0.1", port, path: "/health", timeout: timeoutMs }, (res) => {
+      let body = "";
+      res.on("data", (c) => { if (body.length < 1000) body += c; });
+      res.on("end", () => {
+        let app = null;
+        try { app = JSON.parse(body).application; } catch {}
+        resolve(app === "codex-live-viewer" ? "running" : "foreign");
+      });
+    });
+    req.on("timeout", () => { req.destroy(); resolve("down"); });
+    req.on("error", () => resolve("down"));
+  });
+}
+
+export function bundledViewerPath(pluginRoot) {
+  return path.join(pluginRoot, "viewer", "codex-live-viewer.js");
+}
+
+export async function maybeStartViewer(env = process.env) {
+  try {
+    if (env.CODEX_VIEWER_AUTOSTART === "0") return "disabled";
+    const pluginRoot = env.CLAUDE_PLUGIN_ROOT;
+    if (!pluginRoot) return "no-plugin-root";
+    const script = bundledViewerPath(pluginRoot);
+    if (!fs.existsSync(script)) return "no-bundle";
+    const state = await checkViewerHealth(viewerPort(env));
+    if (state !== "down") return state; // running, or a foreign process owns the port
+    spawn(process.execPath, [script, "serve"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    return "started";
+  } catch {
+    return "error";
+  }
+}
 
 function readHookInput() {
   const raw = fs.readFileSync(0, "utf8").trim();
@@ -74,10 +118,11 @@ function cleanupSessionJobs(cwd, sessionId) {
   });
 }
 
-function handleSessionStart(input) {
+async function handleSessionStart(input) {
   appendEnvVar(SESSION_ID_ENV, input.session_id);
   appendEnvVar(TRANSCRIPT_PATH_ENV, input.transcript_path);
   appendEnvVar(PLUGIN_DATA_ENV, process.env[PLUGIN_DATA_ENV]);
+  await maybeStartViewer();
 }
 
 async function handleSessionEnd(input) {
@@ -118,7 +163,7 @@ async function main() {
   const eventName = process.argv[2] ?? input.hook_event_name ?? "";
 
   if (eventName === "SessionStart") {
-    handleSessionStart(input);
+    await handleSessionStart(input);
     return;
   }
 
@@ -127,7 +172,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  });
+}
