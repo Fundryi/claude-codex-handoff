@@ -167,7 +167,10 @@ function simplify(line) {
     if (et === "user_message")  return { kind: "user",  ts, text: p.message || "" };
     if (et === "agent_message") return { kind: "agent", ts, text: p.message || "" };
     if (et === "agent_reasoning" || et === "agent_reasoning_delta") return null; // too chatty
-    if (et === "token_count") return null;
+    if (et === "token_count") {
+      const tokens = p.info?.total_token_usage?.total_tokens ?? p.total_tokens ?? 0;
+      return tokens ? { kind: "meta", ts, tokens } : null;
+    }
     if (et === "task_started") return { kind: "sys", ts, text: "task started" };
     if (et === "task_complete") return { kind: "done", ts, text: "task complete" };
     if (et === "turn_aborted") return { kind: "err", ts, text: "turn aborted" };
@@ -216,9 +219,11 @@ function simplify(line) {
     }
     return null;
   }
-  // turn_context lines carry model/cwd on newer versions
+  // turn_context lines carry model/cwd/effort/sandbox on newer versions
   if (t === "turn_context") {
-    return { kind: "meta", ts, cwd: p.cwd || "", model: p.model || "" };
+    const sp = p.sandbox_policy;
+    const sandbox = typeof sp === "string" ? sp : (sp && (sp.mode || sp.type)) || "";
+    return { kind: "meta", ts, cwd: p.cwd || "", model: p.model || "", effort: p.effort || "", sandbox };
   }
   return null;
 }
@@ -312,6 +317,9 @@ function ingest(file) {
     if (ev.kind === "meta") {
       if (ev.cwd) s.meta.cwd = ev.cwd;
       if (ev.model) s.meta.model = ev.model;
+      if (ev.effort) s.meta.effort = ev.effort;
+      if (ev.sandbox) s.meta.sandbox = ev.sandbox;
+      if (ev.tokens) s.meta.tokens = ev.tokens;
       if (ev.id) s.meta.threadId = ev.id;
       continue;
     }
@@ -351,6 +359,9 @@ function sessionSummary(s) {
     title: s.meta.title || "",
     cwd: s.meta.cwd || "",
     model: s.meta.model || "",
+    effort: s.meta.effort || "",
+    sandbox: s.meta.sandbox || "",
+    tokensUsed: s.meta.tokens || 0,
     status,
     archived: s.file.startsWith(ARCHIVED_DIR),
     lastGrow: s.lastGrow,
