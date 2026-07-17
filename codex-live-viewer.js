@@ -470,6 +470,61 @@ function companionJobFile(stateDir, jobId) {
   return path.join(COMPANION_STATE_ROOT, stateDir, "jobs", jobId + ".json");
 }
 
+const DEFAULT_RESUME_PROMPT = "Continue the previous task where it left off and finish it.";
+
+function buildCompanionTaskArgs(body) {
+  const args = ["task", "--background", "--json", "--cwd", body.cwd];
+  if (body.effort) args.push("--effort", String(body.effort));
+  if (body.model) args.push("-m", String(body.model));
+  if (body.write) args.push("--write");
+  if (body.resumeThreadId) args.push("--resume-thread", String(body.resumeThreadId));
+  if (body.prompt) args.push(String(body.prompt));
+  return args;
+}
+
+function buildCompanionReviewArgs(body) {
+  const kind = body.kind === "adversarial-review" ? "adversarial-review" : "review";
+  const args = [kind, "--background", "--json", "--cwd", body.cwd];
+  if (body.model) args.push("-m", String(body.model));
+  if (kind === "adversarial-review" && body.focus) args.push(String(body.focus));
+  return args;
+}
+
+function readJsonBody(req, cb) {
+  let body = "";
+  req.on("data", c => { body += c; if (body.length > 1e6) req.destroy(); });
+  req.on("end", () => { let j = null; try { j = JSON.parse(body); } catch {} cb(j); });
+}
+
+function runCompanion(args, extraEnv, cb) {
+  execFile(process.execPath, [COMPANION_SCRIPT, ...args], {
+    env: { ...process.env, ...extraEnv },
+    maxBuffer: 5 * 1024 * 1024,
+    windowsHide: true,
+  }, (err, stdout, stderr) => {
+    let parsed = null;
+    try { parsed = JSON.parse(stdout); } catch {}
+    cb(err, parsed, String(stderr || err || "").slice(0, 500));
+  });
+}
+
+function jsonReply(res, code, obj) {
+  res.writeHead(code, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(obj));
+}
+
+function isUsableDir(p) {
+  try { return typeof p === "string" && p.length > 0 && fs.statSync(p).isDirectory(); } catch { return false; }
+}
+
+function handleLaunch(res, body, args) {
+  const env = body.sandbox ? { CODEX_PLUGIN_SANDBOX: String(body.sandbox) } : {};
+  runCompanion(args, env, (err, parsed, errText) => {
+    if (err || !parsed || !parsed.jobId) return jsonReply(res, 500, { ok: false, error: errText || "companion did not return a job id" });
+    jsonReply(res, 200, { ok: true, jobId: parsed.jobId, logFile: parsed.logFile || "" });
+  });
+}
+
 // ---------------- HTTP ----------------
 const FALLBACK_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Codex Live</title><style>
 :root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#c9d1d9;--dim:#8b949e;--green:#3fb950;--yellow:#d29922;--blue:#58a6ff;--red:#f85149;--purple:#bc8cff}
@@ -800,6 +855,54 @@ const server = http.createServer((req, res) => {
     try { body = file && fs.readFileSync(file, "utf8"); } catch {}
     res.writeHead(body ? 200 : 404, { "Content-Type": "application/json" });
     res.end(body || JSON.stringify({ ok: false, error: "job not found" }));
+  } else if (req.url === "/task") {
+    if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    readJsonBody(req, body => {
+      if (!body || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "cwd must be an existing directory" });
+      if (!body.prompt && !body.resumeThreadId) return jsonReply(res, 400, { ok: false, error: "prompt or resumeThreadId required" });
+      handleLaunch(res, body, buildCompanionTaskArgs(body));
+    });
+  } else if (req.url === "/review") {
+    if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    readJsonBody(req, body => {
+      if (!body || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "cwd must be an existing directory" });
+      handleLaunch(res, body, buildCompanionReviewArgs(body));
+    });
+  } else if (req.url === "/resume") {
+    if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    readJsonBody(req, body => {
+      if (!body || !body.threadId || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "threadId and existing cwd required" });
+      const liveJob = listCompanionJobs().find(j => j.threadId === body.threadId && pidAlive(j.pid));
+      if (liveJob) return jsonReply(res, 409, { ok: false, error: "job " + liveJob.id + " is still running on this thread - stop it first" });
+      handleLaunch(res, body, buildCompanionTaskArgs({
+        ...body,
+        resumeThreadId: body.threadId,
+        prompt: body.prompt || DEFAULT_RESUME_PROMPT,
+      }));
+    });
+  } else if (req.url === "/cancel") {
+    if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    readJsonBody(req, body => {
+      if (!body || !body.jobId || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "jobId and existing cwd required" });
+      runCompanion(["cancel", String(body.jobId), "--cwd", body.cwd, "--json"], {}, (err, parsed, errText) => {
+        if (err) return jsonReply(res, 500, { ok: false, error: errText });
+        jsonReply(res, 200, { ok: true, ...(parsed || {}) });
+      });
+    });
+  } else if (req.url === "/notify") {
+    if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
+    // no origin check: posted by the local companion process, not a browser
+    readJsonBody(req, body => {
+      if (body && body.jobId) {
+        broadcastNotification({ type: "job", jobId: body.jobId, status: body.status || "", title: String(body.title || "").slice(0, 120) });
+        kick();
+      }
+      jsonReply(res, 200, { ok: true });
+    });
   } else {
     res.writeHead(404); res.end("not found");
   }
