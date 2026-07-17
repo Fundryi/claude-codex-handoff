@@ -6,8 +6,7 @@ import path from "node:path";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
 const STATE_VERSION = 1;
-const PLUGIN_DATA_ENV = "CLAUDE_PLUGIN_DATA";
-const FALLBACK_STATE_ROOT_DIR = path.join(os.tmpdir(), "codex-companion");
+export const STATE_ROOT_ENV = "CODEX_COMPANION_STATE_ROOT";
 const STATE_FILE_NAME = "state.json";
 const JOBS_DIR_NAME = "jobs";
 const MAX_JOBS = 50;
@@ -26,6 +25,12 @@ function defaultState() {
   };
 }
 
+export function resolveStateRoot() {
+  // ponytail: one fixed shared root for CLI + viewer; CLAUDE_PLUGIN_DATA
+  // intentionally ignored so both sides always see the same jobs.
+  return process.env[STATE_ROOT_ENV] || path.join(os.homedir(), ".codex-companion", "state");
+}
+
 export function resolveStateDir(cwd) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   let canonicalWorkspaceRoot = workspaceRoot;
@@ -38,8 +43,7 @@ export function resolveStateDir(cwd) {
   const slugSource = path.basename(workspaceRoot) || "workspace";
   const slug = slugSource.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "workspace";
   const hash = createHash("sha256").update(canonicalWorkspaceRoot).digest("hex").slice(0, 16);
-  const pluginDataDir = process.env[PLUGIN_DATA_ENV];
-  const stateRoot = pluginDataDir ? path.join(pluginDataDir, "state") : FALLBACK_STATE_ROOT_DIR;
+  const stateRoot = resolveStateRoot();
   return path.join(stateRoot, `${slug}-${hash}`);
 }
 
