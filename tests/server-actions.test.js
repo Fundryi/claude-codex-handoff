@@ -57,6 +57,15 @@ test("buildCompanionTaskArgs maps every field", () => {
   );
 });
 
+test("buildCompanionTaskArgs maps fast before the prompt", () => {
+  const { buildCompanionTaskArgs } = ctx();
+  assert.deepEqual(
+    Array.from(buildCompanionTaskArgs({ cwd: "D:\\x", prompt: "p", fast: true })),
+    ["task", "--background", "--json", "--cwd", "D:\\x", "--fast", "p"],
+  );
+  assert.ok(!buildCompanionTaskArgs({ cwd: "D:\\x", prompt: "p" }).includes("--fast"));
+});
+
 test("buildCompanionReviewArgs maps kind and focus", () => {
   const { buildCompanionReviewArgs } = ctx();
   assert.deepEqual(
@@ -68,4 +77,13 @@ test("buildCompanionReviewArgs maps kind and focus", () => {
     ["review", "--background", "--json", "--cwd", "D:\\x"],
   );
   assert.deepEqual(buildCompanionReviewArgs({ cwd: "D:\\x", kind: "nonsense" })[0], "review");
+});
+
+test("buildCompanionReviewArgs maps fast before the focus", () => {
+  const { buildCompanionReviewArgs } = ctx();
+  assert.deepEqual(
+    Array.from(buildCompanionReviewArgs({ cwd: "D:\\x", kind: "adversarial-review", focus: "p", fast: true })),
+    ["adversarial-review", "--background", "--json", "--cwd", "D:\\x", "--fast", "p"],
+  );
+  assert.ok(!buildCompanionReviewArgs({ cwd: "D:\\x", kind: "review" }).includes("--fast"));
 });

@@ -488,6 +488,7 @@ function buildCompanionTaskArgs(body) {
   if (body.model) args.push("-m", String(body.model));
   if (body.write) args.push("--write");
   if (body.resumeThreadId) args.push("--resume-thread", String(body.resumeThreadId));
+  if (body.fast) args.push("--fast");
   if (body.prompt) args.push(String(body.prompt));
   return args;
 }
@@ -496,6 +497,7 @@ function buildCompanionReviewArgs(body) {
   const kind = body.kind === "adversarial-review" ? "adversarial-review" : "review";
   const args = [kind, "--background", "--json", "--cwd", body.cwd];
   if (body.model) args.push("-m", String(body.model));
+  if (body.fast) args.push("--fast");
   if (kind === "adversarial-review" && body.focus) args.push(String(body.focus));
   return args;
 }
