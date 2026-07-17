@@ -3,10 +3,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-for (const f of ["codex-live-viewer.js", "viewer-ui.html"]) {
+for (const f of ["codex-live-viewer.js", "viewer-ui.html", "assets/logo.svg"]) {
   test(`plugin/viewer/${f} is byte-identical to the repo copy (run: npm run sync:viewer)`, () => {
-    const root = fs.readFileSync(path.join(__dirname, "..", f), "utf8");
-    const bundled = fs.readFileSync(path.join(__dirname, "..", "plugin", "viewer", f), "utf8");
+    const root = fs.readFileSync(path.join(__dirname, "..", ...f.split("/")), "utf8");
+    const bundled = fs.readFileSync(path.join(__dirname, "..", "plugin", "viewer", ...f.split("/")), "utf8");
     assert.equal(bundled, root);
   });
 }
