@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import process from "node:process";
 
+import { mapDeathReason } from "./death-reasons.mjs";
 import { readJobFile, resolveJobFile, resolveJobLogFile, upsertJob, writeJobFile } from "./state.mjs";
 
 export const SESSION_ID_ENV = "CODEX_COMPANION_SESSION_ID";
@@ -71,6 +72,7 @@ export function createJobProgressUpdater(workspaceRoot, jobId) {
   let lastPhase = null;
   let lastThreadId = null;
   let lastTurnId = null;
+  let lastBeatMs = 0;
 
   return (event) => {
     const normalized = normalizeProgressEvent(event);
@@ -92,6 +94,15 @@ export function createJobProgressUpdater(workspaceRoot, jobId) {
     if (normalized.turnId && normalized.turnId !== lastTurnId) {
       lastTurnId = normalized.turnId;
       patch.turnId = normalized.turnId;
+      changed = true;
+    }
+
+    const nowMs = Date.now();
+    if (nowMs - lastBeatMs >= 2000) {
+      // ponytail: every beat rewrites state.json; fine at this job volume,
+      // move heartbeats to the per-job file only if it ever gets hot.
+      lastBeatMs = nowMs;
+      patch.heartbeatAt = new Date(nowMs).toISOString();
       changed = true;
     }
 
@@ -164,7 +175,11 @@ export async function runTrackedJob(job, runner, options = {}) {
       phase: completionStatus === "completed" ? "done" : "failed",
       completedAt,
       result: execution.payload,
-      rendered: execution.rendered
+      rendered: execution.rendered,
+      exitCode: execution.exitStatus,
+      diedReason: completionStatus === "failed"
+        ? mapDeathReason(execution.payload?.codex?.stderr ?? execution.rendered ?? "")
+        : null
     });
     upsertJob(job.workspaceRoot, {
       id: job.id,
@@ -174,12 +189,18 @@ export async function runTrackedJob(job, runner, options = {}) {
       summary: execution.summary,
       phase: completionStatus === "completed" ? "done" : "failed",
       pid: null,
-      completedAt
+      completedAt,
+      exitCode: execution.exitStatus,
+      diedReason: completionStatus === "failed"
+        ? mapDeathReason(execution.payload?.codex?.stderr ?? execution.rendered ?? "")
+        : null
     });
     appendLogBlock(options.logFile ?? job.logFile ?? null, "Final output", execution.rendered);
     return execution;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const stderrTail = String(error?.stderr ?? errorMessage ?? "").slice(-2000);
+    const diedReason = mapDeathReason(stderrTail) ?? mapDeathReason(errorMessage);
     const existing = readStoredJobOrNull(job.workspaceRoot, job.id) ?? runningRecord;
     const completedAt = nowIso();
     writeJobFile(job.workspaceRoot, job.id, {
@@ -187,6 +208,9 @@ export async function runTrackedJob(job, runner, options = {}) {
       status: "failed",
       phase: "failed",
       errorMessage,
+      exitCode: typeof error?.exitStatus === "number" ? error.exitStatus : null,
+      stderrTail,
+      diedReason,
       pid: null,
       completedAt,
       logFile: options.logFile ?? job.logFile ?? existing.logFile ?? null
@@ -197,6 +221,9 @@ export async function runTrackedJob(job, runner, options = {}) {
       phase: "failed",
       pid: null,
       errorMessage,
+      exitCode: typeof error?.exitStatus === "number" ? error.exitStatus : null,
+      stderrTail,
+      diedReason,
       completedAt
     });
     throw error;
