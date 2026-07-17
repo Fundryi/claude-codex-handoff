@@ -430,6 +430,46 @@ function codexProcs(cb) {
     });
 }
 
+// ---------------- companion job state (shared with the plugin) ----------------
+const COMPANION_STATE_ROOT = process.env.CODEX_COMPANION_STATE_ROOT
+  || path.join(os.homedir(), ".codex-companion", "state");
+const COMPANION_SCRIPT = path.join(__dirname, "plugin", "scripts", "codex-companion.mjs");
+const STUCK_AFTER_MS = 5 * 60 * 1000; // alive but no heartbeat this long => possibly stuck
+
+function classifyJobLiveness(job, pidIsAlive, now) {
+  if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") return job.status;
+  if (!pidIsAlive) return "dead";
+  const beatMs = job.heartbeatAt ? now - Date.parse(job.heartbeatAt) : Infinity;
+  // ponytail: heartbeat freshness only; if pid is alive we never flag before
+  // STUCK_AFTER_MS, so long-running commands are not misreported as stuck.
+  return beatMs < STUCK_AFTER_MS ? "working" : "possibly-stuck";
+}
+
+function pidAlive(pid) {
+  if (!pid) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+function listCompanionJobs() {
+  const out = [];
+  let dirs = [];
+  try { dirs = fs.readdirSync(COMPANION_STATE_ROOT, { withFileTypes: true }).filter(d => d.isDirectory()); } catch { return out; }
+  for (const d of dirs) {
+    try {
+      const state = JSON.parse(fs.readFileSync(path.join(COMPANION_STATE_ROOT, d.name, "state.json"), "utf8"));
+      for (const job of state.jobs || []) out.push({ ...job, stateDir: d.name });
+    } catch { /* partial write or foreign dir - skip */ }
+  }
+  out.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  return out.slice(0, 100);
+}
+
+const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
+function companionJobFile(stateDir, jobId) {
+  if (!SAFE_SEGMENT.test(stateDir) || !SAFE_SEGMENT.test(jobId)) return null;
+  return path.join(COMPANION_STATE_ROOT, stateDir, "jobs", jobId + ".json");
+}
+
 // ---------------- HTTP ----------------
 const FALLBACK_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Codex Live</title><style>
 :root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#c9d1d9;--dim:#8b949e;--green:#3fb950;--yellow:#d29922;--blue:#58a6ff;--red:#f85149;--purple:#bc8cff}
@@ -743,6 +783,23 @@ const server = http.createServer((req, res) => {
     notificationClients.add(res);
     res.write(": connected\n\n");
     req.on("close", () => notificationClients.delete(res));
+  } else if (req.url === "/jobs") {
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    const now = Date.now();
+    const jobs = listCompanionJobs().map(j => {
+      const alive = pidAlive(j.pid);
+      return { ...j, pidAlive: alive, live: classifyJobLiveness(j, alive, now) };
+    });
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ jobs }));
+  } else if (req.url.startsWith("/job?")) {
+    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    const u = new URL(req.url, "http://local");
+    const file = companionJobFile(u.searchParams.get("dir") || "", u.searchParams.get("id") || "");
+    let body = null;
+    try { body = file && fs.readFileSync(file, "utf8"); } catch {}
+    res.writeHead(body ? 200 : 404, { "Content-Type": "application/json" });
+    res.end(body || JSON.stringify({ ok: false, error: "job not found" }));
   } else {
     res.writeHead(404); res.end("not found");
   }
