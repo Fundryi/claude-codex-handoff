@@ -40,9 +40,9 @@
       font-size: 13px;
       line-height: 1.45;
     }
-    button, input { font: inherit; }
+    button, input, select, textarea { font: inherit; }
     button { color: inherit; }
-    button:focus-visible, input:focus-visible, [role="separator"]:focus-visible {
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [role="separator"]:focus-visible {
       outline: 2px solid var(--blue);
       outline-offset: 2px;
     }
@@ -200,6 +200,7 @@
       text-overflow: ellipsis;
     }
     .session-last { display: none; }
+    .session.job .session-last { display: block; white-space: normal; }
     .session-time { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
     .unread { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 7px var(--blue); }
     .status {
@@ -340,7 +341,7 @@
       font-weight: 700;
       flex: none;
     }
-    #stop-modal {
+    #stop-modal, #job-modal {
       position: fixed;
       inset: 0;
       z-index: 50;
@@ -348,8 +349,8 @@
       display: grid;
       place-items: center;
     }
-    #stop-modal[hidden] { display: none; }
-    #stop-modal-box {
+    #stop-modal[hidden], #job-modal[hidden] { display: none; }
+    #stop-modal-box, #job-modal-box {
       width: min(92vw, 560px);
       max-height: 84vh;
       overflow-y: auto;
@@ -359,7 +360,7 @@
       padding: 16px;
       box-shadow: 0 18px 50px #000c;
     }
-    #stop-modal-box h2 { margin: 0 0 12px; font-size: 14px; }
+    #stop-modal-box h2, #job-modal-box h2 { margin: 0 0 12px; font-size: 14px; }
     .stop-modal-row { display: flex; gap: 10px; margin-bottom: 6px; font-size: 12px; }
     .stop-modal-label { color: var(--muted); flex: none; width: 70px; }
     .stop-modal-value { min-width: 0; overflow-wrap: anywhere; }
@@ -373,8 +374,8 @@
     .stop-modal-warning.red { background: #4a1512; color: #ffb3ad; border: 1px solid #7a2a24; }
     .stop-modal-warning.yellow { background: #453a14; color: #f0cb6e; border: 1px solid #6d5a1e; }
     .stop-modal-warning.ok { background: #14331e; color: #8fdca4; border: 1px solid #245c36; }
-    #stop-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-    #stop-modal-actions button {
+    #stop-modal-actions, #job-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    #stop-modal-actions button, #job-modal-actions button {
       border: 1px solid var(--border);
       border-radius: 7px;
       padding: 7px 12px;
@@ -382,9 +383,23 @@
       cursor: pointer;
       font-size: 12px;
     }
-    #stop-modal-actions button:hover { background: var(--hover); }
+    #stop-modal-actions button:hover, #job-modal-actions button:hover { background: var(--hover); }
     #stop-modal-confirm { background: #6d2925; border-color: #8a3a34; color: #ffd0cc; font-weight: 700; }
     #stop-modal-confirm:disabled { opacity: .6; cursor: default; }
+    #job-modal-box { width: min(92vw, 760px); }
+    #job-modal-result {
+      max-height: 55vh;
+      overflow: auto;
+      margin: 12px 0 0;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg);
+      color: #b8c5d1;
+      font: 11px/1.55 "Cascadia Code", Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
 
     #feed-toolbar {
       min-height: 43px;
@@ -582,6 +597,17 @@
     </div>
   </div>
 
+  <div id="job-modal" hidden>
+    <div id="job-modal-box" role="dialog" aria-modal="true" aria-labelledby="job-modal-title">
+      <h2 id="job-modal-title">Job result</h2>
+      <div id="job-modal-meta"></div>
+      <pre id="job-modal-result"></pre>
+      <div id="job-modal-actions">
+        <button id="job-modal-close" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     'use strict';
 
@@ -599,6 +625,7 @@
     };
     var prefs = loadPrefs();
     var sessions = [];
+    var jobs = [];
     var selected = prefs.selected;
     var store = {};
     var seeded = false;
@@ -629,6 +656,11 @@
     var stopModalBody = document.getElementById('stop-modal-body');
     var stopModalConfirm = document.getElementById('stop-modal-confirm');
     var stopModalCancel = document.getElementById('stop-modal-cancel');
+    var jobModal = document.getElementById('job-modal');
+    var jobModalTitle = document.getElementById('job-modal-title');
+    var jobModalMeta = document.getElementById('job-modal-meta');
+    var jobModalResult = document.getElementById('job-modal-result');
+    var jobModalClose = document.getElementById('job-modal-close');
     var pendingKillPid = null;
     var followButton = document.getElementById('follow-button');
     var autoscrollButton = document.getElementById('autoscroll-button');
@@ -644,6 +676,7 @@
     };
     var FILTERS = [
       { id: 'ACTIVE', label: 'Active' },
+      { id: 'JOBS', label: 'Jobs' },
       { id: 'LIVE', label: 'Running' },
       { id: 'IDLE', label: 'Waiting' },
       { id: 'STALE', label: 'Stuck' },
@@ -712,6 +745,34 @@
       parts.push('thread: ' + (meta.threadId || '?'));
       return parts.join('   |   ');
     }
+    function jobStatusLabel(job) {
+      var map = {
+        working: 'RUNNING',
+        'possibly-stuck': 'QUIET \u2014 process alive',
+        dead: 'DEAD \u2014 resumable',
+        completed: 'DONE',
+        failed: 'FAILED',
+        cancelled: 'CANCELLED'
+      };
+      return map[job.live] || String(job.status || '').toUpperCase() || '?';
+    }
+    function jobDetailLine(job, now) {
+      function duration(ms) {
+        var seconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+        if (seconds < 60) return seconds + 's';
+        var minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return minutes + 'm ' + (seconds % 60) + 's';
+        return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
+      }
+      var parts = [];
+      if (job.phase) parts.push(job.phase);
+      if (job.heartbeatAt) parts.push('last activity ' + duration(now - Date.parse(job.heartbeatAt)) + ' ago');
+      if (job.model) parts.push(job.model);
+      if (job.effort) parts.push(job.effort);
+      if (job.sandbox) parts.push(job.sandbox);
+      if (job.diedReason) parts.push(job.diedReason);
+      return parts.join(' \u00b7 ');
+    }
     function waitReason(session) {
       if (!session || session.archived || (session.status !== 'IDLE' && session.status !== 'STALE')) return '';
       var text = firstLine(session.lastText, 80);
@@ -769,6 +830,7 @@
     }
 
     function statusCount(id) {
+      if (id === 'JOBS') return jobs.length;
       if (id === 'ALL') return sessions.length;
       var pool = sessions.filter(function (s) { return !isDismissed(s.id); });
       return pool.filter(function (s) { return filterIncludes(s, id); }).length;
@@ -821,11 +883,12 @@
       applyPrefs();
       renderFilters();
       renderList();
+      if (filter === 'JOBS') refreshJobs();
     }
 
     function followSelectedStatus(previousStatus) {
       var session = currentSession();
-      if (!session || !previousStatus || session.status === previousStatus || prefs.filter === 'ALL' || filterIncludes(session, prefs.filter)) return;
+      if (!session || !previousStatus || session.status === previousStatus || prefs.filter === 'ALL' || prefs.filter === 'JOBS' || filterIncludes(session, prefs.filter)) return;
       prefs.filter = session.status;
       savePrefs();
     }
@@ -837,7 +900,81 @@
       else savePrefs();
     }
 
+    function visibleJobs() {
+      var query = String(prefs.query || '').trim().toLowerCase();
+      if (!query) return jobs;
+      return jobs.filter(function (job) {
+        return [job.title, job.workspaceRoot, job.id, job.threadId, job.kindLabel, job.phase]
+          .some(function (value) { return String(value || '').toLowerCase().includes(query); });
+      });
+    }
+
+    function renderJobList() {
+      var shown = visibleJobs();
+      var signature = JSON.stringify([
+        'JOBS',
+        prefs.query,
+        Math.floor(Date.now() / 10000),
+        shown.map(function (job) {
+          return [job.id, job.live, job.updatedAt, job.heartbeatAt, job.title, job.phase, job.diedReason];
+        })
+      ]);
+      if (signature === lastListSignature) return;
+      lastListSignature = signature;
+      list.textContent = '';
+      shown.forEach(function (job) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'session job';
+
+        var top = document.createElement('div');
+        top.className = 'session-top';
+        var badge = document.createElement('span');
+        var badgeStatus = job.live === 'working' ? 'LIVE'
+          : job.live === 'possibly-stuck' ? 'IDLE'
+          : job.live === 'dead' || job.live === 'failed' ? 'STALE' : 'DONE';
+        badge.className = 'status ' + badgeStatus;
+        badge.textContent = jobStatusLabel(job);
+        top.appendChild(badge);
+        var time = document.createElement('span');
+        time.className = 'session-time';
+        time.textContent = relativeTime(Date.parse(job.updatedAt || ''));
+        top.appendChild(time);
+
+        var title = document.createElement('div');
+        title.className = 'session-title';
+        title.textContent = job.title || job.kindLabel || 'Untitled Codex job';
+        title.title = job.title || '';
+        var project = document.createElement('div');
+        project.className = 'session-project';
+        project.textContent = job.workspaceRoot || '';
+        project.title = job.workspaceRoot || '';
+        var detail = document.createElement('div');
+        detail.className = 'session-last';
+        var detailText = jobDetailLine(job, Date.now());
+        var matchingSession = sessions.find(function (session) { return session.threadId && session.threadId === job.threadId; });
+        if (matchingSession && matchingSession.tokensUsed) {
+          detailText += (detailText ? ' \u00b7 ' : '') + 'tokens: ' + matchingSession.tokensUsed.toLocaleString();
+        }
+        detail.textContent = detailText;
+
+        button.append(top, title, project, detail);
+        button.addEventListener('click', function () { openJob(job); });
+        list.appendChild(button);
+      });
+      if (!shown.length) {
+        var empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.textContent = jobs.length ? 'No jobs match this search.' : 'No companion jobs yet.';
+        list.appendChild(empty);
+      }
+    }
+
     function renderList() {
+      if (prefs.filter === 'JOBS') {
+        renderJobList();
+        return;
+      }
       var shown = visibleSessions();
       var signature = JSON.stringify([
         prefs.filter,
@@ -1117,6 +1254,43 @@
       } catch (_) {}
     }
 
+    async function refreshJobs() {
+      try {
+        var response = await fetch('/jobs');
+        var data = await response.json();
+        if (!response.ok) return;
+        jobs = data.jobs || [];
+        lastListSignature = '';
+        lastFilterSignature = '';
+        renderFilters();
+        if (prefs.filter === 'JOBS') renderList();
+      } catch (_) {}
+    }
+
+    async function openJob(job) {
+      jobModalTitle.textContent = job.title || job.kindLabel || 'Job result';
+      jobModalMeta.textContent = '';
+      jobModalMeta.appendChild(modalRow('Summary', job.summary || ''));
+      jobModalMeta.appendChild(modalRow('Thread', job.threadId || '', true));
+      jobModalResult.textContent = 'Loading job result\u2026';
+      jobModal.hidden = false;
+      jobModalClose.focus();
+      try {
+        var response = await fetch('/job?dir=' + encodeURIComponent(job.stateDir) + '&id=' + encodeURIComponent(job.id));
+        var detail = await response.json();
+        if (!response.ok) throw new Error(detail.error || 'Job not found');
+        jobModalTitle.textContent = detail.title || job.title || 'Job result';
+        jobModalMeta.textContent = '';
+        jobModalMeta.appendChild(modalRow('Summary', detail.summary || ''));
+        jobModalMeta.appendChild(modalRow('Thread', detail.threadId || '', true));
+        jobModalResult.textContent = detail.rendered
+          || [detail.errorMessage, detail.stderrTail].filter(Boolean).join('\n\n')
+          || 'No rendered result is available.';
+      } catch (error) {
+        jobModalResult.textContent = 'Could not load job result: ' + error.message;
+      }
+    }
+
     function newestRunning() { return sessions.find(function (session) { return session.status === 'LIVE'; }); }
     function scrollToLatest() { feed.scrollTop = feed.scrollHeight; jumpLatest.hidden = true; }
     function nearBottom() { return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 90; }
@@ -1201,15 +1375,22 @@
     stopModal.addEventListener('click', function (event) {
       if (event.target === stopModal) { stopModal.hidden = true; pendingKillPid = null; }
     });
+    jobModalClose.addEventListener('click', function () { jobModal.hidden = true; });
+    jobModal.addEventListener('click', function (event) {
+      if (event.target === jobModal) jobModal.hidden = true;
+    });
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape' && !stopModal.hidden) { stopModal.hidden = true; pendingKillPid = null; }
+      if (event.key === 'Escape' && !jobModal.hidden) jobModal.hidden = true;
     });
 
     search.addEventListener('input', function () {
       prefs.query = search.value;
       savePrefs();
-      renderList();
       window.clearTimeout(historySearchTimer);
+      lastListSignature = '';
+      renderList();
+      if (prefs.filter === 'JOBS') return;
       var query = String(prefs.query || '').trim();
       if (!query) {
         historyResults = [];
@@ -1433,12 +1614,22 @@
       }
     };
 
+    var notifications = new EventSource('/notifications');
+    notifications.onmessage = function (message) {
+      try {
+        var data = JSON.parse(message.data);
+        if (data.type === 'job') refreshJobs();
+      } catch (_) {}
+    };
+
     applyPrefs();
     renderFilters();
     renderList();
     renderHeader();
     renderFeed();
+    refreshJobs();
     window.setInterval(function () { renderList(); renderHeader(); }, 10000);
+    window.setInterval(function () { if (prefs.filter === 'JOBS') refreshJobs(); }, 5000);
   </script>
 </body>
 </html>
