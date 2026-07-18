@@ -64,7 +64,17 @@ Recovery is always flag-only: the dashboard marks, you click. It never resumes o
 | `/codex:viewer` | Open the dashboard |
 | `/codex:setup` | Check Codex CLI readiness |
 
-Say "use fast mode" in a rescue request (or pass `--fast`) for priority processing: faster, more quota, always opt-in.
+**Effort and fast mode** are set per job (form fields in the dashboard, `--effort`/`--fast` on the CLI, or just say "high effort" / "use fast mode" in a rescue request):
+
+| Effort | Use for |
+|---|---|
+| `none` / `minimal` | Trivial one-liners, mechanical renames |
+| `low` | Small well-specified fixes, boilerplate |
+| `medium` | Typical bugfixes and features (a sensible default) |
+| `high` | Multi-file features, tricky bugs, thorough reviews |
+| `xhigh` | Designs, root-cause hunts, hard bugs, big refactors |
+
+`--fast` is orthogonal: it buys priority processing (faster turnaround, more quota) at whatever effort you chose, and never changes the effort tier. Use it when you are actively waiting on the result; it is always opt-in, never the default.
 
 **In the browser** (`localhost:8377`):
 
