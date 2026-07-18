@@ -70,9 +70,11 @@ Recovery is always flag-only: the dashboard marks, you click. It never resumes o
 |---|---|
 | `none` / `minimal` | Trivial one-liners, mechanical renames |
 | `low` | Small well-specified fixes, boilerplate |
-| `medium` | Typical bugfixes and features (a sensible default) |
-| `high` | Multi-file features, tricky bugs, thorough reviews |
+| `medium` | Quick everyday tweaks |
+| `high` | The everyday default: bugfixes, features, thorough reviews |
 | `xhigh` | Designs, root-cause hunts, hard bugs, big refactors |
+
+When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo.
 
 `--fast` is orthogonal: it buys priority processing (faster turnaround, more quota) at whatever effort you chose, and never changes the effort tier. Use it when you are actively waiting on the result; it is always opt-in, never the default.
 
@@ -92,7 +94,7 @@ Patterns from daily use that make handoffs reliable:
 2. **Scope limits writes, not reads.** Codex may read anything to trace the real flow; name the files it may change.
 3. **Demand a self-check gate.** End your contract with checks Codex runs before returning. Every bug a review catches becomes a permanent check, so quality compounds.
 4. **Fix a return format.** Uniform returns (findings, diff, manifest, gate results) are reviewable at a glance.
-5. **Match effort to the task.** `low`/`medium` for mechanical work, `high`/`xhigh` for designs and hard bugs, `--fast` only when you're actively waiting.
+5. **Match effort to the task, and round up.** `low`/`medium` only for genuinely mechanical work, `high`/`xhigh` for everything that involves judgment. `--fast` only when you're actively waiting.
 6. **Let the dashboard carry the anxiety.** Kick off jobs, keep working, act when a badge asks you to.
 
 <details>
