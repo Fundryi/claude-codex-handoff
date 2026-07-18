@@ -2,7 +2,7 @@ import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
 
-const MANIFEST_URL = "https://raw.githubusercontent.com/Fundryi/codex-live-viewer/main/plugin/.claude-plugin/plugin.json";
+const MANIFEST_URL = "https://raw.githubusercontent.com/Fundryi/claude-codex-handoff/main/plugin/.claude-plugin/plugin.json";
 const CHECK_INTERVAL_MS = 24 * 3600 * 1000;
 const FETCH_TIMEOUT_MS = 800;
 

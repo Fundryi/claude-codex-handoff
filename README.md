@@ -1,215 +1,114 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Codex Live Viewer logo" width="120">
+  <img src="assets/logo.svg" alt="Claude Codex Handoff logo" width="120">
 </p>
 
-# Codex Live Viewer — Control Panel Edition
+# Claude Codex Handoff
 
-A live dashboard **and control panel** for every [OpenAI Codex CLI](https://github.com/openai/codex) session on your machine — bundled with our own fork of the `codex` Claude Code plugin, so handoffs can be started, watched, resumed, and cancelled from the browser.
-
-## Why this exists
-
-We use Fable to plan and coordinate work. Its plugin hands implementation tasks to Codex, and Codex does the coding in a headless app-server session.
-
-Those handoffs do not open a terminal or window. We built this viewer to know whether Codex was still working, had finished, or had become stuck — and then grew it into a full control panel because watching a stuck job without being able to fix it is only half the story.
-
-Codex writes its session events to `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. The viewer follows those files and streams activity to the browser. The bundled plugin additionally records ground-truth job state (exact PID, heartbeat, failure cause) at `~/.codex-companion/state`, shared between the `/codex:*` Claude Code commands and the web UI.
+Hand coding tasks from [Claude Code](https://claude.com/claude-code) to [OpenAI Codex CLI](https://github.com/openai/codex) — and never lose one again. A fork of the official `codex` Claude Code plugin with reliability built in, bundled with a live web dashboard to start, watch, resume, and cancel headless Codex runs.
 
 ![zero npm dependencies](https://img.shields.io/badge/npm_dependencies-0-brightgreen) ![node >= 18](https://img.shields.io/badge/node-%3E%3D18-blue)
 
-## Features
+> ⚠️ **Sandbox: full access by default.** Codex runs launched by this plugin use `danger-full-access` — Codex can read/write anywhere and run any command, as your user. This is deliberate: the sandboxed modes are broken on common Windows setups (Store PowerShell stub → `CreateProcessAsUserW failed: 1312`) and were a constant source of dead handoffs. If your machine's sandbox works and you want it back: `CODEX_PLUGIN_SANDBOX=workspace-write`. Use full access only on machines you trust with the code you run.
 
-- Filesystem watching sends new events to the browser through SSE. A one-second poll is there as a fallback.
-- The session list shows the first user prompt as its title and sorts sessions into LIVE, IDLE, STALE, DONE, and ALL.
-- The feed separates user messages, agent messages, working output, and status changes.
-- Sessions you are not watching get an unread dot when something changes.
-- The feed includes prompts, shell commands, command output, patches, reasoning summaries, agent messages, and completion events.
-- The newest live session opens automatically until you choose a session yourself.
-- The task menu copies ready-to-paste `codex resume`, `codex exec resume` (headless continue), and `codex fork` commands for the selected session.
-- Sessions archived with `codex archive` appear under an Archived filter with a copy-paste `codex unarchive <id>` command to restore them.
-- Waiting and possibly-stuck sessions explain what they were last doing (running a command, thinking, waiting for a reply) and for how long.
-- The responsive dashboard includes search, human-readable status filters, Activity and Raw log views, a collapsible and resizable session list, and a safer task-actions menu.
-- Search covers ALL recorded sessions, not just the visible list: a metadata index (title, project, thread id) of every rollout file powers a History section, and clicking a result loads that session on demand.
-- Layout and display preferences are saved in the browser, including sidebar width, selected filter, feed view, auto-follow, and auto-scroll.
-- On Windows, you can inspect matching Codex processes and stop a stuck task through a detail dialog that shows the full command line and warns before touching shared `app-server`/MCP processes.
-- A small Rust tray app starts the Node viewer in the background on Windows and Linux.
-- The tray shows a native notification when a Codex task finishes.
-- The Node viewer itself has no npm dependencies.
+## Install
 
-### Control panel (bundled plugin)
-
-- **Start handoffs from the browser**: New task form with project directory, prompt, effort (none→xhigh), model, write access, and sandbox override. One code path with the CLI — `/codex:status` in Claude Code and the JOBS tab always show the same jobs.
-- **Reviews from the browser**: run `review` or `adversarial-review` against any project's working tree; findings render in the UI and stay on disk for `/codex:result`.
-- **Fast mode**: opt in per task, review, or resume for priority processing; fast jobs are marked in the JOBS tab and normal mode remains the default.
-- **Ground-truth stuck detection**: jobs are classified **RUNNING** (heartbeat fresh or process alive on a long task), **QUIET — process alive** (heartbeat stale past 5 min), or **DEAD — resumable** (process gone). Long-running commands are never misflagged: liveness is checked against the real PID, not just file quiet-time.
-- **Death reasons**: when a job dies, the UI shows *why* — including the Windows sandbox `1312` cluster, expired Codex auth, and rate limits — with a fix hint.
-- **One-click resume**: dead jobs (and stale sessions with a thread id) get a Resume button — optionally with a different effort, model, or write access. Refuses to resume while the job's process is still alive; recovery is always flag-only, never automatic.
-- **Cancel** running jobs (turn interrupt + process-tree kill via the companion), **instant completion pushes** from the companion to the UI, and per-session **effort / sandbox / token** display parsed from the rollouts.
-
-## Install as a Claude Code plugin
-
-This repo IS a Claude Code marketplace. In Claude Code:
+In Claude Code:
 
 ```
-/plugin marketplace add Fundryi/codex-live-viewer
+/plugin marketplace add Fundryi/claude-codex-handoff
 /plugin install codex@fundryi
 ```
 
-(Working from a local clone instead? `/plugin marketplace add <path-to-clone>` works the same.)
+If you had the OpenAI-marketplace `codex` plugin, uninstall it first — all `/codex:*` command names are identical, so nothing else changes. Requires [Node.js 18+](https://nodejs.org) and the Codex CLI (`npm install -g @openai/codex`, then `codex login`).
 
-The installed plugin bundles the viewer and starts it automatically on each Claude Code session start. Set `CODEX_VIEWER_AUTOSTART=0` to opt out. Autostart leaves the browser closed; run `/codex:viewer` to start or reuse the viewer and open its dashboard.
+That's the whole setup. On your next Claude Code session:
 
-The plugin checks for updates once a day at session start and prints the update command when a newer version is available. Set `CODEX_PLUGIN_UPDATE_CHECK=0` to disable the check.
+- the **dashboard auto-starts** in the background (browser stays closed; open it anytime with `/codex:viewer`),
+- the plugin **checks for updates once a day** and prints the update command when there's a new version.
 
-Fast mode is opt-in per job, uses `service_tier=priority` and more quota, and can use a different tier value through `CODEX_PLUGIN_FAST_TIER`.
+## What you get
 
-Uninstall the OpenAI-marketplace copy of `codex` first so `/codex:*` resolves to ours. All command names stay identical (`/codex:rescue`, `/codex:review`, `/codex:status`, ...). What our fork changes:
+**In Claude Code** — the familiar commands, made reliable:
 
-- **Sandbox**: defaults to `danger-full-access` (see [Sandbox](#sandbox) below) instead of the broken-on-Store-pwsh sandboxed modes — and it survives plugin updates, because the plugin is this repo.
-- **Reliability**: job records carry a heartbeat, exact PID, thread id from the first event, and a mapped death reason; the companion pushes completions to the viewer.
-- **`task --resume-thread <id>`** and background reviews, powering the web UI's resume/review buttons.
+| Command | Does |
+|---|---|
+| `/codex:rescue` | Hand a task to Codex (investigate, fix, implement) as a background job |
+| `/codex:review` / `/codex:adversarial-review` | Codex reviews your working tree / challenges your design |
+| `/codex:status` / `/codex:result` / `/codex:cancel` | Track, fetch, or stop background jobs |
+| `/codex:transfer` | Move the current Claude session into a Codex thread |
+| `/codex:viewer` | Open the live dashboard |
+| `/codex:setup` | Check Codex CLI readiness |
 
-### Sandbox
+Say **"use fast mode"** in a rescue request (or pass `--fast`) for priority processing — faster, uses more quota, opt-in per job, never the default.
 
-`CODEX_PLUGIN_SANDBOX` controls the sandbox for all plugin/viewer-launched runs. Default: `danger-full-access`, because the Microsoft Store `pwsh.exe` stub cannot be spawned by Codex's sandbox users (`CreateProcessAsUserW failed: 1312` / `CreateProcessWithLogonW failed: 2`). If you install MSI PowerShell and disable the `pwsh` app-execution alias, flip it back with `CODEX_PLUGIN_SANDBOX=workspace-write` — no code change needed.
+**In the browser** (`localhost:8377`) — a live dashboard *and* control panel:
 
-### Upstream syncs
+- Every Codex session on the machine streams live: prompts, commands, output, patches, reasoning — however it was started.
+- **JOBS tab** with ground truth, not guesses: jobs are **RUNNING** (heartbeat fresh / process alive on a long task), **QUIET — process alive** (silent 5+ min), or **DEAD — resumable** (process gone). Long-running commands are never misflagged.
+- When a job dies you see **why** — sandbox failures, expired `codex login`, rate limits — with a fix hint.
+- **One-click resume** for dead jobs, optionally with higher effort or a different model. Refuses while the process still lives. Recovery is always flag-only: it marks, you click — no auto-resume, no auto-kill.
+- **Start new tasks and reviews from the browser**: project, prompt, effort (`none`→`xhigh`), model, write access, sandbox, fast mode. Same job store as the CLI — `/codex:status` and the JOBS tab always agree.
+- Cancel with a real turn-interrupt + process-tree kill; completions push to the UI instantly.
+- Search across all recorded sessions, effort/sandbox/token display per session, archived-session handling, unread markers, sound cues, saved layout prefs.
 
-`node scripts/upstream-diff.mjs` clones the latest [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) and prints a diff against `plugin/` (`--full` for the complete diff). Cherry-pick what's good by hand; updates are opt-in, never automatic.
+## Using it well
 
-## Quick start
+Patterns that make handoffs reliable (distilled from daily use):
 
-Requires [Node.js 18+](https://nodejs.org).
+1. **Write a contract, not an essay.** Keep short per-task-type instruction files in your repo (e.g. `handoff/coding.md`, `handoff/review.md`) and open every handoff prompt with one line: `Follow handoff/coding.md (binding). Task: …`. The prompt then only carries scope, done-criteria, and task-specific decisions.
+2. **Scope limits writes, not reads.** Let Codex read anything to trace the real flow, but name the files it may change. Allow root-cause fixes outside the named files only when declared and justified in the report.
+3. **Demand a self-check gate.** End your contract with checks Codex must run before returning — linters, validators, greps for your codebase's known failure patterns. Every bug class a review catches becomes a permanent pre-return check: quality compounds.
+4. **Fix a return format.** Findings verified → fixed/skipped list → diff → per-file manifest → self-check results → out-of-scope observations. Uniform returns are reviewable at a glance.
+5. **Match effort to the task.** `low`/`medium` for mechanical work, `high`/`xhigh` for designs and gnarly bugs; add `--fast` only when you're actively waiting on the result.
+6. **Let the dashboard carry the anxiety.** Kick off jobs, keep working; the JOBS tab tells you truthfully if something needs a click. Claude Code restarts don't kill handoffs — workers are detached and resumable.
 
-### Windows
+## Standalone viewer (no plugin)
 
-Download and extract `Codex-Live-Viewer-Windows-x64.zip`, then double-click `Codex Live Viewer.exe`. The app starts in the system tray without opening a terminal. Double-click the tray icon to open the viewer, or right-click it for status, `Open viewer`, `Restart viewer`, and `Exit`.
-
-The tray checks its Node child once per second. If the background server exits, the icon turns red, the menu shows `Status: Stopped`, and a native notification points to `Restart viewer`. A successful restart restores the blue icon and dashboard without restarting the tray app.
-
-### Linux desktop
-
-Download and extract `Codex-Live-Viewer-Linux-x64.zip`, then run:
-
-```sh
-./codex-live-viewer-tray
-```
-
-The Linux tray requires GTK 3 and Ayatana AppIndicator (for example `libgtk-3-0` and `libayatana-appindicator3-1` on Ubuntu/Debian).
-
-### macOS
-
-There is no macOS tray build. The bundled Claude Code plugin autostarts the Node viewer on session start; run `/codex:viewer` to open it.
-
-### Node CLI
-
-```sh
-node codex-live-viewer.js serve    # foreground (what npm start does)
-node codex-live-viewer.js start    # detached background + open browser
-node codex-live-viewer.js stop     # stop the background server
-node codex-live-viewer.js status
-```
-
-## Remote access
-
-By default the viewer only listens on `127.0.0.1`. Three ways to open it up:
-
-### Home LAN
-
-    node codex-live-viewer.js serve --host 0.0.0.0
-
-Open `http://<server-ip>:8377` from any machine on your network. No auth — your LAN is trusted.
-
-### Internet, zero setup (Cloudflare quick tunnel)
-
-Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), then:
-
-    node codex-live-viewer.js serve --tunnel
-
-The viewer prints a ready-to-click `https://<random>.trycloudflare.com/?token=...` URL. Free, no Cloudflare account, new URL each start. Tunnel visitors need the token (auto-generated once, stored in `~/.codex/live-viewer-token`); local/LAN access stays tokenless.
-
-### Internet, custom domain (named tunnel)
-
-Create a named tunnel in the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/) pointing at `http://localhost:8377`, copy its token, then:
-
-    node codex-live-viewer.js serve --tunnel-token <TUNNEL_TOKEN>
-
-Stable URL on your own domain. Access token works the same as above.
-
-Pin a fixed access token with `--token <secret>` or `CODEX_VIEWER_TOKEN` instead of the auto-generated one.
-
-### Build from source
-
-Requires stable Rust and Node.js 18+:
+The dashboard also runs on its own — it only reads `~/.codex/sessions/`:
 
 ```sh
-npm run tray          # development build
-npm run build:tray    # optimized launcher
+node codex-live-viewer.js start    # background + open browser
+node codex-live-viewer.js serve    # foreground
+node codex-live-viewer.js stop
 ```
 
-The tray launcher must remain beside `codex-live-viewer.js` in a release folder. The Node CLI can also run independently without Rust.
+Or grab a tray app from [Releases](../../releases): `Codex-Live-Viewer-Windows-x64.zip` (double-click the exe) or `Codex-Live-Viewer-Linux-x64.zip` (needs GTK 3 + Ayatana AppIndicator). The tray supervises the server and shows completion toasts. macOS: no tray build — use the Node CLI or the plugin's autostart.
 
-## Releases
-
-Pushing a version tag such as `v1.0.0` builds the Windows and Linux launchers and creates a GitHub Release with ready-to-use ZIP files.
+**Remote access:** `--host 0.0.0.0` for your LAN; `--tunnel` for a free Cloudflare quick tunnel (token-gated, printed on start); `--tunnel-token <t>` for a named tunnel on your own domain. Local access never needs a token.
 
 ## Configuration
 
 | Environment variable | Default | Purpose |
 |---|---|---|
-| `CODEX_VIEWER_PORT` | `8377` | HTTP port (also the target of companion completion pushes) |
-| `CODEX_HOME` | `~/.codex` | Codex home (sessions are read from `$CODEX_HOME/sessions`) |
-| `CODEX_PLUGIN_SANDBOX` | `danger-full-access` | Sandbox mode for plugin/viewer-launched Codex runs |
-| `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state (plugin CLI + viewer) |
-| `CODEX_VIEWER_TRAY_PORT` | viewer port + 1 | Tray single-instance lock port |
-| `CODEX_VIEWER_NOTIFICATIONS` | `1` | Set to `0` to disable tray notifications |
+| `CODEX_PLUGIN_SANDBOX` | `danger-full-access` | Sandbox for plugin/dashboard-launched runs (see warning at top) |
+| `CODEX_PLUGIN_FAST_TIER` | `priority` | Service tier used by `--fast` |
+| `CODEX_PLUGIN_UPDATE_CHECK` | `1` | `0` disables the daily update check |
+| `CODEX_VIEWER_AUTOSTART` | `1` | `0` disables the session-start dashboard autostart |
+| `CODEX_VIEWER_PORT` | `8377` | Dashboard port (also receives job-completion pushes) |
+| `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state (CLI + dashboard) |
+| `CODEX_HOME` | `~/.codex` | Where Codex session files are read from |
+| `CODEX_VIEWER_TRAY_PORT` | port + 1 | Tray single-instance lock |
+| `CODEX_VIEWER_NOTIFICATIONS` | `1` | `0` disables tray toasts |
 
-## Optional: completion toasts (Windows)
+## When something gets stuck
 
-The tray already shows completion notifications while it is running. The viewer and tray work without changing your Codex configuration.
-
-Run `install-codex-notify-hook.bat` if you also want notifications when the viewer is closed. The hook uses [BurntToast](https://github.com/Windos/BurntToast) when it is available and writes each completion to `~/.codex/hooks/notify-log.jsonl`.
-
-The installer keeps the notifier that was already configured and calls it after writing its own notification. It backs up `config.toml`, changes only the `notify` line, verifies the result, and restores the backup if verification fails. You can run it again after a Codex Desktop update changes the notifier path.
-
-When the tray is connected, the hook keeps logging and calling the original notifier but suppresses its own toast. This prevents duplicate notifications. The viewer does not need the hook for normal operation.
-
-## Recovering a stuck session
-
-1. Check the JOBS tab: plugin-launched jobs show ground truth — **RUNNING** (heartbeat fresh), **QUIET — process alive** (no heartbeat for 5+ min; might be wedged, might be a long silent command), or **DEAD — resumable** (process gone), plus the death reason when one was captured.
-2. For a dead job, click **Resume** — optionally with a higher effort or a different model — and confirm. The viewer refuses while the job's process is still alive; stop it first via the stop dialog (which warns before touching shared `app-server`/MCP hosts).
-3. Sessions started outside the plugin (plain `codex` runs) keep the heuristic classification and the copy-paste actions: `Copy continue command` (`codex exec resume <id> "…"`), `Copy resume command` (interactive), `Copy fork command` (experiment on a copy).
-4. Don't want to continue it at all? `Dismiss task` hides the dead session from every filter except All (viewer-only, stored in your browser, undoable via `Restore task`). For permanent cleanup, `Copy archive command` gives you `codex archive <id>` — archived sessions stay visible under the **Archived** filter with a `codex unarchive <id>` command to restore.
-
-Recovery is always flag-only: the viewer marks, you click. It never auto-resumes or auto-kills.
+1. Check the JOBS tab — the badge tells you the truth (running / quiet-but-alive / dead), with the death reason if there is one.
+2. Dead job → **Resume** (optionally bump effort). The dashboard refuses if the process is actually still alive.
+3. Truly wedged process → stop dialog (Windows shows the full command line and warns before touching shared `app-server`/MCP hosts), then Resume.
+4. Sessions started outside the plugin get copy-paste `codex exec resume <id> "…"` / `codex resume` / `codex fork` commands instead.
 
 ## Security notes
 
-- The server listens on `127.0.0.1` by default, so it is not exposed to the network.
-- The viewer never edits Codex session files or `~/.codex`. It spawns Codex only through the bundled companion script, and only when you submit an in-app form or confirm an action dialog.
-- All state-changing endpoints (`/task`, `/review`, `/resume`, `/cancel`, `/kill`, `/shutdown`) are POST-only and reject untrusted browser origins and DNS-rebound Hosts.
-- The Windows stop feature runs `taskkill` only after you choose a PID and confirm it in a dialog that shows the full command line. Plugin-launched jobs use the exact recorded PID; for foreign sessions the match is start-time based and the dialog warns explicitly before stopping `codex app-server`/MCP processes that may host several handoffs.
-
-## Limitations
-
-- The tray launcher supports Windows and Linux. The Node server and CLI also run on macOS, but there is no macOS tray build yet.
-- `Exit` stops Node only when that tray instance started it. If Node was already running, the tray leaves it alone.
-- Sessions are detected by file growth. A session whose file stops growing for 20 s shows as IDLE even if the process is still alive (e.g. long-running silent tool call).
-- Search matches session metadata (title, project, thread id) — not the full conversation text.
-- The rollout schema is not a public API. The parser is schema-tolerant and skips unknown shapes silently; if an event type renders as a gap, extend `simplify()` in `codex-live-viewer.js`.
+- Listens on `127.0.0.1` by default; state-changing endpoints are POST-only, origin-guarded, and confirmed in-app.
+- Never edits Codex session files or `~/.codex` — it spawns Codex only through the bundled companion, only when you act.
+- Remember the trade-off at the top: convenience came from dropping the sandbox. That's a real decision, not a default to forget about.
 
 ## Project layout
 
-- `codex-live-viewer.js`: Node server, CLI, rollout parser, control endpoints, and embedded fallback UI
-- `viewer-ui.html`: zero-dependency responsive browser interface
-- `plugin/`: our fork of the `codex` Claude Code plugin (companion script, commands, hooks)
-- `.claude-plugin/marketplace.json`: makes this repo an installable Claude Code marketplace
-- `scripts/upstream-diff.mjs`: selective upstream sync helper
-- `docs/UI-THEME.md`: visual system and interaction rules
-- `tests/`: Node regression tests (server, UI, and plugin)
-- `tray-launcher/`: Windows and Linux tray app
-- `install-codex-notify-hook.bat`: optional Windows completion notifications
-- `.github/workflows/release.yml`: builds release ZIPs when a `v*` tag is pushed
-
-## License
-
-MIT for the viewer, tray, and scripts. `plugin/` is a fork of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) and keeps its original Apache-2.0 license and NOTICE.
+- `codex-live-viewer.js` — Node server, CLI, rollout parser, control endpoints (one file, no deps)
+- `viewer-ui.html` — the whole frontend (one file)
+- `plugin/` — the Claude Code plugin (fork of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc); keeps its Apache-2.0 `LICENSE`/`NOTICE`)
+- `plugin/viewer/` — bundled dashboard copies (refreshed by `npm run sync:viewer`, drift-guarded by tests)
+- `scripts/upstream-diff.mjs` — diff `plugin/` against upstream for selective, manual cherry-picks
+- `tests/` — zero-dep `node:test` suites
+- `tray-launcher/` — Rust tray app (Windows/Linux)

@@ -1,8 +1,8 @@
 {
-  "name": "codex-live-viewer",
-  "version": "2.0.0",
+  "name": "claude-codex-handoff",
+  "version": "2.3.0",
   "private": true,
-  "description": "Lightweight tray and browser dashboard for all local Codex CLI sessions, including headless handoffs.",
+  "description": "Claude Code -> Codex handoffs that don't get stuck: bundled codex plugin fork + live web dashboard to start, watch, resume and cancel headless Codex runs.",
   "main": "codex-live-viewer.js",
   "scripts": {
     "start": "node codex-live-viewer.js serve",
@@ -22,14 +22,13 @@
     "codex-live-viewer.js",
     "viewer-ui.html",
     "assets/logo.svg",
-    "README.md",
-    "LICENSE"
+    "README.md"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Fundryi/codex-live-viewer.git"
+    "url": "git+https://github.com/Fundryi/claude-codex-handoff.git"
   },
-  "homepage": "https://github.com/Fundryi/codex-live-viewer#readme",
-  "bugs": "https://github.com/Fundryi/codex-live-viewer/issues",
-  "license": "MIT"
+  "homepage": "https://github.com/Fundryi/claude-codex-handoff#readme",
+  "bugs": "https://github.com/Fundryi/claude-codex-handoff/issues",
+  "license": "UNLICENSED"
 }
