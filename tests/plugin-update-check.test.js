@@ -45,3 +45,14 @@ test("checkForUpdate uses a fresh cache without fetching and is silent when disa
   const disabled = await checkForUpdate({ currentVersion: "2.2.0", cacheFile, env: { CODEX_PLUGIN_UPDATE_CHECK: "0" } });
   assert.equal(disabled, null);
 });
+
+test("sessionUpdateNotice reads version from plugin root and uses the state-root cache file", async () => {
+  const hook = await import(pathToFileURL(path.join(__dirname, "..", "plugin", "scripts", "session-lifecycle-hook.mjs")).href);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clv-upd2-"));
+  fs.mkdirSync(path.join(dir, ".claude-plugin"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".claude-plugin", "plugin.json"), JSON.stringify({ version: "1.0.0" }));
+  const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "clv-upd3-"));
+  fs.writeFileSync(path.join(stateRoot, "update-check.json"), JSON.stringify({ checkedAt: Date.now(), latestVersion: "1.1.0" }));
+  const notice = await hook.sessionUpdateNotice({ CLAUDE_PLUGIN_ROOT: dir, CODEX_COMPANION_STATE_ROOT: stateRoot });
+  assert.match(notice, /1\.0\.0 -> 1\.1\.0/);
+});

@@ -3,6 +3,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
@@ -19,6 +20,7 @@ import {
 } from "./lib/broker-lifecycle.mjs";
 import { loadState, resolveStateFile, saveState } from "./lib/state.mjs";
 import { TRANSCRIPT_PATH_ENV } from "./lib/claude-session-transfer.mjs";
+import { checkForUpdate } from "./lib/update-check.mjs";
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
 export const SESSION_ID_ENV = "CODEX_COMPANION_SESSION_ID";
@@ -61,6 +63,22 @@ export async function maybeStartViewer(env = process.env) {
     return "started";
   } catch {
     return "error";
+  }
+}
+
+export async function sessionUpdateNotice(env = process.env) {
+  try {
+    const pluginRoot = env.CLAUDE_PLUGIN_ROOT;
+    if (!pluginRoot) return null;
+    const manifest = JSON.parse(fs.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8"));
+    const stateRoot = env.CODEX_COMPANION_STATE_ROOT || path.join(os.homedir(), ".codex-companion");
+    return await checkForUpdate({
+      currentVersion: manifest.version,
+      cacheFile: path.join(stateRoot, "update-check.json"),
+      env
+    });
+  } catch {
+    return null;
   }
 }
 
@@ -123,6 +141,8 @@ async function handleSessionStart(input) {
   appendEnvVar(TRANSCRIPT_PATH_ENV, input.transcript_path);
   appendEnvVar(PLUGIN_DATA_ENV, process.env[PLUGIN_DATA_ENV]);
   await maybeStartViewer();
+  const notice = await sessionUpdateNotice();
+  if (notice) console.log(notice);
 }
 
 async function handleSessionEnd(input) {
