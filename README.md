@@ -58,6 +58,8 @@ This repo IS a Claude Code marketplace. In Claude Code:
 
 The installed plugin bundles the viewer and starts it automatically on each Claude Code session start. Set `CODEX_VIEWER_AUTOSTART=0` to opt out. Autostart leaves the browser closed; run `/codex:viewer` to start or reuse the viewer and open its dashboard.
 
+The plugin checks for updates once a day at session start and prints the update command when a newer version is available. Set `CODEX_PLUGIN_UPDATE_CHECK=0` to disable the check.
+
 Fast mode is opt-in per job, uses `service_tier=priority` and more quota, and can use a different tier value through `CODEX_PLUGIN_FAST_TIER`.
 
 Uninstall the OpenAI-marketplace copy of `codex` first so `/codex:*` resolves to ours. All command names stay identical (`/codex:rescue`, `/codex:review`, `/codex:status`, ...). What our fork changes:
