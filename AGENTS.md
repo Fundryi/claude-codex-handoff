@@ -16,7 +16,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 
 ## Hard rules
 
-- **Zero npm dependencies.** Node stdlib only (`node >= 18`). Never add a package.
+- **Zero npm dependencies.** Node stdlib only (`node >= 22`; requirements always track a current LTS, never an EOL line). Never add a package.
 - Server stays one file, UI stays one file. No build step for the Node side.
 - The viewer never *edits* Codex session files or anything under `~/.codex`. It DOES spawn codex via `plugin/scripts/codex-companion.mjs` (task/review/resume/cancel) and shares plugin job state at `~/.codex-companion/state`. All state-changing endpoints are POST, origin-guarded (`trustedControlOrigin`), and confirmed in-app — never `window.confirm`/`alert`.
 - Recovery is flag-only: the classifier marks jobs working / possibly-stuck / dead; the user clicks Resume. No auto-resume, no auto-kill.
