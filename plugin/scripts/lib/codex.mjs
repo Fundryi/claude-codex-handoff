@@ -1106,6 +1106,47 @@ export async function importExternalAgentSession(cwd, options = {}) {
   });
 }
 
+// Polls shouldCancel while a turn runs; on the first true it sends one native
+// turn/interrupt through the SAME client that owns the turn (an outside client
+// cannot reach a turn hosted in another app-server process).
+export function createTurnCancelWatcher({ shouldCancel, interrupt, intervalMs = 1500 }) {
+  if (typeof shouldCancel !== "function") {
+    return { arm: () => {}, dispose: () => {}, interrupted: () => false };
+  }
+  let timer = null;
+  let sent = false;
+  return {
+    arm(threadId, turnId) {
+      if (timer || sent || !turnId) {
+        return;
+      }
+      timer = setInterval(() => {
+        let wanted = false;
+        try {
+          wanted = Boolean(shouldCancel());
+        } catch {
+          wanted = false;
+        }
+        if (!wanted) {
+          return;
+        }
+        sent = true;
+        clearInterval(timer);
+        timer = null;
+        Promise.resolve(interrupt(threadId, turnId)).catch(() => {});
+      }, intervalMs);
+      timer.unref?.();
+    },
+    dispose() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    },
+    interrupted: () => sent
+  };
+}
+
 export async function runAppServerTurn(cwd, options = {}) {
   const availability = getCodexAvailability(cwd);
   if (!availability.available) {
@@ -1143,22 +1184,40 @@ export async function runAppServerTurn(cwd, options = {}) {
       throw new Error("A prompt is required for this Codex run.");
     }
 
-    const turnState = await captureTurn(
-      client,
-      threadId,
-      () =>
-        client.request("turn/start", {
-          threadId,
-          input: buildTurnInput(prompt),
-          model: options.model ?? null,
-          effort: options.effort ?? null,
-          outputSchema: options.outputSchema ?? null
-        }),
-      { onProgress: options.onProgress }
-    );
+    const cancelWatcher = createTurnCancelWatcher({
+      shouldCancel: options.shouldCancel,
+      interrupt: (interruptThreadId, turnId) => {
+        emitProgress(options.onProgress, "Cancel requested - interrupting Codex turn.", "cancelling");
+        return client.request("turn/interrupt", { threadId: interruptThreadId, turnId });
+      },
+      intervalMs: options.cancelPollMs ?? 1500
+    });
+
+    let turnState;
+    try {
+      turnState = await captureTurn(
+        client,
+        threadId,
+        () =>
+          client.request("turn/start", {
+            threadId,
+            input: buildTurnInput(prompt),
+            model: options.model ?? null,
+            effort: options.effort ?? null,
+            outputSchema: options.outputSchema ?? null
+          }),
+        {
+          onProgress: options.onProgress,
+          onResponse: (response) => cancelWatcher.arm(threadId, response.turn?.id ?? null)
+        }
+      );
+    } finally {
+      cancelWatcher.dispose();
+    }
 
     return {
       status: buildResultStatus(turnState),
+      interrupted: cancelWatcher.interrupted(),
       threadId,
       turnId: turnState.turnId,
       finalMessage: turnState.lastAgentMessage,

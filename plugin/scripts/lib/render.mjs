@@ -449,7 +449,9 @@ export function renderCancelReport(job) {
   const lines = [
     "# Codex Cancel",
     "",
-    `Cancelled ${job.id}.`,
+    job.status && job.status !== "cancelled"
+      ? `${job.id} ended on its own (${job.status}) before the cancel landed.`
+      : `Cancelled ${job.id}.`,
     ""
   ];
 

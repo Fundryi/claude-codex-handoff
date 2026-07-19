@@ -254,6 +254,7 @@
     .status.IDLE { background: #473a19; color: #f0cb6e; }
     .status.STALE { background: #4a2c12; color: #f0a254; }
     .status.DONE { background: #173923; color: #72dc8c; }
+    .status.STOPPED { background: #43181d; color: #ff8f88; }
     .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
@@ -748,6 +749,7 @@
       IDLE: { label: 'Waiting', help: 'No new events for 20 seconds. It may be thinking or running a quiet tool.' },
       STALE: { label: 'Possibly stuck', help: 'No new events for more than 10 minutes and no completion event.' },
       DONE: { label: 'Finished', help: 'The session reported that the task completed.' },
+      STOPPED: { label: 'Stopped', help: 'The job for this session was cancelled on request.' },
       ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' }
     };
     var FILTERS = [
@@ -1037,7 +1039,8 @@
         var badge = document.createElement('span');
         var badgeStatus = job.live === 'working' ? 'LIVE'
           : job.live === 'possibly-stuck' ? 'IDLE'
-          : job.live === 'dead' || job.live === 'failed' ? 'STALE' : 'DONE';
+          : job.live === 'dead' || job.live === 'failed' ? 'STALE'
+          : job.live === 'cancelled' ? 'STOPPED' : 'DONE';
         badge.className = 'status ' + badgeStatus;
         badge.textContent = jobStatusLabel(job);
         top.appendChild(badge);
@@ -1253,7 +1256,7 @@
         reasonLine.title = reason;
         taskMeta.appendChild(reasonLine);
       }
-      stopButton.hidden = session.status === 'DONE' || !!session.archived;
+      stopButton.hidden = session.status === 'DONE' || session.status === 'STOPPED' || !!session.archived;
       var dismissButton = document.getElementById('dismiss-button');
       dismissButton.hidden = false;
       dismissButton.textContent = isDismissed(session.id) ? 'Restore task' : 'Dismiss task';

@@ -41,7 +41,8 @@ import {
   readStoredJob,
   resolveCancelableJob,
   resolveResultJob,
-  sortJobsNewestFirst
+  sortJobsNewestFirst,
+  waitForJobSettled
 } from "./lib/job-control.mjs";
 import {
   appendLogLine,
@@ -494,6 +495,7 @@ async function executeTaskRun(request) {
     fast: request.fast,
     sandbox: companionSandbox(),
     onProgress: request.onProgress,
+    shouldCancel: request.shouldCancel,
     persistThread: true,
     threadName: resumeThreadId ? null : buildPersistentTaskThreadName(request.prompt || DEFAULT_CONTINUE_PROMPT)
   });
@@ -522,6 +524,7 @@ async function executeTaskRun(request) {
 
   return {
     exitStatus: result.status,
+    interrupted: Boolean(result.interrupted),
     threadId: result.threadId,
     turnId: result.turnId,
     payload,
@@ -903,12 +906,16 @@ async function handleTaskWorker(argv) {
       logFile: storedJob.logFile ?? null
     }
   );
+  // Safe stop: /codex:cancel sets cancelRequested on the job file; this worker
+  // owns the app-server connection, so it interrupts its own turn natively.
+  const shouldCancel = () => readStoredJob(workspaceRoot, options["job-id"])?.cancelRequested === true;
   const runner = storedJob.jobClass === "review" ? () => executeReviewRun({
     ...request,
     onProgress: progress
   }) : () => executeTaskRun({
     ...request,
-    onProgress: progress
+    onProgress: progress,
+    shouldCancel
   });
   await runTrackedJob({ ...storedJob, workspaceRoot, logFile }, runner, { logFile });
 }
@@ -1006,6 +1013,26 @@ async function handleCancel(argv) {
   const threadId = existing.threadId ?? job.threadId ?? null;
   const turnId = existing.turnId ?? job.turnId ?? null;
 
+  // Safe stop first: flag the job; its worker owns the app-server connection
+  // and interrupts its own turn natively (turn_aborted lands in the rollout).
+  const cancelRequestedAt = nowIso();
+  writeJobFile(workspaceRoot, job.id, { ...existing, cancelRequested: true, cancelRequestedAt });
+  upsertJob(workspaceRoot, { id: job.id, cancelRequested: true, cancelRequestedAt });
+  appendLogLine(job.logFile, "Cancel requested - waiting for the Codex turn to stop safely.");
+
+  const grace = await waitForJobSettled(workspaceRoot, job.id, { timeoutMs: 5000, pollMs: 250 });
+  if (grace.settled) {
+    appendLogLine(job.logFile, `Job stopped safely (${grace.status}).`);
+    const settledJob = readStoredJob(workspaceRoot, job.id) ?? { ...job, status: grace.status };
+    outputCommandResult(
+      { jobId: job.id, status: grace.status, title: job.title, stopMode: "safe" },
+      renderCancelReport(settledJob),
+      options.json
+    );
+    return;
+  }
+
+  // Force stop: external interrupt covers broker-hosted turns, then kill the tree.
   const interrupt = await interruptAppServerTurn(cwd, { threadId, turnId });
   if (interrupt.attempted) {
     appendLogLine(
@@ -1017,7 +1044,7 @@ async function handleCancel(argv) {
   }
 
   terminateProcessTree(job.pid ?? Number.NaN);
-  appendLogLine(job.logFile, "Cancelled by user.");
+  appendLogLine(job.logFile, "Cancelled by user (forced).");
 
   const completedAt = nowIso();
   const nextJob = {
@@ -1047,6 +1074,7 @@ async function handleCancel(argv) {
     jobId: job.id,
     status: "cancelled",
     title: job.title,
+    stopMode: "forced",
     turnInterruptAttempted: interrupt.attempted,
     turnInterrupted: interrupt.interrupted
   };

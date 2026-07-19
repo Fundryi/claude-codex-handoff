@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.3.0";
+const APP_VERSION = "2.5.0";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 function parseFlags(argv) {
   const flags = { cmd: null, host: null, tunnel: false, tunnelToken: null, token: null, flagArgv: [] };
@@ -345,13 +345,16 @@ function ingest(file) {
   }
 }
 
-function sessionSummary(s) {
+function sessionSummary(s, threadJobStatus) {
   // LIVE: file is growing. DONE: wrote task_complete. IDLE: quiet but recent
   // (slow tool call / thinking). STALE: quiet >10min and never completed - dead/aborted.
+  // STOPPED: quiet because the companion job for this thread was cancelled on request.
   const quiet = Date.now() - s.lastGrow;
-  const status = quiet < LIVE_WINDOW_MS ? "LIVE"
+  let status = quiet < LIVE_WINDOW_MS ? "LIVE"
     : s.events.some(e => e.kind === "done") ? "DONE"
     : quiet < STALE_AFTER_MS ? "IDLE" : "STALE";
+  if ((status === "IDLE" || status === "STALE") && threadJobStatus
+    && threadJobStatus.get(s.meta.threadId) === "cancelled") status = "STOPPED";
   const last = s.events[s.events.length - 1];
   return {
     id: s.id,
@@ -391,7 +394,17 @@ function tick() {
   }
   for (const f of files) ingest(f);
   for (const key of sessions.keys()) if (!files.includes(key)) sessions.delete(key);
-  broadcast({ type: "sessions", sessions: files.map(f => sessions.get(f)).filter(Boolean).map(sessionSummary) });
+  const threadJobStatus = threadJobStatuses(listCompanionJobs());
+  broadcast({ type: "sessions", sessions: files.map(f => sessions.get(f)).filter(Boolean).map(s => sessionSummary(s, threadJobStatus)) });
+}
+
+// newest job per thread wins - a cancelled thread that was resumed is running again
+function threadJobStatuses(jobs) {
+  const map = new Map();
+  for (const job of jobs || []) {
+    if (job.threadId && !map.has(job.threadId)) map.set(job.threadId, job.status);
+  }
+  return map;
 }
 
 // fs.watch makes updates near-instant (~50ms); the 1s poll stays as fallback
@@ -841,7 +854,8 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     sseClients.add(res);
     // initial state: session list + full event snapshots
-    res.write("data: " + JSON.stringify({ type: "sessions", sessions: [...sessions.values()].map(sessionSummary) }) + "\n\n");
+    const threadJobStatus = threadJobStatuses(listCompanionJobs());
+    res.write("data: " + JSON.stringify({ type: "sessions", sessions: [...sessions.values()].map(s => sessionSummary(s, threadJobStatus)) }) + "\n\n");
     for (const s of sessions.values())
       res.write("data: " + JSON.stringify({ type: "snapshot", session: s.id, events: s.events }) + "\n\n");
     req.on("close", () => sseClients.delete(res));

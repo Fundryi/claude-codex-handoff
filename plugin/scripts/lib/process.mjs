@@ -66,7 +66,10 @@ export function terminateProcessTree(pid, options = {}) {
   if (platform === "win32") {
     const result = runCommandImpl("taskkill", ["/PID", String(pid), "/T", "/F"], {
       cwd: options.cwd,
-      env: options.env
+      env: options.env,
+      // shell:false — runCommand's win32 default routes through $SHELL, and Git Bash
+      // rewrites /PID into "C:/Program Files/Git/PID"; taskkill is a native exe.
+      shell: false
     });
 
     if (!result.error && result.status === 0) {

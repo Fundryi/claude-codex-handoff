@@ -180,7 +180,10 @@ export async function runTrackedJob(job, runner, options = {}) {
 
   try {
     const execution = await runner();
-    const completionStatus = execution.exitStatus === 0 ? "completed" : "failed";
+    // interrupted = the run was stopped via native turn/interrupt after a cancel
+    // request - that is a successful cancel, not a failure.
+    const completionStatus = execution.interrupted ? "cancelled"
+      : execution.exitStatus === 0 ? "completed" : "failed";
     const completedAt = nowIso();
     writeJobFile(job.workspaceRoot, job.id, {
       ...runningRecord,
@@ -188,7 +191,8 @@ export async function runTrackedJob(job, runner, options = {}) {
       threadId: execution.threadId ?? null,
       turnId: execution.turnId ?? null,
       pid: null,
-      phase: completionStatus === "completed" ? "done" : "failed",
+      phase: completionStatus === "completed" ? "done" : completionStatus,
+      ...(completionStatus === "cancelled" ? { errorMessage: "Cancelled by user." } : {}),
       completedAt,
       result: execution.payload,
       rendered: execution.rendered,
@@ -203,7 +207,8 @@ export async function runTrackedJob(job, runner, options = {}) {
       threadId: execution.threadId ?? null,
       turnId: execution.turnId ?? null,
       summary: execution.summary,
-      phase: completionStatus === "completed" ? "done" : "failed",
+      phase: completionStatus === "completed" ? "done" : completionStatus,
+      ...(completionStatus === "cancelled" ? { errorMessage: "Cancelled by user." } : {}),
       pid: null,
       completedAt,
       exitCode: execution.exitStatus,

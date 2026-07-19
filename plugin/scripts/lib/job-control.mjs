@@ -278,6 +278,45 @@ export function resolveResultJob(cwd, reference) {
   throw new Error("No finished Codex jobs found for this repository yet.");
 }
 
+const TERMINAL_JOB_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
+function jobPidAlive(pid) {
+  if (!pid) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Grace-wait for a safe stop: the worker sees cancelRequested and marks the job
+// terminal itself. Returns early when the worker process is already gone.
+export async function waitForJobSettled(workspaceRoot, jobId, { timeoutMs = 5000, pollMs = 250 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    let stored = null;
+    try {
+      const jobFile = resolveJobFile(workspaceRoot, jobId);
+      stored = fs.existsSync(jobFile) ? readJobFile(jobFile) : null;
+    } catch {
+      stored = null;
+    }
+    if (stored && TERMINAL_JOB_STATUSES.has(stored.status)) {
+      return { settled: true, status: stored.status };
+    }
+    if (stored?.pid && !jobPidAlive(stored.pid)) {
+      return { settled: false, status: stored.status ?? null, pidDead: true };
+    }
+    if (Date.now() >= deadline) {
+      return { settled: false, status: stored?.status ?? null };
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}
+
 export function resolveCancelableJob(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
