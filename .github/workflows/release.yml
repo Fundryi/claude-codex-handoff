@@ -29,7 +29,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           New-Item -ItemType Directory -Force -Path "$folder/assets" | Out-Null
           Copy-Item "tray-launcher/target/release/codex-live-viewer-tray.exe" "$folder/Codex Live Viewer.exe"
-          Copy-Item "codex-live-viewer.js", "viewer-ui.html", "README.md", "LICENSE" $folder
+          Copy-Item "codex-live-viewer.js", "viewer-ui.html", "README.md" $folder
           Copy-Item "assets/logo.svg" "$folder/assets/logo.svg"
           Copy-Item "install-codex-notify-hook.bat" "$folder/install-codex-notify-hook.bat"
           Compress-Archive -Path $folder -DestinationPath "dist/Codex-Live-Viewer-Windows-x64.zip"
@@ -61,7 +61,7 @@ jobs:
           mkdir -p "$folder"
           mkdir -p "$folder/assets"
           cp tray-launcher/target/release/codex-live-viewer-tray "$folder/codex-live-viewer-tray"
-          cp codex-live-viewer.js viewer-ui.html README.md LICENSE "$folder/"
+          cp codex-live-viewer.js viewer-ui.html README.md "$folder/"
           cp assets/logo.svg "$folder/assets/logo.svg"
           chmod +x "$folder/codex-live-viewer-tray"
           cd dist
