@@ -346,15 +346,19 @@ function ingest(file) {
 }
 
 function sessionSummary(s, threadJobStatus) {
-  // LIVE: file is growing. DONE: wrote task_complete. IDLE: quiet but recent
-  // (slow tool call / thinking). STALE: quiet >10min and never completed - dead/aborted.
-  // STOPPED: quiet because the companion job for this thread was cancelled on request.
+  // LIVE: file is growing, or the thread's companion job process is alive with
+  // a fresh heartbeat (long thinking writes nothing to the rollout). DONE: wrote
+  // task_complete. STALE: quiet >10min and never completed, or the job process
+  // died without completing. IDLE: quiet but recent, no job evidence either way.
+  // STOPPED: quiet because the companion job for this thread was cancelled.
   const quiet = Date.now() - s.lastGrow;
+  const jobLive = threadJobStatus ? threadJobStatus.get(s.meta.threadId) : undefined;
   let status = quiet < LIVE_WINDOW_MS ? "LIVE"
     : s.events.some(e => e.kind === "done") ? "DONE"
+    : jobLive === "working" ? "LIVE"
+    : jobLive === "dead" ? "STALE"
     : quiet < STALE_AFTER_MS ? "IDLE" : "STALE";
-  if ((status === "IDLE" || status === "STALE") && threadJobStatus
-    && threadJobStatus.get(s.meta.threadId) === "cancelled") status = "STOPPED";
+  if ((status === "IDLE" || status === "STALE") && jobLive === "cancelled") status = "STOPPED";
   const last = s.events[s.events.length - 1];
   return {
     id: s.id,
@@ -401,8 +405,9 @@ function tick() {
 // newest job per thread wins - a cancelled thread that was resumed is running again
 function threadJobStatuses(jobs) {
   const map = new Map();
+  const now = Date.now();
   for (const job of jobs || []) {
-    if (job.threadId && !map.has(job.threadId)) map.set(job.threadId, job.status);
+    if (job.threadId && !map.has(job.threadId)) map.set(job.threadId, classifyJobLiveness(job, pidAlive(job.pid), now));
   }
   return map;
 }
