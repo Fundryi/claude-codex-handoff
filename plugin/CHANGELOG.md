@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.0
+
+Smarter status: the viewer now tells "thinking hard" apart from actually stuck.
+
+- **Viewer: sessions with a live companion job stay "Running" while quiet.** Session status used to track only rollout file growth, so long thinking stretches (which write nothing to the rollout) flipped to "Waiting" after 20 seconds. Now the thread's job liveness — process alive plus a fresh companion heartbeat — keeps the session shown as Running.
+- **Viewer: dead jobs surface immediately.** A session whose job process died without completing shows "Possibly stuck" right away instead of waiting out the 10-minute quiet window, so Resume is offered sooner.
+- Status help text updated to match. Interactive sessions without a companion job behave exactly as before.
+
 ## 2.5.0
 
 Reliable stop: cancelling a Codex job now works, stops exactly one job, and shows up correctly everywhere.
