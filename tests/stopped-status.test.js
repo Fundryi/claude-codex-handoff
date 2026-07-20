@@ -95,3 +95,9 @@ test("UI knows the STOPPED status", () => {
   // stop button is pointless on an already-stopped task
   assert.match(html, /stopButton\.hidden = session\.status === 'DONE' \|\| session\.status === 'STOPPED'/);
 });
+
+test("UI help text explains job-liveness-aware statuses", () => {
+  assert.match(html, /LIVE: \{ label: 'Running', help: 'The session is writing new events, or its job process is alive and streaming\.' \}/);
+  assert.match(html, /IDLE: \{ label: 'Waiting', help: 'No new events for 20 seconds and no live job process\. It may be running a quiet tool\.' \}/);
+  assert.match(html, /STALE: \{ label: 'Possibly stuck', help: 'No new events for more than 10 minutes, or the job process died without completing\.' \}/);
+});

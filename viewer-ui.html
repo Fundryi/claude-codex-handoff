@@ -745,9 +745,9 @@
     var connectionText = document.getElementById('connection-text');
 
     var STATUS = {
-      LIVE: { label: 'Running', help: 'The session is actively writing new events.' },
-      IDLE: { label: 'Waiting', help: 'No new events for 20 seconds. It may be thinking or running a quiet tool.' },
-      STALE: { label: 'Possibly stuck', help: 'No new events for more than 10 minutes and no completion event.' },
+      LIVE: { label: 'Running', help: 'The session is writing new events, or its job process is alive and streaming.' },
+      IDLE: { label: 'Waiting', help: 'No new events for 20 seconds and no live job process. It may be running a quiet tool.' },
+      STALE: { label: 'Possibly stuck', help: 'No new events for more than 10 minutes, or the job process died without completing.' },
       DONE: { label: 'Finished', help: 'The session reported that the task completed.' },
       STOPPED: { label: 'Stopped', help: 'The job for this session was cancelled on request.' },
       ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' }
