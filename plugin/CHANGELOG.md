@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.6.1
+
+- **Viewer: Resume from the job result modal.** Opening a dead/failed job used to show only the result (often "No rendered result is available.") with a lone Close button; resuming required going back to the card. The modal now offers a Resume button that opens the usual resume dialog with thread and workspace prefilled.
+
 ## 2.6.0
 
 Smarter status: the viewer now tells "thinking hard" apart from actually stuck.
