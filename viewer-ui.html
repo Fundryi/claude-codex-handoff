@@ -656,6 +656,7 @@
       <div id="job-modal-meta"></div>
       <pre id="job-modal-result"></pre>
       <div id="job-modal-actions">
+        <button id="job-modal-resume" type="button" hidden>Resume</button>
         <button id="job-modal-close" type="button">Close</button>
       </div>
     </div>
@@ -728,6 +729,7 @@
     var jobModalMeta = document.getElementById('job-modal-meta');
     var jobModalResult = document.getElementById('job-modal-result');
     var jobModalClose = document.getElementById('job-modal-close');
+    var jobModalResume = document.getElementById('job-modal-resume');
     var controlModal = document.getElementById('control-modal');
     var controlModalTitle = document.getElementById('control-modal-title');
     var controlModalForm = document.getElementById('control-modal-form');
@@ -1405,6 +1407,12 @@
       jobModalMeta.appendChild(modalRow('Summary', job.summary || ''));
       jobModalMeta.appendChild(modalRow('Thread', job.threadId || '', true));
       jobModalResult.textContent = 'Loading job result\u2026';
+      var resumable = !!job.threadId && (job.live === 'dead' || job.live === 'failed');
+      jobModalResume.hidden = !resumable;
+      jobModalResume.onclick = resumable ? function () {
+        jobModal.hidden = true;
+        openResumeModal({ threadId: job.threadId, cwd: job.workspaceRoot }, job.title);
+      } : null;
       jobModal.hidden = false;
       jobModalClose.focus();
       try {
