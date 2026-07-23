@@ -1,6 +1,6 @@
 {
   "name": "claude-codex-handoff",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "private": true,
   "description": "Claude Code -> Codex handoffs that don't get stuck: bundled codex plugin fork + live web dashboard to start, watch, resume and cancel headless Codex runs.",
   "main": "codex-live-viewer.js",
