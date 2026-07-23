@@ -1,9 +1,10 @@
 ---
 description: Open the Codex Live Viewer dashboard (starts it if needed)
+allowed-tools: Bash(node:*)
 ---
 
-Run this exact command with the Bash tool, then tell the user the dashboard URL it prints:
+The viewer was already started when this command was invoked. Its output:
 
-    node "${CLAUDE_PLUGIN_ROOT}/viewer/codex-live-viewer.js" start
+!`node "${CLAUDE_PLUGIN_ROOT}/viewer/codex-live-viewer.js" start`
 
-`start` is idempotent: it reuses a running viewer or starts one in the background, then opens the browser. If the command fails, show the user the error and suggest checking that Node 18+ is on PATH.
+If the output above contains a dashboard URL, reply with just that URL — do not run any tools. Only if it shows an error: diagnose it (check that Node 22+ is on PATH, check the port from CODEX_VIEWER_PORT, default 8377) and tell the user what's wrong.
