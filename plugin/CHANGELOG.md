@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.7.1
+
+- **Multi-agent handoffs no longer end with a spurious "turn aborted".** In collab-mode runs, the worker inferred turn completion just 250ms after the root agent's final answer — usually beating the real `turn/completed` event — then closed the app-server, which aborted the still-finishing turn. The rollout got stamped `turn_aborted`, the viewer showed "err: turn aborted", and resuming that thread fed Codex an "interrupted on purpose" marker, even though the job itself completed with the full result. The inferred-completion grace window is now 10 seconds, so it only fires for genuinely hung turns; normal runs complete on the real event with no added latency.
+
 ## 2.7.0
 
 Long Codex handoffs stop dying at the ten-minute mark.
