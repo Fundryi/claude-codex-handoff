@@ -357,7 +357,7 @@ function clearCompletionTimer(state) {
   }
 }
 
-function completeTurn(state, turn = null, options = {}) {
+export function completeTurn(state, turn = null, options = {}) {
   if (state.completed) {
     return;
   }
@@ -384,7 +384,13 @@ function completeTurn(state, turn = null, options = {}) {
   state.resolveCompletion(state);
 }
 
-function scheduleInferredCompletion(state) {
+// Fallback for collab-mode turns whose root turn/completed never arrives. The
+// grace window must comfortably outlast a normal completion: closing the
+// app-server while the turn is still in progress aborts it, stamping
+// turn_aborted into the rollout of an otherwise successful run.
+const INFERRED_COMPLETION_GRACE_MS = 10000;
+
+export function scheduleInferredCompletion(state) {
   if (state.completed || state.finalTurn || !state.finalAnswerSeen) {
     return;
   }
@@ -403,7 +409,7 @@ function scheduleInferredCompletion(state) {
       return;
     }
     completeTurn(state, null, { inferred: true });
-  }, 250);
+  }, INFERRED_COMPLETION_GRACE_MS);
   state.completionTimer.unref?.();
 }
 
