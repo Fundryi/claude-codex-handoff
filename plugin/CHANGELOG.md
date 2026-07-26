@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.7.0
+
+Long Codex handoffs stop dying at the ten-minute mark.
+
+- **Codex runs never die when Claude stops watching.** Every `task`, `review`, and `adversarial-review` now runs in the detached worker that previously only backed `--background` — spawned through a trampoline so not even a Windows tree kill (`taskkill /T`, the harness timeout mechanism) can walk the process chain to reach it. Previously a long rescue or review was killed at the harness's wall clock, losing every token spent and leaving the job unusable.
+- **The CLI follows the detached run instead of hosting it.** Output is unchanged for jobs that finish quickly. A job that outlives the follow budget prints its job id and keeps running — pick it up with `/codex:result <job-id>`, or let the new re-attach hook surface it on your next message.
+- **Jobs whose worker vanished no longer jam `/codex:result` forever.** A `running` record with a dead process is reconciled to `failed` with `diedReason: process-vanished` the next time jobs are read, so the partial output is retrievable and `/codex:cancel` stops seeing a phantom active job. Previously that record stayed `running` permanently and every result fetch refused with "still running".
+- **`/codex:review` and `/codex:adversarial-review` no longer ask how to run.** The foreground/background question and the diff-size estimate behind it are gone; there is nothing left to choose. `--background` still returns a job id immediately, and `--wait` is accepted but does nothing.
+- Errors that used to print inline now surface as failed jobs. Because every run is detached, a review that fails preflight (for example, outside a git repository) records a failed job with the real error instead of erroring inline — `/codex:result` returns it, and the viewer shows it.
+- Removed the guidance that had Claude guess whether a task "looks complicated" to decide execution mode — a prediction that was guarding a hard cliff that no longer exists.
+
 ## 2.6.2
 
 - **`/codex:viewer` starts the viewer instantly, without spending tokens.** The command now launches the viewer via slash-command bash preprocessing (`` !`...` `` in the command file), so the dashboard is already up before the model responds. The AI only relays the URL — and only investigates if the start output shows an error.
