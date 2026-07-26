@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { resolveWorkspaceRoot } from "./workspace.mjs";
+import { jobLooksDead } from "./liveness.mjs";
 
 const STATE_VERSION = 1;
 export const STATE_ROOT_ENV = "CODEX_COMPANION_STATE_ROOT";
@@ -150,7 +151,62 @@ export function upsertJob(cwd, jobPatch) {
   });
 }
 
+function pidAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function fileMtimeIso(filePath) {
+  try {
+    return fs.statSync(filePath).mtime.toISOString();
+  } catch {
+    return nowIso();
+  }
+}
+
+// A worker killed by SIGKILL/taskkill never reaches runTrackedJob's catch block,
+// so its record freezes at "running" forever and permanently jams resolveResultJob.
+// Nothing else will ever correct it, so reads do.
+export function reconcileDeadJobs(cwd) {
+  const state = loadState(cwd);
+  const dead = state.jobs.filter((job) => jobLooksDead(job, pidAlive(job.pid)));
+  if (dead.length === 0) {
+    return [];
+  }
+
+  const patch = {
+    status: "failed",
+    phase: "died",
+    diedReason: "process-vanished",
+    errorMessage: "Worker process exited without recording a result.",
+    pid: null
+  };
+
+  for (const job of dead) {
+    const jobFile = resolveJobFile(cwd, job.id);
+    if (!fs.existsSync(jobFile)) continue;
+    const stored = readJobFile(jobFile);
+    writeJobFile(cwd, job.id, { ...stored, ...patch, completedAt: fileMtimeIso(jobFile) });
+  }
+
+  const deadIds = new Set(dead.map((job) => job.id));
+  saveState(cwd, {
+    ...state,
+    jobs: state.jobs.map((job) =>
+      deadIds.has(job.id) ? { ...job, ...patch, completedAt: job.completedAt ?? nowIso() } : job
+    )
+  });
+
+  return [...deadIds];
+}
+
 export function listJobs(cwd) {
+  reconcileDeadJobs(cwd);
   return loadState(cwd).jobs;
 }
 
