@@ -152,8 +152,8 @@ function pushJobDetails(lines, job, options = {}) {
     lines.push(`  Result: /codex:result ${job.id}`);
   }
   if (job.status !== "queued" && job.status !== "running" && job.jobClass === "task" && job.write && options.showReviewHint) {
-    lines.push("  Review changes: /codex:review --wait");
-    lines.push("  Stricter review: /codex:adversarial-review --wait");
+    lines.push("  Review changes: /codex:review");
+    lines.push("  Stricter review: /codex:adversarial-review");
   }
   if (job.progressPreview?.length) {
     lines.push("  Progress:");
