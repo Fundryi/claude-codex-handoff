@@ -1,6 +1,17 @@
 {
-  "description": "Optional stop-time review gate for Codex Companion.",
+  "description": "Codex Companion: pending-job re-attach, viewer lifecycle, optional stop-time review gate.",
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/pending-jobs-hook.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

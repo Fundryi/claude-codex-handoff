@@ -69,3 +69,51 @@ test("a crashed run surfaces its error instead of exiting silently with 0", () =
     "followAndReport must report a job that failed without recording a result"
   );
 });
+
+// A job followed to completion prints its result inline - that IS delivery, so the
+// re-attach hook (pending-jobs-hook.mjs) must not later flag it as undelivered.
+// Only the handback branch (still running, nothing printed) leaves it genuinely
+// undelivered. Sliced by function boundary rather than a single anchored regex so
+// this still finds the right code no matter how the branches get reordered.
+test("markJobAnnounced stamps announcedAt into both the per-job file and state.json", () => {
+  assert.match(
+    src,
+    /function markJobAnnounced\(job, stored\) \{[\s\S]*?writeJobFile\(job\.workspaceRoot, job\.id, \{ \.\.\.stored, announcedAt \}\);[\s\S]*?upsertJob\(job\.workspaceRoot, \{ id: job\.id, announcedAt \}\);/,
+    "markJobAnnounced must write announcedAt to the job file and the state.json entry, like the hook's markAnnounced"
+  );
+});
+
+test("only the delivered paths in followAndReport mark a job announced", () => {
+  const start = src.indexOf("async function followAndReport(");
+  assert.notEqual(start, -1, "followAndReport must exist");
+  const nextFnStart = src.indexOf("function spawnDetachedTaskWorker(", start);
+  assert.notEqual(nextFnStart, -1, "spawnDetachedTaskWorker must exist right after followAndReport");
+  const body = src.slice(start, nextFnStart);
+
+  const handbackStart = body.indexOf("if (snapshot.waitTimedOut)");
+  const crashGuardStart = body.indexOf("stored.rendered == null");
+  assert.ok(handbackStart !== -1 && crashGuardStart !== -1 && handbackStart < crashGuardStart);
+
+  const handbackBlock = body.slice(handbackStart, crashGuardStart);
+  assert.equal(
+    handbackBlock.includes("markJobAnnounced"),
+    false,
+    "the handback branch must not mark the job announced - it is still running and genuinely undelivered"
+  );
+
+  const crashGuardBlock = body.slice(crashGuardStart);
+  assert.match(
+    crashGuardBlock,
+    /process\.exitCode = 1;[\s\S]*?markJobAnnounced\(job, stored\);/,
+    "the crash-guard branch reports the error to the user, so it must mark the job announced"
+  );
+
+  const successTailStart = body.indexOf("outputResult(options.json ? stored.result");
+  assert.notEqual(successTailStart, -1);
+  const successTail = body.slice(successTailStart);
+  assert.match(
+    successTail,
+    /markJobAnnounced\(job, stored\);/,
+    "the success path prints the result, so it must mark the job announced"
+  );
+});

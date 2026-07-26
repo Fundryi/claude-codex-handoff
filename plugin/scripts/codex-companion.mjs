@@ -644,6 +644,17 @@ function requireTaskRequest(prompt, resumeLast, resumeThreadId) {
   }
 }
 
+// Printing the result to the user - success or crash-guard - is delivery. Stamp
+// announcedAt the same way pending-jobs-hook.mjs's markAnnounced does, so that hook
+// does not re-report a job the user already watched finish inline. The handback
+// branch in followAndReport below deliberately never calls this: there, the job is
+// still running and genuinely has not been delivered.
+function markJobAnnounced(job, stored) {
+  const announcedAt = new Date().toISOString();
+  writeJobFile(job.workspaceRoot, job.id, { ...stored, announcedAt });
+  upsertJob(job.workspaceRoot, { id: job.id, announcedAt });
+}
+
 async function followAndReport(cwd, job, logFile, options = {}) {
   const snapshot = await followJob(cwd, job.id, logFile, { quiet: Boolean(options.json) });
 
@@ -676,6 +687,7 @@ async function followAndReport(cwd, job, logFile, options = {}) {
       options.json
     );
     process.exitCode = 1;
+    markJobAnnounced(job, stored);
     return;
   }
 
@@ -683,6 +695,7 @@ async function followAndReport(cwd, job, logFile, options = {}) {
   if (typeof stored.exitCode === "number" && stored.exitCode !== 0) {
     process.exitCode = stored.exitCode;
   }
+  markJobAnnounced(job, stored);
 }
 
 function spawnDetachedTaskWorker(cwd, jobId) {
