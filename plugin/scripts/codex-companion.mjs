@@ -31,7 +31,9 @@ import {
   generateJobId,
   getConfig,
   listJobs,
+  resolveJobFile,
   setConfig,
+  updateState,
   upsertJob,
   writeJobFile
 } from "./lib/state.mjs";
@@ -645,14 +647,31 @@ function requireTaskRequest(prompt, resumeLast, resumeThreadId) {
 }
 
 // Printing the result to the user - success or crash-guard - is delivery. Stamp
-// announcedAt the same way pending-jobs-hook.mjs's markAnnounced does, so that hook
-// does not re-report a job the user already watched finish inline. The handback
-// branch in followAndReport below deliberately never calls this: there, the job is
-// still running and genuinely has not been delivered.
+// announcedAt the same way pending-jobs-hook.mjs's markAnnounced does (existsSync
+// guard on the job file, a single field-preserving updateState write rather than
+// upsertJob's updatedAt-bumping patch), so that hook does not re-report a job the
+// user already watched finish inline. The handback branch in followAndReport below
+// deliberately never calls this: there, the job is still running and genuinely has
+// not been delivered.
+//
+// Best-effort: on Windows, upsertJob/updateState's saveState can unlinkSync pruned
+// job files and logs while the viewer or a live worker still holds a handle
+// (EBUSY/EPERM). A stamping failure must never turn an already-printed result into
+// a non-zero exit - losing the stamp just means the hook re-reports next prompt.
 function markJobAnnounced(job, stored) {
-  const announcedAt = new Date().toISOString();
-  writeJobFile(job.workspaceRoot, job.id, { ...stored, announcedAt });
-  upsertJob(job.workspaceRoot, { id: job.id, announcedAt });
+  try {
+    const announcedAt = new Date().toISOString();
+    const jobFile = resolveJobFile(job.workspaceRoot, job.id);
+    if (fs.existsSync(jobFile)) {
+      writeJobFile(job.workspaceRoot, job.id, { ...stored, announcedAt });
+    }
+    updateState(job.workspaceRoot, (state) => {
+      const record = state.jobs.find((entry) => entry.id === job.id);
+      if (record) record.announcedAt = announcedAt;
+    });
+  } catch {
+    // swallow - see comment above
+  }
 }
 
 async function followAndReport(cwd, job, logFile, options = {}) {

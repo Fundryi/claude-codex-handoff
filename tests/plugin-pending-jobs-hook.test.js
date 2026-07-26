@@ -108,3 +108,60 @@ test("a job handed back when the follow budget expired is reported", async () =>
   assert.match(report, /task-handback/);
   assert.match(report, /running 3m/);
 });
+
+// Fold-in fix: Date.parse on an unparseable/missing-but-truthy timestamp is NaN,
+// which used to flow straight into the template as "NaNhNaNm" plus a doubled space
+// and a bare "ago" once ageLabel started returning "".
+test("an unparseable timestamp falls back to a readable label, never NaN", async () => {
+  const { buildPendingJobsReport } = await import(hookUrl);
+  const report = buildPendingJobsReport(
+    [
+      { id: "task-badclock", status: "completed", title: "Codex Rescue", completedAt: "not-a-date" },
+      { id: "rev-badclock", status: "running", phase: "reviewing", startedAt: "also-not-a-date" }
+    ],
+    NOW
+  );
+  assert.equal(report.includes("NaN"), false, "must never render NaN");
+  assert.equal(/ {2,}ago/.test(report), false, "must not render a doubled space before ago");
+  assert.match(report, /task-badclock  completed unknown time ago/);
+  assert.match(report, /rev-badclock  running unknown time · phase: reviewing/);
+});
+
+// Required test (fix round 1): markAnnounced must stamp announcedAt into both
+// stores for exactly the targeted job, and must not disturb updatedAt anywhere -
+// upsertJob forces updatedAt to "now" on every patch, which would repoint
+// sortJobsNewestFirst (and so bare /codex:result and /codex:status's
+// latestFinished) at whichever job last got announced, not whichever job is
+// actually newest.
+test("markAnnounced stamps announcedAt in both stores without touching updatedAt", async () => {
+  const stateUrl = pathToFileURL(
+    path.join(__dirname, "..", "plugin", "scripts", "lib", "state.mjs")
+  ).href;
+  const { markAnnounced } = await import(hookUrl);
+  const state = await import(stateUrl);
+
+  const cwd = process.cwd();
+  const targetUpdatedAt = iso(10 * 60_000);
+  const otherUpdatedAt = iso(5 * 60_000);
+
+  state.writeJobFile(cwd, "task-mark", { id: "task-mark", status: "completed", updatedAt: targetUpdatedAt });
+  state.writeJobFile(cwd, "task-other", { id: "task-other", status: "completed", updatedAt: otherUpdatedAt });
+  state.updateState(cwd, (s) => {
+    s.jobs.push({ id: "task-mark", status: "completed", updatedAt: targetUpdatedAt });
+    s.jobs.push({ id: "task-other", status: "completed", updatedAt: otherUpdatedAt });
+  });
+
+  markAnnounced(cwd, [{ id: "task-mark", status: "completed" }], iso(0));
+
+  const markedFile = state.readJobFile(state.resolveJobFile(cwd, "task-mark"));
+  assert.ok(markedFile.announcedAt, "(a) the job file must carry announcedAt");
+  assert.equal(markedFile.updatedAt, targetUpdatedAt, "(b) the job file's updatedAt must be untouched");
+
+  const stateJobs = state.loadState(cwd).jobs;
+  const marked = stateJobs.find((job) => job.id === "task-mark");
+  const untouched = stateJobs.find((job) => job.id === "task-other");
+  assert.ok(marked.announcedAt, "(a) the state.json entry must carry announcedAt");
+  assert.equal(marked.updatedAt, targetUpdatedAt, "(b) the state.json entry's updatedAt must be untouched");
+  assert.equal(untouched.announcedAt, undefined, "(c) the untouched job must not gain announcedAt");
+  assert.equal(untouched.updatedAt, otherUpdatedAt, "(b) the untouched job's updatedAt must also be untouched");
+});

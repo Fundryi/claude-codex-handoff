@@ -75,11 +75,55 @@ test("a crashed run surfaces its error instead of exiting silently with 0", () =
 // Only the handback branch (still running, nothing printed) leaves it genuinely
 // undelivered. Sliced by function boundary rather than a single anchored regex so
 // this still finds the right code no matter how the branches get reordered.
-test("markJobAnnounced stamps announcedAt into both the per-job file and state.json", () => {
+// Fix round 1, Important 2 + fold-in 4: upsertJob forces updatedAt to now on every
+// patch, and sortJobsNewestFirst sorts on updatedAt - bare /codex:result and
+// /codex:status's latestFinished both depend on that order. markJobAnnounced must
+// stamp state.json without disturbing updatedAt (matching the hook's markAnnounced,
+// which was fixed the same way), and must not create a bogus job file - containing
+// nothing but announcedAt - when the crash-guard path's readStoredJob found none.
+test("markJobAnnounced guards the per-job-file write and stamps state.json via updateState, not upsertJob", () => {
+  const start = src.indexOf("function markJobAnnounced(job, stored)");
+  assert.notEqual(start, -1, "markJobAnnounced must exist");
+  const nextFnStart = src.indexOf("async function followAndReport(", start);
+  assert.notEqual(nextFnStart, -1);
+  const body = src.slice(start, nextFnStart);
+
+  assert.match(body, /const jobFile = resolveJobFile\(job\.workspaceRoot, job\.id\);/);
   assert.match(
-    src,
-    /function markJobAnnounced\(job, stored\) \{[\s\S]*?writeJobFile\(job\.workspaceRoot, job\.id, \{ \.\.\.stored, announcedAt \}\);[\s\S]*?upsertJob\(job\.workspaceRoot, \{ id: job\.id, announcedAt \}\);/,
-    "markJobAnnounced must write announcedAt to the job file and the state.json entry, like the hook's markAnnounced"
+    body,
+    /if \(fs\.existsSync\(jobFile\)\) \{[\s\S]*?writeJobFile\(job\.workspaceRoot, job\.id, \{ \.\.\.stored, announcedAt \}\);/,
+    "must not create a bogus job file when readStoredJob found nothing, like the hook's markAnnounced"
+  );
+  assert.match(
+    body,
+    /updateState\(job\.workspaceRoot, \(state\) => \{[\s\S]*?announcedAt = announcedAt;/,
+    "must stamp the state.json entry via a field-preserving updateState, not upsertJob"
+  );
+  assert.equal(
+    body.includes("upsertJob("),
+    false,
+    "upsertJob forces updatedAt to now and would reorder sortJobsNewestFirst"
+  );
+});
+
+// Fix round 1, Important 1: a stamping failure (e.g. Windows EBUSY/EPERM from
+// saveState's unlinkSync racing the viewer or a live worker) must not turn an
+// already-printed result into a non-zero exit via main().catch. Losing the stamp
+// just means pending-jobs-hook.mjs re-reports the job next prompt.
+test("markJobAnnounced swallows a stamping failure instead of letting it reach main().catch", () => {
+  const start = src.indexOf("function markJobAnnounced(job, stored)");
+  const nextFnStart = src.indexOf("async function followAndReport(", start);
+  const body = src.slice(start, nextFnStart);
+
+  assert.match(body, /\btry \{/, "the stamping work must run inside a try block");
+  const catchIndex = body.search(/\}\s*catch\s*\{/);
+  assert.notEqual(catchIndex, -1, "must have a catch block");
+  const catchBlock = body.slice(catchIndex);
+  assert.equal(catchBlock.includes("throw"), false, "the catch must swallow, not rethrow");
+  assert.equal(
+    catchBlock.includes("process.exitCode"),
+    false,
+    "a stamping failure must not touch the exit code - the result was already printed"
   );
 });
 
