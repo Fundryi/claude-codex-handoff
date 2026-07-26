@@ -44,6 +44,7 @@ import {
   sortJobsNewestFirst,
   waitForJobSettled
 } from "./lib/job-control.mjs";
+import { followJob, renderFollowHandback, waitForSingleJobSnapshot } from "./lib/job-follow.mjs";
 import {
   appendLogLine,
   createJobLogFile,
@@ -68,8 +69,6 @@ import {
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REVIEW_SCHEMA = path.join(ROOT_DIR, "schemas", "review-output.schema.json");
-const DEFAULT_STATUS_WAIT_TIMEOUT_MS = 240000;
-const DEFAULT_STATUS_POLL_INTERVAL_MS = 2000;
 const VALID_REASONING_EFFORTS = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
 const MODEL_ALIASES = new Map([["spark", "gpt-5.3-codex-spark"]]);
 const STOP_REVIEW_TASK_MARKER = "Run a stop-gate review of the previous Claude turn.";
@@ -315,24 +314,6 @@ function findLatestResumableTaskJob(jobs) {
         job.status !== "running"
     ) ?? null
   );
-}
-
-async function waitForSingleJobSnapshot(cwd, reference, options = {}) {
-  const timeoutMs = Math.max(0, Number(options.timeoutMs) || DEFAULT_STATUS_WAIT_TIMEOUT_MS);
-  const pollIntervalMs = Math.max(100, Number(options.pollIntervalMs) || DEFAULT_STATUS_POLL_INTERVAL_MS);
-  const deadline = Date.now() + timeoutMs;
-  let snapshot = buildSingleJobSnapshot(cwd, reference);
-
-  while (isActiveJobStatus(snapshot.job.status) && Date.now() < deadline) {
-    await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - Date.now())));
-    snapshot = buildSingleJobSnapshot(cwd, reference);
-  }
-
-  return {
-    ...snapshot,
-    waitTimedOut: isActiveJobStatus(snapshot.job.status),
-    timeoutMs
-  };
 }
 
 async function resolveLatestTrackedTaskThread(cwd, options = {}) {
@@ -671,17 +652,45 @@ function requireTaskRequest(prompt, resumeLast, resumeThreadId) {
   }
 }
 
-async function runForegroundCommand(job, runner, options = {}) {
-  const { logFile, progress } = createTrackedProgress(job, {
-    logFile: options.logFile,
-    stderr: !options.json
-  });
-  const execution = await runTrackedJob(job, () => runner(progress), { logFile });
-  outputResult(options.json ? execution.payload : execution.rendered, options.json);
-  if (execution.exitStatus !== 0) {
-    process.exitCode = execution.exitStatus;
+async function followAndReport(cwd, job, logFile, options = {}) {
+  const snapshot = await followJob(cwd, job.id, logFile, { quiet: Boolean(options.json) });
+
+  if (snapshot.waitTimedOut) {
+    const payload = {
+      jobId: job.id,
+      status: snapshot.job.status,
+      title: job.title,
+      workspaceRoot: job.workspaceRoot,
+      logFile,
+      waitTimedOut: true
+    };
+    outputCommandResult(payload, renderFollowHandback(payload), options.json);
+    return;
   }
-  return execution;
+
+  // state.json carries no rendered/result - runTrackedJob only writes those to
+  // the per-job file - so read the job file for the payload.
+  const stored = readStoredJob(job.workspaceRoot, job.id) ?? {};
+
+  // A worker that threw never records rendered/result and leaves exitCode null.
+  // main().catch used to surface those errors when the run was inline; now that
+  // it happens in another process, the follower has to, or the run dies silently
+  // on stdout with exit 0 - the exact failure this whole change exists to end.
+  if (stored.rendered == null && stored.result == null) {
+    const message = stored.errorMessage ?? `Job ${job.id} finished without recording a result.`;
+    outputCommandResult(
+      { jobId: job.id, status: stored.status ?? "failed", title: job.title, workspaceRoot: job.workspaceRoot, errorMessage: message },
+      `${message}\n`,
+      options.json
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  outputResult(options.json ? stored.result : stored.rendered ?? "", options.json);
+  if (typeof stored.exitCode === "number" && stored.exitCode !== 0) {
+    process.exitCode = stored.exitCode;
+  }
 }
 
 function spawnDetachedTaskWorker(cwd, jobId) {
@@ -754,36 +763,24 @@ async function handleReviewCommand(argv, config) {
     model: options.model ?? null,
     fast: Boolean(options.fast)
   });
+  ensureCodexAvailable(cwd);
+  const request = {
+    cwd,
+    base: options.base ?? null,
+    scope: options.scope ?? null,
+    model: options.model ?? null,
+    focusText,
+    reviewName: config.reviewName,
+    fast: Boolean(options.fast)
+  };
+  const { payload, logFile } = enqueueBackgroundTask(cwd, job, request);
+
   if (options.background) {
-    ensureCodexAvailable(cwd);
-    const request = {
-      cwd,
-      base: options.base ?? null,
-      scope: options.scope ?? null,
-      model: options.model ?? null,
-      focusText,
-      reviewName: config.reviewName,
-      fast: Boolean(options.fast)
-    };
-    const { payload } = enqueueBackgroundTask(cwd, job, request);
     outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
     return;
   }
-  await runForegroundCommand(
-    job,
-    (progress) =>
-      executeReviewRun({
-        cwd,
-        base: options.base,
-        scope: options.scope,
-        model: options.model,
-        focusText,
-        reviewName: config.reviewName,
-        fast: Boolean(options.fast),
-        onProgress: progress
-      }),
-    { json: options.json }
-  );
+
+  await followAndReport(cwd, job, logFile, { json: options.json });
 }
 
 async function handleReview(argv) {
@@ -821,46 +818,29 @@ async function handleTask(argv) {
     resumeLast
   });
 
-  if (options.background) {
-    ensureCodexAvailable(cwd);
-    requireTaskRequest(prompt, resumeLast, resumeThreadId);
+  ensureCodexAvailable(cwd);
+  requireTaskRequest(prompt, resumeLast, resumeThreadId);
 
-    const job = buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast);
-    const request = buildTaskRequest({
-      cwd,
-      model,
-      effort,
-      prompt,
-      write,
-      resumeLast,
-      resumeThreadId,
-      jobId: job.id,
-      fast
-    });
-    const { payload } = enqueueBackgroundTask(cwd, job, request);
+  const job = buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast);
+  const request = buildTaskRequest({
+    cwd,
+    model,
+    effort,
+    prompt,
+    write,
+    resumeLast,
+    resumeThreadId,
+    jobId: job.id,
+    fast
+  });
+  const { payload, logFile } = enqueueBackgroundTask(cwd, job, request);
+
+  if (options.background) {
     outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
     return;
   }
 
-  requireTaskRequest(prompt, resumeLast, resumeThreadId);
-  const job = buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast);
-  await runForegroundCommand(
-    job,
-    (progress) =>
-      executeTaskRun({
-        cwd,
-        model,
-        effort,
-        prompt,
-        write,
-        resumeLast,
-        resumeThreadId,
-        jobId: job.id,
-        fast,
-        onProgress: progress
-      }),
-    { json: options.json }
-  );
+  await followAndReport(cwd, job, logFile, { json: options.json });
 }
 
 async function handleTransfer(argv) {
