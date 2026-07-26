@@ -19,3 +19,6 @@ node_modules/
 
 # plans/specs/archive, kept local only
 /docs/superpowers/
+
+# subagent-driven-development scratch (ledger, briefs, review packages)
+/.superpowers/
