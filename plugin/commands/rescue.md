@@ -13,10 +13,10 @@ $ARGUMENTS
 
 Execution mode:
 
-- If the request includes `--background`, run the `codex:codex-rescue` subagent in the background.
-- If the request includes `--wait`, run the `codex:codex-rescue` subagent in the foreground.
-- If neither flag is present, default to foreground.
-- `--background` and `--wait` are execution flags for Claude Code. Do not forward them to `task`, and do not treat them as part of the natural-language task text.
+- Codex always runs detached, so no timeout can end a run. Nothing here needs to predict how long a task will take.
+- If the request includes `--background`, forward it: the command returns a job id immediately instead of waiting for the result.
+- Without `--background`, the companion follows the detached job and prints its output. If the job outlives the follow budget, the companion returns a job id and the job keeps running — pick it up with `/codex:result <job-id>`.
+- `--wait` is accepted as a no-op alias for the default and must not be forwarded to `task`.
 - `--model` and `--effort` are runtime-selection flags. Preserve them for the forwarded `task` call, but do not treat them as part of the natural-language task text.
 - If the request includes `--resume`, do not ask whether to continue. The user already chose.
 - If the request includes `--fresh`, do not ask whether to continue. The user already chose.

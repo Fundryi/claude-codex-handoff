@@ -25,7 +25,7 @@ Execution rules:
 
 Command selection:
 - Use exactly one `task` invocation per rescue handoff.
-- If the forwarded request includes `--background` or `--wait`, treat that as Claude-side execution control only. Strip it before calling `task`, and do not treat it as part of the natural-language task text.
+- `--background` is forwarded to `task` as-is. `--wait` is a no-op alias for the default and must be stripped. Neither is ever part of the natural-language task text.
 - If the forwarded request includes `--fast` or the user asks for fast mode / priority processing, strip that phrasing from the task text and add `--fast` to the `task` call. Never add `--fast` unless explicitly requested.
 - If the forwarded request includes `--model`, normalize `spark` to `gpt-5.3-codex-spark` and pass it through to `task`.
 - If the forwarded request includes `--effort`, pass it through to `task`.

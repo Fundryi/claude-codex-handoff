@@ -161,3 +161,31 @@ test("only the delivered paths in followAndReport mark a job announced", () => {
     "the success path prints the result, so it must mark the job announced"
   );
 });
+
+const pluginDir = path.join(__dirname, "..", "plugin");
+
+test("no prompt file asks the model to guess how long a task will run", () => {
+  const files = [
+    path.join(pluginDir, "commands", "rescue.md"),
+    path.join(pluginDir, "commands", "review.md"),
+    path.join(pluginDir, "commands", "adversarial-review.md"),
+    path.join(pluginDir, "agents", "codex-rescue.md"),
+    path.join(pluginDir, "skills", "codex-cli-runtime", "SKILL.md")
+  ];
+  for (const file of files) {
+    const text = fs.readFileSync(file, "utf8");
+    assert.equal(
+      /default to foreground|prefer foreground|likely to keep Codex running|clearly tiny|recommend background/i.test(text),
+      false,
+      `${path.basename(file)} still asks the model to choose an execution mode`
+    );
+  }
+});
+
+test("the review commands no longer offer an execution-mode choice", () => {
+  for (const name of ["review.md", "adversarial-review.md"]) {
+    const text = fs.readFileSync(path.join(pluginDir, "commands", name), "utf8");
+    assert.equal(/AskUserQuestion/.test(text), false, `${name} must not ask about execution mode`);
+    assert.equal(/run_in_background/.test(text), false, `${name} must not background the Bash call`);
+  }
+});
