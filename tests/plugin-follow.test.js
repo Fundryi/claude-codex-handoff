@@ -92,6 +92,76 @@ test("log lines are emitted once, never repeated", async () => {
   assert.equal(emitted.match(/second line/g).length, 1, "second line emitted exactly once");
 });
 
+test("a state.json caught mid-write costs one tick, not the whole run", async () => {
+  freshRoot();
+  const state = await import(`${stateUrl}?f=${seq}`);
+  const { followJob } = await import(`${followUrl}?f=${seq}`);
+  const record = jobRecord({ id: "task-torn" });
+  state.writeJobFile(process.cwd(), record.id, record);
+  state.upsertJob(process.cwd(), record);
+
+  const stateFile = state.resolveStateFile(process.cwd());
+  const good = fs.readFileSync(stateFile, "utf8");
+
+  // Tear the file after the seed read, then restore it terminal a moment later.
+  setTimeout(() => fs.writeFileSync(stateFile, good.slice(0, good.length >> 1), "utf8"), 150);
+  setTimeout(() => {
+    fs.writeFileSync(stateFile, good, "utf8");
+    state.upsertJob(process.cwd(), { id: record.id, status: "completed" });
+  }, 400);
+
+  const snapshot = await followJob(process.cwd(), record.id, null, { budgetMs: 5000, quiet: true });
+  assert.equal(snapshot.waitTimedOut, false, "a torn read must not abort the follow");
+  assert.equal(snapshot.job.status, "completed");
+});
+
+test("a job that genuinely does not exist still throws", async () => {
+  freshRoot();
+  const state = await import(`${stateUrl}?f=${seq}`);
+  const { followJob } = await import(`${followUrl}?f=${seq}`);
+  const record = jobRecord({ id: "task-present" });
+  state.writeJobFile(process.cwd(), record.id, record);
+  state.upsertJob(process.cwd(), record);
+
+  await assert.rejects(
+    () => followJob(process.cwd(), "task-nope", null, { budgetMs: 2000, quiet: true }),
+    /No job found/,
+    "tolerating torn reads must not swallow a real unknown-job error"
+  );
+});
+
+test("the final output block is not echoed to stderr", async () => {
+  freshRoot();
+  const root = process.env.CODEX_COMPANION_STATE_ROOT;
+  const state = await import(`${stateUrl}?f=${seq}`);
+  const { followJob } = await import(`${followUrl}?f=${seq}`);
+
+  fs.mkdirSync(root, { recursive: true });
+  const logFile = path.join(root, "final.log");
+  fs.writeFileSync(
+    logFile,
+    "[2026-01-01T00:00:00.000Z] Turn completed.\n\n[2026-01-01T00:00:01.000Z] Final output\nTHE ANSWER\n",
+    "utf8"
+  );
+
+  const record = jobRecord({ id: "task-final", status: "completed", logFile, rendered: "THE ANSWER\n", exitCode: 0 });
+  state.writeJobFile(process.cwd(), record.id, record);
+  state.upsertJob(process.cwd(), record);
+
+  const chunks = [];
+  const originalWrite = process.stderr.write;
+  process.stderr.write = (chunk) => { chunks.push(String(chunk)); return true; };
+  try {
+    await followJob(process.cwd(), record.id, logFile, { budgetMs: 500 });
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  const emitted = chunks.join("");
+  assert.match(emitted, /Turn completed/, "progress lines must still stream");
+  assert.equal(emitted.includes("THE ANSWER"), false, "the rendered answer belongs on stdout only");
+});
+
 test("the handback names the job, the workspace, and how to get the result", async () => {
   const { renderFollowHandback } = await import(`${followUrl}?f=${seq}`);
   const text = renderFollowHandback({

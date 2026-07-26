@@ -24,16 +24,33 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function snapshotOrNull(cwd, reference) {
+  // A concurrent non-atomic state.json write makes loadState return an empty job
+  // list, which makes buildSingleJobSnapshot throw. The job is fine - the file was
+  // caught mid-write. Callers keep their last good snapshot and retry next tick.
+  try {
+    return buildSingleJobSnapshot(cwd, reference);
+  } catch {
+    return null;
+  }
+}
+
 export async function waitForSingleJobSnapshot(cwd, reference, options = {}) {
   const timeoutMs = Math.max(0, Number(options.timeoutMs) || DEFAULT_STATUS_WAIT_TIMEOUT_MS);
   const pollIntervalMs = Math.max(100, Number(options.pollIntervalMs) || DEFAULT_STATUS_POLL_INTERVAL_MS);
   const deadline = Date.now() + timeoutMs;
-  let snapshot = buildSingleJobSnapshot(cwd, reference);
+  let snapshot = snapshotOrNull(cwd, reference);
+  if (!snapshot) {
+    // Two consecutive failures mean the job really is unknown, not a torn read,
+    // so this one is allowed to throw.
+    await sleep(pollIntervalMs);
+    snapshot = buildSingleJobSnapshot(cwd, reference);
+  }
 
   while (isActiveJobStatus(snapshot.job.status) && Date.now() < deadline) {
     options.onPoll?.();
     await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - Date.now())));
-    snapshot = buildSingleJobSnapshot(cwd, reference);
+    snapshot = snapshotOrNull(cwd, reference) ?? snapshot;
   }
 
   return {
@@ -43,9 +60,14 @@ export async function waitForSingleJobSnapshot(cwd, reference, options = {}) {
   };
 }
 
+// runTrackedJob flips the job terminal and only then appends this block, so the
+// final drain races that append: land after it and the answer goes to stderr and
+// then again to stdout. Matches appendLogBlock's "\n[<iso>] Final output\n".
+const FINAL_OUTPUT_MARKER = /\n\[[^\]]+\] Final output\n/;
+
 export async function followJob(cwd, jobId, logFile, options = {}) {
   let emitted = 0;
-  const drainLog = () => {
+  const drainLog = (isFinal = false) => {
     if (!logFile) return;
     let text = "";
     try {
@@ -54,8 +76,14 @@ export async function followJob(cwd, jobId, logFile, options = {}) {
       return;
     }
     if (text.length <= emitted) return;
-    process.stderr.write(text.slice(emitted));
+    let pending = text.slice(emitted);
+    if (isFinal) {
+      const cut = pending.search(FINAL_OUTPUT_MARKER);
+      if (cut !== -1) pending = pending.slice(0, cut);
+    }
+    // Advance past the whole remainder either way so nothing repeats later.
     emitted = text.length;
+    if (pending) process.stderr.write(pending);
   };
 
   const quiet = Boolean(options.quiet);
@@ -64,7 +92,7 @@ export async function followJob(cwd, jobId, logFile, options = {}) {
     pollIntervalMs: FOLLOW_POLL_INTERVAL_MS,
     onPoll: quiet ? undefined : drainLog
   });
-  if (!quiet) drainLog();
+  if (!quiet) drainLog(true);
   return snapshot;
 }
 

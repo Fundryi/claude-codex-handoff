@@ -157,10 +157,6 @@ function resolveCommandWorkspace(options = {}) {
   return resolveWorkspaceRoot(resolveCommandCwd(options));
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function shorten(text, limit = 96) {
   const normalized = String(text ?? "").trim().replace(/\s+/g, " ");
   if (!normalized) {
@@ -286,10 +282,6 @@ function validateNativeReviewRequest(target, focusText) {
 
 function renderStatusPayload(report, asJson) {
   return asJson ? report : renderStatusReport(report);
-}
-
-function isActiveJobStatus(status) {
-  return status === "queued" || status === "running";
 }
 
 function getCurrentClaudeSessionId() {

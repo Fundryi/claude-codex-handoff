@@ -43,13 +43,20 @@ test("the foreground execution path is gone for good", () => {
   );
 });
 
+// (?:(?!\n\})[\s\S])*? stops the match at the first column-0 "}", i.e. the end of the
+// named function. An unbounded [\s\S]*? would happily reach a sibling function's call,
+// so deleting either handler's call would still pass - a guard that cannot fail.
+const insideBody = (name, call) =>
+  new RegExp(`async function ${name}\\((?:(?!\\n\\})[\\s\\S])*?${call}`);
+
 test("task and review both reach codex through the detached worker", () => {
-  assert.match(src, /async function handleTask\(argv\)[\s\S]*?enqueueBackgroundTask\(cwd, job, request\)/);
-  assert.match(src, /async function handleReviewCommand\(argv, config\)[\s\S]*?enqueueBackgroundTask\(cwd, job, request\)/);
+  assert.match(src, insideBody("handleTask", "enqueueBackgroundTask\\(cwd, job, request\\)"));
+  assert.match(src, insideBody("handleReviewCommand", "enqueueBackgroundTask\\(cwd, job, request\\)"));
 });
 
 test("the non-background path follows the detached job instead of running it inline", () => {
-  assert.match(src, /await followAndReport\(cwd, job, logFile/);
+  assert.match(src, insideBody("handleTask", "await followAndReport\\(cwd, job, logFile"));
+  assert.match(src, insideBody("handleReviewCommand", "await followAndReport\\(cwd, job, logFile"));
 });
 
 // runTrackedJob's catch path writes errorMessage but no rendered/result and a null
