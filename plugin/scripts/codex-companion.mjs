@@ -717,9 +717,25 @@ async function followAndReport(cwd, job, logFile, options = {}) {
   markJobAnnounced(job, stored);
 }
 
+// Double-spawn on purpose: this launches a trampoline (`task-worker-launch`), which
+// launches the real worker and exits. Do NOT "simplify" it to spawning `task-worker`
+// directly - that reinstates the exact bug this whole change exists to fix.
+//
+// On Windows `detached: true` + unref() breaks the console and process-group tie but
+// leaves ParentProcessId intact in the process table, and `taskkill /T` enumerates
+// descendants by walking ParentProcessId *at kill time*. So a tree kill of whatever
+// is following the job (a harness timeout, a stopped background shell) walks
+// shell -> follower -> worker -> codex and takes the run with it. This repo proves
+// that chain is walkable on Windows in the other direction: cancel's
+// terminateProcessTree (lib/process.mjs) relies on the same traversal to reach codex
+// from the worker pid.
+//
+// After the trampoline exits, the worker's ParentProcessId points at a dead pid, and
+// taskkill cannot traverse a dead link - enumeration stops at the follower. POSIX is
+// unaffected: process-group kills already could not reach the detached child.
 function spawnDetachedTaskWorker(cwd, jobId) {
   const scriptPath = path.join(ROOT_DIR, "scripts", "codex-companion.mjs");
-  const child = spawn(process.execPath, [scriptPath, "task-worker", "--cwd", cwd, "--job-id", jobId], {
+  const child = spawn(process.execPath, [scriptPath, "task-worker-launch", "--cwd", cwd, "--job-id", jobId], {
     cwd,
     env: process.env,
     detached: true,
@@ -878,6 +894,47 @@ async function handleTransfer(argv) {
     source: options.source
   });
   outputCommandResult(payload, rendered, options.json);
+}
+
+// The trampoline half of spawnDetachedTaskWorker's double-spawn - see the long
+// comment there for why the extra hop exists. Spawns the real worker, hands the job
+// record the worker's pid, exits. The pid swap matters: enqueueBackgroundTask records
+// this launcher's pid, and this launcher is about to die, so without the swap the
+// record would hold a dead pid and reconcileDeadJobs would mark a perfectly healthy
+// job failed. Writing it while the worker is already alive means the record names a
+// live process at every instant.
+async function handleTaskWorkerLaunch(argv) {
+  const { options } = parseCommandInput(argv, {
+    valueOptions: ["cwd", "job-id"]
+  });
+
+  const jobId = options["job-id"];
+  if (!jobId) {
+    throw new Error("Missing required --job-id for task-worker-launch.");
+  }
+
+  const cwd = resolveCommandCwd(options);
+  const workspaceRoot = resolveCommandWorkspace(options);
+  const scriptPath = path.join(ROOT_DIR, "scripts", "codex-companion.mjs");
+  const child = spawn(process.execPath, [scriptPath, "task-worker", "--cwd", cwd, "--job-id", jobId], {
+    cwd,
+    env: process.env,
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true
+  });
+  child.unref();
+
+  // Field-preserving writes to both stores, like markJobAnnounced - upsertJob would
+  // bump updatedAt and reorder sortJobsNewestFirst.
+  const stored = readStoredJob(workspaceRoot, jobId);
+  if (stored) {
+    writeJobFile(workspaceRoot, jobId, { ...stored, pid: child.pid ?? null });
+  }
+  updateState(workspaceRoot, (state) => {
+    const record = state.jobs.find((entry) => entry.id === jobId);
+    if (record) record.pid = child.pid ?? null;
+  });
 }
 
 async function handleTaskWorker(argv) {
@@ -1110,6 +1167,9 @@ async function main() {
       break;
     case "transfer":
       await handleTransfer(argv);
+      break;
+    case "task-worker-launch":
+      await handleTaskWorkerLaunch(argv);
       break;
     case "task-worker":
       await handleTaskWorker(argv);

@@ -1,9 +1,22 @@
 const assert = require("node:assert/strict");
+const { spawn } = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { pathToFileURL } = require("node:url");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "plugin", "scripts", "codex-companion.mjs"), "utf8");
+const companionPath = path.join(__dirname, "..", "plugin", "scripts", "codex-companion.mjs");
+const src = fs.readFileSync(companionPath, "utf8");
+
+// Slice a top-level function's body: from its declaration to the next column-0 "}".
+function functionBody(name) {
+  const start = src.indexOf(name);
+  assert.notEqual(start, -1, `${name} must exist`);
+  const end = src.indexOf("\n}", start);
+  assert.notEqual(end, -1, `${name} must be a top-level function`);
+  return src.slice(start, end);
+}
 
 test("task accepts --resume-thread and validates like resume-last", () => {
   assert.ok(src.includes('"resume-thread"'), "resume-thread must be a value option");
@@ -159,6 +172,84 @@ test("only the delivered paths in followAndReport mark a job announced", () => {
     successTail,
     /markJobAnnounced\(job, stored\);/,
     "the success path prints the result, so it must mark the job announced"
+  );
+});
+
+// Windows `taskkill /T` enumerates descendants by walking ParentProcessId at kill
+// time, and `detached: true` does not clear that link - so a tree kill of the
+// follower reached the worker and codex under it, which is the original incident.
+// The trampoline exits immediately, leaving the worker parented to a dead pid that
+// taskkill cannot traverse. These two guards exist because the double-spawn looks
+// redundant and someone WILL try to collapse it.
+test("spawnDetachedTaskWorker spawns the trampoline, never the worker directly", () => {
+  const body = functionBody("function spawnDetachedTaskWorker(");
+  assert.match(body, /"task-worker-launch"/, "must spawn the trampoline");
+  assert.equal(
+    /"task-worker"/.test(body),
+    false,
+    "spawning task-worker directly leaves a live ParentProcessId link for taskkill /T to walk"
+  );
+});
+
+test("task-worker-launch is dispatched and spawns the real worker detached", () => {
+  assert.match(
+    src,
+    /case "task-worker-launch":\s*\n\s*await handleTaskWorkerLaunch\(argv\);/,
+    "the trampoline needs a dispatcher case or the spawn is a no-op"
+  );
+  const body = functionBody("async function handleTaskWorkerLaunch(");
+  assert.match(body, /"task-worker"/, "the trampoline must spawn the real worker");
+  assert.match(body, /detached: true/);
+  assert.match(body, /child\.unref\(\)/);
+  // Without the pid swap the record keeps the trampoline's pid, which is dead
+  // moments later, and reconcileDeadJobs marks a healthy job failed.
+  assert.match(body, /pid: child\.pid \?\? null/, "must hand the record the real worker's pid");
+  assert.equal(body.includes("upsertJob("), false, "upsertJob would bump updatedAt and reorder jobs");
+});
+
+test("the trampoline hands the job record the real worker's pid, then exits", async () => {
+  const root = path.join(os.tmpdir(), `clv-tramp-${process.pid}`);
+  fs.rmSync(root, { recursive: true, force: true });
+  process.env.CODEX_COMPANION_STATE_ROOT = root;
+  const state = await import(
+    pathToFileURL(path.join(__dirname, "..", "plugin", "scripts", "lib", "state.mjs")).href
+  );
+
+  const workspace = path.join(root, "ws");
+  fs.mkdirSync(workspace, { recursive: true });
+
+  // No `request` on purpose: the worker throws on the missing payload before
+  // runTrackedJob ever runs, so it never touches the pid we are asserting on and
+  // no codex process is started.
+  const job = {
+    id: "task-trampoline",
+    title: "Codex Task",
+    jobClass: "task",
+    status: "queued",
+    phase: "queued",
+    workspaceRoot: workspace,
+    pid: null,
+    logFile: null
+  };
+  state.writeJobFile(workspace, job.id, job);
+  state.upsertJob(workspace, job);
+
+  const launcher = spawn(
+    process.execPath,
+    [companionPath, "task-worker-launch", "--cwd", workspace, "--job-id", job.id],
+    { stdio: "ignore" }
+  );
+  const launcherPid = launcher.pid;
+  const exitCode = await new Promise((resolve) => launcher.on("exit", resolve));
+  assert.equal(exitCode, 0, "the trampoline must exit cleanly and immediately");
+
+  const stored = state.readJobFile(state.resolveJobFile(workspace, job.id));
+  assert.equal(typeof stored.pid, "number", "the trampoline must record a worker pid");
+  assert.notEqual(stored.pid, launcherPid, "the recorded pid must be the worker's, not the dying launcher's");
+  assert.equal(
+    state.loadState(workspace).jobs.find((entry) => entry.id === job.id).pid,
+    stored.pid,
+    "both stores must agree, or reconcileDeadJobs reads the stale one"
   );
 });
 
