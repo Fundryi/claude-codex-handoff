@@ -62,6 +62,7 @@ test("a running job with no live pid is reconciled to failed", async () => {
 
   const entry = state.listJobs(process.cwd()).find((job) => job.id === "task-zzz");
   assert.equal(entry.status, "failed", "state.json must agree with the job file");
+  assert.equal(entry.completedAt, stored.completedAt, "both stores must agree on completedAt");
 });
 
 test("a running job whose pid is alive is left alone", async () => {
@@ -79,6 +80,9 @@ test("terminal jobs are untouched and cause no write", async () => {
   const state = await loadState();
   await seed(state, jobRecord({ id: "task-done", status: "completed", pid: null }));
 
+  // A same-tick write would false-pass the mtime comparison below on filesystems
+  // with coarse timestamp resolution.
+  await new Promise((r) => setTimeout(r, 20));
   const stateFile = state.resolveStateFile(process.cwd());
   const before = fs.statSync(stateFile).mtimeMs;
   assert.deepEqual(state.reconcileDeadJobs(process.cwd()), []);

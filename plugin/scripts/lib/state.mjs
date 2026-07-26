@@ -156,8 +156,10 @@ function pidAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    // ESRCH = no such process (dead). EPERM = process exists but we can't signal it
+    // (still alive) - treating EPERM as dead would fail live-but-inaccessible work.
+    return err?.code === "EPERM";
   }
 }
 
@@ -187,19 +189,26 @@ export function reconcileDeadJobs(cwd) {
     pid: null
   };
 
+  // Same stamp lands in both stores - job-file mtime approximates when the worker
+  // actually stopped, which enrichJob's elapsed/duration math reads from state.json.
+  const stamps = new Map();
   for (const job of dead) {
     const jobFile = resolveJobFile(cwd, job.id);
+    const stamp = fileMtimeIso(jobFile);
+    stamps.set(job.id, stamp);
     if (!fs.existsSync(jobFile)) continue;
     const stored = readJobFile(jobFile);
-    writeJobFile(cwd, job.id, { ...stored, ...patch, completedAt: fileMtimeIso(jobFile) });
+    writeJobFile(cwd, job.id, { ...stored, ...patch, completedAt: stamp });
   }
 
   const deadIds = new Set(dead.map((job) => job.id));
-  saveState(cwd, {
-    ...state,
-    jobs: state.jobs.map((job) =>
-      deadIds.has(job.id) ? { ...job, ...patch, completedAt: job.completedAt ?? nowIso() } : job
-    )
+  // updateState reloads fresh right before saving, narrowing the write race to the
+  // same load/mutate/save window every other writer already has - not the whole
+  // per-job-file loop above, which could otherwise clobber a job written concurrently.
+  updateState(cwd, (s) => {
+    s.jobs = s.jobs.map((job) =>
+      deadIds.has(job.id) ? { ...job, ...patch, completedAt: stamps.get(job.id) } : job
+    );
   });
 
   return [...deadIds];
