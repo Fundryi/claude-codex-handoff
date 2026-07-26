@@ -462,6 +462,8 @@ function resolveCompanionScript(baseDir) {
   return candidates[0];
 }
 const COMPANION_SCRIPT = resolveCompanionScript(__dirname);
+// Mirrored in plugin/scripts/lib/liveness.mjs - the server stays one file, so the
+// two copies are kept honest by tests/plugin-liveness.test.js instead of an import.
 const STUCK_AFTER_MS = 5 * 60 * 1000; // alive but no heartbeat this long => possibly stuck
 
 function classifyJobLiveness(job, pidIsAlive, now) {
