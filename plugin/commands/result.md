@@ -1,6 +1,6 @@
 ---
 description: Show the stored final output for a finished Codex job in this repository
-argument-hint: '[job-id] [--wait] [--timeout-ms <ms>]'
+argument-hint: '[job-id]'
 disable-model-invocation: true
 allowed-tools: Bash(node:*)
 ---
@@ -14,12 +14,14 @@ Present the full command output to the user. Do not summarize or condense it. Pr
 - Any error messages or parse errors
 - Follow-up commands such as `/codex:status <id>` and `/codex:review`
 
-If the job is still running, do not poll or re-arm foreground waits. Run:
+If the job is still running, do not poll or re-arm foreground waits. This
+slash command itself runs `result` in the foreground at prompt-expansion time,
+so `--wait` is not for it. Instead, invoke the Bash tool directly with:
 
     node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" result <job-id> --wait
 
-with the Bash tool's `run_in_background: true`, then continue with other work.
-The process exits the moment the job finishes — fast or slow — and the harness
-delivers the full report automatically. `--timeout-ms <ms>` adds an optional
-ceiling; without it the wait has no deadline (a dead worker is reconciled to
-`failed`, which also ends the wait).
+and `run_in_background: true`, then continue with other work. The process
+exits the moment the job finishes — fast or slow — and the harness delivers
+the full report automatically. `--timeout-ms <ms>` adds an optional ceiling;
+without it the wait has no deadline (a dead worker is reconciled to `failed`,
+which also ends the wait).
