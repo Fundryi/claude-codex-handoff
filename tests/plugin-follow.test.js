@@ -172,6 +172,7 @@ test("the handback names the job, the workspace, and how to get the result", asy
   });
   assert.match(text, /task-abc/);
   assert.match(text, /still running/i);
+  assert.match(text, /--wait/, "must teach the background result --wait pickup pattern");
   assert.match(text, /--cwd/, "must pin --cwd so a follow-up from another directory still finds it");
   assert.match(text, /D:\\GIT\\example/);
 });

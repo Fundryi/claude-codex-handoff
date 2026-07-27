@@ -15,3 +15,5 @@ If the user did not pass a job ID:
 If the user did pass a job ID:
 - Present the full command output to the user.
 - Do not summarize or condense it.
+
+For long-running jobs, do not loop `/codex:status --wait`: run `result <job-id> --wait` as a background Bash task instead and let the harness deliver the report.

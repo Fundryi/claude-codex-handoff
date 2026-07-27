@@ -102,8 +102,14 @@ export function renderFollowHandback(payload) {
     `${payload.title} is still running as ${payload.jobId}.`,
     "It is detached, so it keeps going on its own. Nothing has been lost.",
     "",
-    `  Result when it finishes:  node scripts/codex-companion.mjs result ${payload.jobId} --cwd "${payload.workspaceRoot}"`,
-    `  Live progress:            http://127.0.0.1:${port}`,
+    "To collect the result without polling, run this as a BACKGROUND Bash task",
+    "(run_in_background: true) and continue with other work - the harness wakes",
+    "you with the report the moment the job finishes, however long it takes:",
+    "",
+    `  node scripts/codex-companion.mjs result ${payload.jobId} --wait --cwd "${payload.workspaceRoot}"`,
+    "",
+    "Never re-arm foreground waits on a timer.",
+    `  Live progress: http://127.0.0.1:${port}`,
     ""
   ].join("\n");
 }

@@ -15,7 +15,7 @@ Execution mode:
 
 - Codex always runs detached, so no timeout can end a run. Nothing here needs to predict how long a task will take.
 - If the request includes `--background`, forward it: the command returns a job id immediately instead of waiting for the result.
-- Without `--background`, the companion follows the detached job and prints its output. If the job outlives the follow budget, the companion returns a job id and the job keeps running — pick it up with `/codex:result <job-id>`.
+- Without `--background`, the companion follows the detached job and prints its output. If the job outlives the follow budget, the companion returns a job id and the job keeps running — collect it by running `result <job-id> --wait` as a background Bash task (`run_in_background: true`); the harness delivers the report when the job finishes. Never re-arm foreground waits on a timer.
 - `--wait` is accepted as a no-op alias for the default and must not be forwarded to `task`.
 - `--model` and `--effort` are runtime-selection flags. Preserve them for the forwarded `task` call, but do not treat them as part of the natural-language task text.
 - If the request includes `--resume`, do not ask whether to continue. The user already chose.
