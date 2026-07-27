@@ -854,6 +854,10 @@
       if (job.diedReason) parts.push(job.diedReason);
       return parts.join(' \u00b7 ');
     }
+    function sessionFastJob(session, jobs) {
+      if (!session || !session.threadId) return null;
+      return (jobs || []).find(function (job) { return !!job.fast && job.threadId === session.threadId; }) || null;
+    }
     function taskFormBody(f) {
       const b = { cwd: String(f.cwd || '').trim(), prompt: String(f.prompt || '').trim() };
       if (f.effort) b.effort = f.effort;
