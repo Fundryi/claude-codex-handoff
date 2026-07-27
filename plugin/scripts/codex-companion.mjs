@@ -1018,6 +1018,9 @@ async function handleResult(argv) {
   const reference = positionals[0] ?? "";
 
   if (options.wait) {
+    if (!reference) {
+      throw new Error("`result --wait` requires a job id.");
+    }
     // No deadline by default: reconcileDeadJobs turns a vanished worker into a
     // terminal `failed` on read, so this loop always ends without a timer.
     const timeoutMs = options["timeout-ms"] ? Number(options["timeout-ms"]) : Number.MAX_SAFE_INTEGER;

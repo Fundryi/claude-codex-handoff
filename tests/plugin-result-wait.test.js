@@ -76,3 +76,15 @@ test("result --wait --timeout-ms hands back a still-running job", async () => {
   assert.equal(payload.waitTimedOut, true);
   assert.equal(payload.jobId, "task-slow");
 });
+
+test("result --wait without a job id fails fast instead of guessing across sessions", async () => {
+  const { root } = await freshState();
+
+  await assert.rejects(
+    runResult(root, ["--wait"]),
+    (error) => {
+      assert.match(error.stderr, /requires a job id/);
+      return true;
+    }
+  );
+});
