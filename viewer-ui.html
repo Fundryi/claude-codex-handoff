@@ -943,6 +943,33 @@
       finished.sort(newestFirst);
       return { active: active, finished: finished.slice(0, 5) };
     }
+    function contextMenuItems(item) {
+      var items = [];
+      if (item.type === 'session') {
+        var session = item.session;
+        if (session.threadId && !session.archived) {
+          items.push({ id: 'copy-resume', label: 'Copy resume command' });
+          items.push({ id: 'copy-continue', label: 'Copy continue command' });
+          items.push({ id: 'copy-fork', label: 'Copy fork command' });
+          items.push({ id: 'copy-archive', label: 'Copy archive command' });
+        }
+        if (session.threadId && session.archived) items.push({ id: 'copy-unarchive', label: 'Copy unarchive command' });
+        items.push({ id: 'dismiss', label: item.dismissed ? 'Restore task' : 'Dismiss task' });
+        if (session.status !== 'DONE' && session.status !== 'STOPPED' && !session.archived) {
+          items.push({ id: 'stop', label: 'Stop task process…', danger: true });
+        }
+      } else if (item.type === 'job') {
+        var job = item.job;
+        if (job.threadId) {
+          items.push({ id: 'copy-resume', label: 'Copy resume command' });
+          items.push({ id: 'copy-continue', label: 'Copy continue command' });
+          items.push({ id: 'copy-fork', label: 'Copy fork command' });
+        }
+        if (job.threadId && (job.live === 'dead' || job.live === 'failed')) items.push({ id: 'resume-job', label: 'Resume job' });
+        if (job.live === 'working' || job.live === 'possibly-stuck') items.push({ id: 'cancel-job', label: 'Cancel job', danger: true });
+      }
+      return items;
+    }
     function taskFormBody(f) {
       const b = { cwd: String(f.cwd || '').trim(), prompt: String(f.prompt || '').trim() };
       if (f.effort) b.effort = f.effort;
