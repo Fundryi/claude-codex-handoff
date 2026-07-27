@@ -85,7 +85,7 @@ function printUsage() {
       "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|spark>] [--effort <none|minimal|low|medium|high|xhigh>] [prompt]",
       "  node scripts/codex-companion.mjs transfer [--source <claude-jsonl>] [--json]",
       "  node scripts/codex-companion.mjs status [job-id] [--all] [--json]",
-      "  node scripts/codex-companion.mjs result [job-id] [--json]",
+      "  node scripts/codex-companion.mjs result [job-id] [--wait] [--timeout-ms <ms>] [--json]",
       "  node scripts/codex-companion.mjs cancel [job-id] [--json]"
     ].join("\n")
   );
@@ -1008,14 +1008,40 @@ async function handleStatus(argv) {
   outputResult(renderStatusPayload(report, options.json), options.json);
 }
 
-function handleResult(argv) {
+async function handleResult(argv) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["cwd"],
-    booleanOptions: ["json"]
+    valueOptions: ["cwd", "timeout-ms"],
+    booleanOptions: ["json", "wait"]
   });
 
   const cwd = resolveCommandCwd(options);
   const reference = positionals[0] ?? "";
+
+  if (options.wait) {
+    // No deadline by default: reconcileDeadJobs turns a vanished worker into a
+    // terminal `failed` on read, so this loop always ends without a timer.
+    const timeoutMs = options["timeout-ms"] ? Number(options["timeout-ms"]) : Number.MAX_SAFE_INTEGER;
+    const snapshot = await waitForSingleJobSnapshot(cwd, reference, { timeoutMs });
+    if (snapshot.waitTimedOut) {
+      const payload = {
+        jobId: snapshot.job.id,
+        status: snapshot.job.status,
+        title: snapshot.job.title ?? "Codex job",
+        workspaceRoot: snapshot.workspaceRoot,
+        waitTimedOut: true
+      };
+      outputCommandResult(payload, renderFollowHandback(payload), options.json);
+      return;
+    }
+    const storedJob = readStoredJob(snapshot.workspaceRoot, snapshot.job.id);
+    outputCommandResult(
+      { job: snapshot.job, storedJob },
+      renderStoredJobResult(snapshot.job, storedJob),
+      options.json
+    );
+    return;
+  }
+
   const { workspaceRoot, job } = resolveResultJob(cwd, reference);
   const storedJob = readStoredJob(workspaceRoot, job.id);
   const payload = {
@@ -1178,7 +1204,7 @@ async function main() {
       await handleStatus(argv);
       break;
     case "result":
-      handleResult(argv);
+      await handleResult(argv);
       break;
     case "task-resume-candidate":
       handleTaskResumeCandidate(argv);
