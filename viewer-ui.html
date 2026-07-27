@@ -724,6 +724,7 @@
     var unread = new Set();
     var previousStatus = {};
     var lastListSignature = '';
+    var lastHomeSignature = '';
     var lastFilterSignature = '';
     var renderLimits = {};
     var historyResults = [];
@@ -862,6 +863,12 @@
         cancelled: 'CANCELLED'
       };
       return map[job.live] || String(job.status || '').toUpperCase() || '?';
+    }
+    function jobBadgeClass(job) {
+      return job.live === 'working' ? 'LIVE'
+        : job.live === 'possibly-stuck' ? 'IDLE'
+        : job.live === 'dead' || job.live === 'failed' ? 'STALE'
+        : job.live === 'cancelled' ? 'STOPPED' : 'DONE';
     }
     function jobDetailLine(job, now) {
       function duration(ms) {
@@ -1122,11 +1129,7 @@
         var top = document.createElement('div');
         top.className = 'session-top';
         var badge = document.createElement('span');
-        var badgeStatus = job.live === 'working' ? 'LIVE'
-          : job.live === 'possibly-stuck' ? 'IDLE'
-          : job.live === 'dead' || job.live === 'failed' ? 'STALE'
-          : job.live === 'cancelled' ? 'STOPPED' : 'DONE';
-        badge.className = 'status ' + badgeStatus;
+        badge.className = 'status ' + jobBadgeClass(job);
         badge.textContent = jobStatusLabel(job);
         top.appendChild(badge);
         if (job.fast) top.appendChild(fastChip());
@@ -1431,12 +1434,9 @@
       var top = document.createElement('div');
       top.className = 'session-top';
       var badge = document.createElement('span');
-      var badgeStatus = card.type === 'job'
-        ? (card.live === 'working' ? 'LIVE' : card.live === 'possibly-stuck' ? 'IDLE' : card.status === 'completed' ? 'DONE' : 'STOPPED')
-        : card.status;
-      badge.className = 'status ' + badgeStatus;
+      badge.className = 'status ' + (card.type === 'job' ? jobBadgeClass(card) : card.status);
       badge.textContent = card.type === 'job'
-        ? (card.live === 'working' ? 'RUNNING' : card.live === 'possibly-stuck' ? 'QUIET' : String(card.status || '').toUpperCase())
+        ? jobStatusLabel(card)
         : (STATUS[card.status] ? STATUS[card.status].label : card.status);
       top.appendChild(badge);
       if (card.fast) top.appendChild(fastChip());
@@ -1462,6 +1462,7 @@
     }
 
     function openHomeCard(card) {
+      lastHomeSignature = '';
       if (card.sessionId && sessions.some(function (s) { return s.id === card.sessionId; })) {
         selectSession(card.sessionId, true);
         return;
@@ -1471,8 +1472,18 @@
     }
 
     function renderHome() {
-      feedInner.textContent = '';
       var data = homeCards(sessions, jobs, Date.now());
+      // same shape as renderJobList: stable card fields plus a 10s bucket so relative times still refresh
+      var signature = JSON.stringify([
+        Math.floor(Date.now() / 10000),
+        data.active.concat(data.finished).map(function (card) {
+          return [card.id, card.sessionId, card.status, card.live, card.title, card.project,
+            card.fast, card.model, card.effort, card.tokens, card.lastMs];
+        })
+      ]);
+      if (signature === lastHomeSignature) return;
+      lastHomeSignature = signature;
+      feedInner.textContent = '';
       var wrap = document.createElement('div');
       wrap.id = 'home-view';
       var heading = document.createElement('div');
@@ -1978,6 +1989,7 @@
     });
     homeButton.addEventListener('click', function () {
       prefs.home = !prefs.home;
+      lastHomeSignature = '';
       savePrefs();
       applyPrefs();
       renderHeader();
