@@ -880,8 +880,9 @@
           tokens: 0, detail: jobDetailLine(job, now),
           lastMs: Date.parse(job.heartbeatAt || job.updatedAt || '') || 0
         };
-        if (card.threadId) byThread[card.threadId] = card;
-        if (job.live === 'working' || job.live === 'possibly-stuck') active.push(card);
+        var isLive = job.live === 'working' || job.live === 'possibly-stuck';
+        if (card.threadId && (isLive || !byThread[card.threadId])) byThread[card.threadId] = card;
+        if (isLive) active.push(card);
         else finished.push(card);
       });
       (sessions || []).forEach(function (session) {

@@ -42,6 +42,31 @@ test("a session sharing a job threadId merges into the job card", () => {
   assert.equal(active[0].tokens, 7);
 });
 
+test("a resumed thread's session merges onto the working job card, not the completed one, regardless of job order", () => {
+  const { homeCards } = ctx();
+  const completedJob = { id: "j-old", threadId: "t1", live: "completed", status: "completed", title: "First run", workspaceRoot: "D:\\repo", updatedAt: new Date(NOW - 9000).toISOString() };
+  const workingJob = { id: "j-new", threadId: "t1", live: "working", status: "running", title: "Resumed run", workspaceRoot: "D:\\repo", heartbeatAt: new Date(NOW).toISOString() };
+  const sessions = [{ id: "s1", threadId: "t1", status: "LIVE", title: "Same thread", cwd: "D:\\repo", lastGrow: NOW, tokensUsed: 99 }];
+
+  const completedFirst = homeCards(sessions, [completedJob, workingJob], NOW);
+  assert.deepEqual(plain(completedFirst.active.map(c => c.id)), ["j-new"]);
+  assert.equal(completedFirst.active[0].sessionId, "s1");
+  assert.equal(completedFirst.active[0].tokens, 99);
+  assert.equal(completedFirst.finished.length, 1);
+  assert.equal(completedFirst.finished[0].id, "j-old");
+  assert.equal(completedFirst.finished[0].sessionId, null);
+  assert.equal(completedFirst.finished[0].tokens, 0);
+
+  const workingFirst = homeCards(sessions, [workingJob, completedJob], NOW);
+  assert.deepEqual(plain(workingFirst.active.map(c => c.id)), ["j-new"]);
+  assert.equal(workingFirst.active[0].sessionId, "s1");
+  assert.equal(workingFirst.active[0].tokens, 99);
+  assert.equal(workingFirst.finished.length, 1);
+  assert.equal(workingFirst.finished[0].id, "j-old");
+  assert.equal(workingFirst.finished[0].sessionId, null);
+  assert.equal(workingFirst.finished[0].tokens, 0);
+});
+
 test("stuck sessions count as active; archived are dropped; finished capped at 5", () => {
   const { homeCards } = ctx();
   const sessions = [
