@@ -118,7 +118,7 @@
     #jobs-actions { display: flex; gap: 6px; margin-top: 8px; }
     #jobs-actions[hidden] { display: none; }
     #jobs-actions button { flex: 1; }
-    .filter-button, .view-button {
+    .filter-button {
       border: 1px solid transparent;
       border-radius: 6px;
       padding: 5px 8px;
@@ -128,7 +128,7 @@
       font-size: 11px;
     }
     .filter-button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; }
-    .filter-button, .view-button, .toolbar-button {
+    .filter-button, .toolbar-button {
       transition: color .14s ease, background-color .14s ease, border-color .14s ease;
     }
     .filter-button::before {
@@ -154,8 +154,8 @@
     .filter-button[data-filter="DONE"]::before { background: var(--green); }
     .filter-button[data-filter="ALL"]::before { background: #7b8794; }
     .filter-button[data-filter="ARCHIVED"]::before { background: #9fb0c3; }
-    .filter-button:hover, .view-button:hover { background: var(--hover); color: var(--fg); }
-    .filter-button.on, .view-button.on {
+    .filter-button:hover { background: var(--hover); color: var(--fg); }
+    .filter-button.on {
       border-color: #36577c;
       background: #172a40;
       color: #b9d8ff;
@@ -628,8 +628,7 @@
     </header>
 
     <div id="feed-toolbar">
-      <button class="view-button" data-view="activity" type="button">Activity</button>
-      <button class="view-button" data-view="raw" type="button">Raw log</button>
+      <button id="internals-button" class="toolbar-button" type="button" title="Show internal Codex events (injected prompts, permissions) and auto-expand patches">Internals</button>
       <span class="spacer"></span>
       <button id="autoscroll-button" class="toolbar-button" type="button">Auto-scroll</button>
     </div>
@@ -686,7 +685,7 @@
       sideCollapsed: false,
       filter: 'ACTIVE',
       query: '',
-      view: 'activity',
+      internals: false,
       autoFollow: true,
       autoScroll: true,
       selected: null,
@@ -745,6 +744,7 @@
     var pendingKillPid = null;
     var followButton = document.getElementById('follow-button');
     var autoscrollButton = document.getElementById('autoscroll-button');
+    var internalsButton = document.getElementById('internals-button');
     var connection = document.getElementById('connection');
     var connectionText = document.getElementById('connection-text');
 
@@ -942,9 +942,8 @@
       followButton.textContent = prefs.autoFollow ? 'Following newest' : 'Follow newest';
       autoscrollButton.classList.toggle('on', !!prefs.autoScroll);
       autoscrollButton.textContent = prefs.autoScroll ? 'Auto-scroll on' : 'Auto-scroll off';
-      document.querySelectorAll('.view-button').forEach(function (button) {
-        button.classList.toggle('on', button.dataset.view === prefs.view);
-      });
+      internalsButton.classList.toggle('on', !!prefs.internals);
+      internalsButton.textContent = prefs.internals ? 'Internals on' : 'Internals';
     }
 
     function statusCount(id) {
@@ -1293,7 +1292,7 @@
     }
 
     function eventVisible(event) {
-      return prefs.view === 'raw' || !isInternal(event);
+      return prefs.internals || !isInternal(event);
     }
 
     function technicalEvent(event) {
@@ -1310,7 +1309,7 @@
       if (technicalEvent(event) || isLongMessage) {
         var details = document.createElement('details');
         details.className = 'event technical ' + event.kind;
-        if (prefs.view === 'raw') details.open = event.kind === 'patch';
+        if (prefs.internals) details.open = event.kind === 'patch';
         var summary = document.createElement('summary');
         summary.textContent = eventLabel(event) + '  ' + eventTime(event.ts) + '  ' + firstLine(event.text, 150) + (isLongMessage ? '  (expand)' : '');
         var pre = document.createElement('pre');
@@ -1340,8 +1339,8 @@
     function renderFeed(preservePosition) {
       feedInner.textContent = '';
       var allEvents = (store[selected] || []).filter(eventVisible);
-      var renderKey = String(selected || '') + '|' + prefs.view;
-      var defaultLimit = prefs.view === 'raw' ? 80 : 160;
+      var renderKey = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
+      var defaultLimit = 160;
       var limit = renderLimits[renderKey] || defaultLimit;
       var hiddenCount = Math.max(0, allEvents.length - limit);
       var events = hiddenCount ? allEvents.slice(hiddenCount) : allEvents;
@@ -1351,8 +1350,8 @@
         var strong = document.createElement('strong');
         strong.textContent = selected ? 'No activity to show' : 'Choose a task to inspect';
         var detail = document.createElement('span');
-        detail.textContent = selected && prefs.view === 'activity'
-          ? 'Switch to Raw log to inspect internal events.'
+        detail.textContent = selected && !prefs.internals
+          ? 'Toggle Internals to include internal Codex events.'
           : 'Running tasks are selected automatically unless Follow newest is paused.';
         empty.append(strong, detail);
         feedInner.appendChild(empty);
@@ -1805,13 +1804,11 @@
         renderList();
       }, 250);
     });
-    document.querySelectorAll('.view-button').forEach(function (button) {
-      button.addEventListener('click', function () {
-        prefs.view = button.dataset.view;
-        savePrefs();
-        applyPrefs();
-        renderFeed();
-      });
+    internalsButton.addEventListener('click', function () {
+      prefs.internals = !prefs.internals;
+      savePrefs();
+      applyPrefs();
+      renderFeed();
     });
     autoscrollButton.addEventListener('click', function () {
       prefs.autoScroll = !prefs.autoScroll;
@@ -1993,8 +1990,8 @@
         if (data.session === selected) {
           var shouldFollow = prefs.autoScroll && nearBottom();
           data.events.filter(eventVisible).forEach(function (event) {
-            var key = String(selected || '') + '|' + prefs.view;
-            var limit = renderLimits[key] || (prefs.view === 'raw' ? 80 : 160);
+            var key = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
+            var limit = renderLimits[key] || 160;
             var rendered = feedInner.querySelectorAll('.event');
             if (rendered.length >= limit && rendered.length) rendered[0].remove();
             feedInner.appendChild(createEvent(event));
