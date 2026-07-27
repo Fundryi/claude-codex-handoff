@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.8.0
+
+Waiting on a long handoff costs nothing now, and the viewer got a Home page.
+
+- **`/codex:result` gains a deadline-free wait: `result <job-id> --wait`.** It blocks until the job is terminal — however long that takes — then prints the full report. Run it as a background Bash task (`run_in_background: true`) and the harness delivers the report the moment the job finishes: no more re-arming foreground waits every nine minutes, no lost track of a running job. A job whose worker died ends the wait too (the liveness reconciler flips it to `failed`), and `--timeout-ms` adds an optional ceiling. The follow handback and command docs now teach exactly this pattern.
+- **Home view in the viewer.** A `Home` button next to Follow newest shows live cards for everything currently running, quiet, or stuck — sessions and companion jobs across all projects, deduped per thread — plus the last five finished items. Follow newest never yanks you away while Home is open; clicking a card jumps to that task.
+- **Fast-tier runs are visible.** A `FAST` chip appears in the task header, session rows, the Jobs list, and the job result modal whenever the run used priority processing.
+- **One feed instead of Activity/Raw tabs.** The two views differed only in showing internal events and auto-expanding patches, so they are now a single feed with an `Internals` toggle.
+- **Right-click menu on the session list.** Every session and job row gets the full 3-dot action set (copy resume/continue/fork/archive, dismiss, stop, resume/cancel) at the cursor, acting on the row you clicked — no need to select it first.
+
 ## 2.7.1
 
 - **Multi-agent handoffs no longer end with a spurious "turn aborted".** In collab-mode runs, the worker inferred turn completion just 250ms after the root agent's final answer — usually beating the real `turn/completed` event — then closed the app-server, which aborted the still-finishing turn. The rollout got stamped `turn_aborted`, the viewer showed "err: turn aborted", and resuming that thread fed Codex an "interrupted on purpose" marker, even though the job itself completed with the full result. The inferred-completion grace window is now 10 seconds, so it only fires for genuinely hung turns; normal runs complete on the real event with no added latency.
