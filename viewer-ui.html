@@ -177,6 +177,27 @@
     .session:hover { background: var(--hover); }
     .session.selected { background: var(--selected); border-left-color: var(--blue); }
     .session.dismissed { opacity: .55; }
+    #home-view { padding: 4px 0 30px; }
+    .home-heading {
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      margin: 18px 0 8px;
+    }
+    .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+    .home-card, .home-finished {
+      text-align: left;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--panel);
+      padding: 10px 12px;
+      cursor: pointer;
+      min-width: 0;
+    }
+    .home-card:hover, .home-finished:hover { background: var(--hover); }
+    .home-finished { display: block; width: 100%; margin-bottom: 6px; }
     .history-caption {
       padding: 10px 12px 4px;
       color: var(--faint);
@@ -314,7 +335,7 @@
     }
     #wait-reason.STALE { color: #f0a254; }
     #header-actions { display: flex; align-items: center; gap: 6px; flex: none; }
-    #follow-button {
+    #follow-button, #home-button {
       height: 32px;
       border: 1px solid var(--border);
       border-radius: 7px;
@@ -324,7 +345,8 @@
       cursor: pointer;
       font-size: 11px;
     }
-    #follow-button:hover, #follow-button.on { color: var(--fg); background: var(--hover); }
+    #follow-button:hover, #follow-button.on,
+    #home-button:hover, #home-button.on { color: var(--fg); background: var(--hover); }
     #action-menu {
       position: absolute;
       right: 14px;
@@ -611,6 +633,7 @@
         </div>
         <div id="header-actions">
           <button id="resume-session-button" class="toolbar-button" type="button" hidden>Resume</button>
+          <button id="home-button" type="button" title="Live overview of everything currently running">Home</button>
           <button id="follow-button" type="button" title="Automatically select the newest running task">Follow newest</button>
           <button id="actions-button" class="icon-button" type="button" title="Task actions" aria-label="Task actions" aria-expanded="false">&#x22EF;</button>
         </div>
@@ -686,6 +709,7 @@
       filter: 'ACTIVE',
       query: '',
       internals: false,
+      home: false,
       autoFollow: true,
       autoScroll: true,
       selected: null,
@@ -743,6 +767,7 @@
     var controlAction = null;
     var pendingKillPid = null;
     var followButton = document.getElementById('follow-button');
+    var homeButton = document.getElementById('home-button');
     var autoscrollButton = document.getElementById('autoscroll-button');
     var internalsButton = document.getElementById('internals-button');
     var connection = document.getElementById('connection');
@@ -983,6 +1008,7 @@
       document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
       document.body.classList.toggle('side-collapsed', !!prefs.sideCollapsed);
       search.value = prefs.query || '';
+      homeButton.classList.toggle('on', !!prefs.home);
       followButton.classList.toggle('on', !!prefs.autoFollow);
       followButton.textContent = prefs.autoFollow ? 'Following newest' : 'Follow newest';
       autoscrollButton.classList.toggle('on', !!prefs.autoScroll);
@@ -1057,6 +1083,7 @@
     }
 
     function followRunningSession(running) {
+      if (prefs.home) return;
       if (!prefs.autoFollow || !running) return;
       if (!filterIncludes(running, prefs.filter)) prefs.filter = 'LIVE';
       if (running.id !== selected) selectSession(running.id, false);
@@ -1265,6 +1292,22 @@
     function renderHeader() {
       var session = currentSession();
       taskMeta.textContent = '';
+      if (prefs.home) {
+        taskStatus.hidden = true;
+        taskFast.hidden = true;
+        taskTitle.textContent = 'Home — everything active';
+        var homeHint = document.createElement('span');
+        homeHint.className = 'meta-item';
+        homeHint.textContent = 'Live overview of running sessions and jobs. Click a card to open it.';
+        taskMeta.appendChild(homeHint);
+        stopButton.hidden = true;
+        resumeSessionButton.hidden = true;
+        document.getElementById('dismiss-button').hidden = true;
+        ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive', 'copy-unarchive'].forEach(function (id) {
+          document.getElementById(id).hidden = true;
+        });
+        return;
+      }
       if (!session) {
         taskStatus.hidden = true;
         taskFast.hidden = true;
@@ -1381,7 +1424,78 @@
       return article;
     }
 
+    function homeCardElement(card, big) {
+      var el = document.createElement('button');
+      el.type = 'button';
+      el.className = big ? 'home-card' : 'home-finished';
+      var top = document.createElement('div');
+      top.className = 'session-top';
+      var badge = document.createElement('span');
+      var badgeStatus = card.type === 'job'
+        ? (card.live === 'working' ? 'LIVE' : card.live === 'possibly-stuck' ? 'IDLE' : card.status === 'completed' ? 'DONE' : 'STOPPED')
+        : card.status;
+      badge.className = 'status ' + badgeStatus;
+      badge.textContent = card.type === 'job'
+        ? (card.live === 'working' ? 'RUNNING' : card.live === 'possibly-stuck' ? 'QUIET' : String(card.status || '').toUpperCase())
+        : (STATUS[card.status] ? STATUS[card.status].label : card.status);
+      top.appendChild(badge);
+      if (card.fast) top.appendChild(fastChip());
+      var time = document.createElement('span');
+      time.className = 'session-time';
+      time.textContent = relativeTime(card.lastMs);
+      top.appendChild(time);
+      var title = document.createElement('div');
+      title.className = 'session-title';
+      title.textContent = card.title;
+      title.title = card.title;
+      var project = document.createElement('div');
+      project.className = 'session-project';
+      project.textContent = card.project;
+      project.title = card.project;
+      var meta = document.createElement('div');
+      meta.className = 'session-last';
+      var parts = [card.model, card.effort, card.tokens ? 'tokens: ' + card.tokens.toLocaleString() : '', card.detail];
+      meta.textContent = parts.filter(Boolean).join(' · ');
+      el.append(top, title, project, meta);
+      el.addEventListener('click', function () { openHomeCard(card); });
+      return el;
+    }
+
+    function openHomeCard(card) {
+      if (card.sessionId && sessions.some(function (s) { return s.id === card.sessionId; })) {
+        selectSession(card.sessionId, true);
+        return;
+      }
+      var job = jobs.find(function (entry) { return entry.id === card.id; });
+      if (job) openJob(job);
+    }
+
+    function renderHome() {
+      feedInner.textContent = '';
+      var data = homeCards(sessions, jobs, Date.now());
+      var wrap = document.createElement('div');
+      wrap.id = 'home-view';
+      var heading = document.createElement('div');
+      heading.className = 'home-heading';
+      heading.textContent = data.active.length ? 'Active now (' + data.active.length + ')' : 'Nothing running right now';
+      wrap.appendChild(heading);
+      var grid = document.createElement('div');
+      grid.className = 'home-grid';
+      data.active.forEach(function (card) { grid.appendChild(homeCardElement(card, true)); });
+      wrap.appendChild(grid);
+      if (data.finished.length) {
+        var doneHeading = document.createElement('div');
+        doneHeading.className = 'home-heading';
+        doneHeading.textContent = 'Recently finished';
+        wrap.appendChild(doneHeading);
+        data.finished.forEach(function (card) { wrap.appendChild(homeCardElement(card, false)); });
+      }
+      feedInner.appendChild(wrap);
+      jumpLatest.hidden = true;
+    }
+
     function renderFeed(preservePosition) {
+      if (prefs.home) { renderHome(); return; }
       feedInner.textContent = '';
       var allEvents = (store[selected] || []).filter(eventVisible);
       var renderKey = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
@@ -1424,7 +1538,7 @@
     }
 
     function selectSession(id, byUser) {
-      if (byUser) prefs.autoFollow = false;
+      if (byUser) { prefs.autoFollow = false; prefs.home = false; }
       selected = id;
       prefs.selected = id;
       unread.delete(id);
@@ -1458,6 +1572,7 @@
         renderFilters();
         if (prefs.filter === 'JOBS') renderList();
         renderHeader();
+        if (prefs.home) renderFeed();
       } catch (_) {}
     }
 
@@ -1861,6 +1976,14 @@
       applyPrefs();
       if (prefs.autoScroll) scrollToLatest();
     });
+    homeButton.addEventListener('click', function () {
+      prefs.home = !prefs.home;
+      savePrefs();
+      applyPrefs();
+      renderHeader();
+      renderFeed();
+      if (prefs.home) refreshJobs();
+    });
     followButton.addEventListener('click', function () {
       prefs.autoFollow = true;
       var running = newestRunning();
@@ -1872,7 +1995,7 @@
     });
     jumpLatest.addEventListener('click', scrollToLatest);
     feed.addEventListener('scroll', function () {
-      jumpLatest.hidden = nearBottom();
+      jumpLatest.hidden = prefs.home || nearBottom();
     }, { passive: true });
 
     document.getElementById('hide-side').addEventListener('click', function () {
@@ -2023,6 +2146,7 @@
         renderFilters();
         renderList();
         renderHeader();
+        if (prefs.home) renderFeed();
       }
       if (data.type === 'snapshot') {
         store[data.session] = data.events;
@@ -2032,7 +2156,7 @@
         var existing = store[data.session] = store[data.session] || [];
         existing.push.apply(existing, data.events);
         if (existing.length > 500) existing.splice(0, existing.length - 500);
-        if (data.session === selected) {
+        if (data.session === selected && !prefs.home) {
           var shouldFollow = prefs.autoScroll && nearBottom();
           data.events.filter(eventVisible).forEach(function (event) {
             var key = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
@@ -2043,7 +2167,7 @@
           });
           if (shouldFollow) requestAnimationFrame(scrollToLatest);
           else jumpLatest.hidden = false;
-        } else {
+        } else if (data.session !== selected) {
           unread.add(data.session);
           renderList();
         }
@@ -2064,8 +2188,8 @@
     renderHeader();
     renderFeed();
     refreshJobs();
-    window.setInterval(function () { renderList(); renderHeader(); }, 10000);
-    window.setInterval(function () { if (prefs.filter === 'JOBS') refreshJobs(); }, 5000);
+    window.setInterval(function () { renderList(); renderHeader(); if (prefs.home) renderFeed(); }, 10000);
+    window.setInterval(function () { if (prefs.filter === 'JOBS' || prefs.home) refreshJobs(); }, 5000);
   </script>
 </body>
 </html>
