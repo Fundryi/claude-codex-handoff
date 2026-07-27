@@ -866,6 +866,50 @@
       chip.title = 'Priority processing (fast tier)';
       return chip;
     }
+    function homeCards(sessions, jobs, now) {
+      var active = [];
+      var finished = [];
+      var byThread = {};
+      (jobs || []).forEach(function (job) {
+        var card = {
+          type: 'job', id: job.id, sessionId: null, threadId: job.threadId || null,
+          title: job.title || job.kindLabel || 'Untitled Codex job',
+          project: job.workspaceRoot || '', fast: !!job.fast,
+          model: job.model || '', effort: job.effort || '',
+          status: job.status || '', live: job.live || '',
+          tokens: 0, detail: jobDetailLine(job, now),
+          lastMs: Date.parse(job.heartbeatAt || job.updatedAt || '') || 0
+        };
+        if (card.threadId) byThread[card.threadId] = card;
+        if (job.live === 'working' || job.live === 'possibly-stuck') active.push(card);
+        else finished.push(card);
+      });
+      (sessions || []).forEach(function (session) {
+        var merged = session.threadId ? byThread[session.threadId] : null;
+        if (merged) {
+          merged.sessionId = session.id;
+          if (session.tokensUsed) merged.tokens = session.tokensUsed;
+          if (!merged.model && session.model) merged.model = session.model;
+          return;
+        }
+        if (session.archived) return;
+        var card = {
+          type: 'session', id: session.id, sessionId: session.id, threadId: session.threadId || null,
+          title: session.title || 'Untitled Codex task',
+          project: session.cwd || '', fast: false,
+          model: session.model || '', effort: '',
+          status: session.status || '', live: '',
+          tokens: session.tokensUsed || 0, detail: session.lastEvent || '',
+          lastMs: session.lastGrow || 0
+        };
+        if (session.status === 'LIVE' || session.status === 'IDLE' || session.status === 'STALE') active.push(card);
+        else finished.push(card);
+      });
+      function newestFirst(a, b) { return b.lastMs - a.lastMs; }
+      active.sort(newestFirst);
+      finished.sort(newestFirst);
+      return { active: active, finished: finished.slice(0, 5) };
+    }
     function taskFormBody(f) {
       const b = { cwd: String(f.cwd || '').trim(), prompt: String(f.prompt || '').trim() };
       if (f.effort) b.effort = f.effort;
