@@ -359,7 +359,17 @@
       box-shadow: 0 12px 30px #0008;
       z-index: 5;
     }
-    #action-menu button {
+    #context-menu {
+      position: fixed;
+      width: 200px;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-2);
+      box-shadow: 0 12px 30px #0008;
+      z-index: 30;
+    }
+    #action-menu button, #context-menu button {
       width: 100%;
       border: 0;
       border-radius: 5px;
@@ -369,7 +379,8 @@
       cursor: pointer;
       font-size: 12px;
     }
-    #action-menu button:hover { background: var(--hover); }
+    #action-menu button:hover, #context-menu button:hover { background: var(--hover); }
+    #context-menu button.danger { color: #ff8f88; }
     #stop-button { color: #ff8f88; }
     #process-panel {
       margin-top: 9px;
@@ -685,6 +696,8 @@
     </div>
   </div>
 
+  <div id="context-menu" hidden></div>
+
   <div id="control-modal" hidden>
     <div id="control-modal-box" role="dialog" aria-modal="true" aria-labelledby="control-modal-title">
       <h2 id="control-modal-title">Codex action</h2>
@@ -743,6 +756,7 @@
     var taskFast = document.getElementById('task-fast');
     var taskMeta = document.getElementById('task-meta');
     var actionMenu = document.getElementById('action-menu');
+    var contextMenu = document.getElementById('context-menu');
     var actionsButton = document.getElementById('actions-button');
     var stopButton = document.getElementById('stop-button');
     var processPanel = document.getElementById('process-panel');
@@ -1184,6 +1198,9 @@
 
         open.append(top, title, project, detail);
         open.addEventListener('click', function () { openJob(job); });
+        row.addEventListener('contextmenu', function (event) {
+          openContextMenu(event, { type: 'job', job: job });
+        });
         row.appendChild(open);
 
         var actions = document.createElement('div');
@@ -1273,6 +1290,9 @@
 
         button.append(top, title, project, last);
         button.addEventListener('click', function () { selectSession(session.id, true); });
+        button.addEventListener('contextmenu', function (event) {
+          openContextMenu(event, { type: 'session', session: session, dismissed: isDismissed(session.id) });
+        });
         list.appendChild(button);
       });
 
@@ -1965,6 +1985,7 @@
       if (event.key === 'Escape' && !stopModal.hidden) { stopModal.hidden = true; pendingKillPid = null; }
       if (event.key === 'Escape' && !jobModal.hidden) jobModal.hidden = true;
       if (event.key === 'Escape' && !controlModal.hidden) closeControlModal();
+      if (event.key === 'Escape') closeContextMenu();
     });
 
     document.getElementById('new-task-button').addEventListener('click', openTaskModal);
@@ -2081,6 +2102,7 @@
       actionsButton.setAttribute('aria-expanded', actionMenu.hidden ? 'false' : 'true');
     });
     document.addEventListener('click', function (event) {
+      closeContextMenu();
       if (actionMenu.hidden || actionMenu.contains(event.target) || actionsButton.contains(event.target)) return;
       actionMenu.hidden = true;
       actionsButton.setAttribute('aria-expanded', 'false');
@@ -2098,19 +2120,74 @@
       });
     });
 
-    document.getElementById('dismiss-button').addEventListener('click', function () {
-      if (!selected) return;
+    var CONTEXT_COPY = {
+      'copy-resume': { build: resumeCommand, done: 'Resume command copied' },
+      'copy-continue': { build: continueCommand, done: 'Continue command copied' },
+      'copy-fork': { build: forkCommand, done: 'Fork command copied' },
+      'copy-archive': { build: archiveCommand, done: 'Archive command copied' },
+      'copy-unarchive': { build: unarchiveCommand, done: 'Unarchive command copied' }
+    };
+
+    function toggleDismissed(id) {
       var ids = prefs.dismissed = prefs.dismissed || [];
-      var at = ids.indexOf(selected);
-      if (at === -1) ids.push(selected); else ids.splice(at, 1);
-      actionMenu.hidden = true;
-      actionsButton.setAttribute('aria-expanded', 'false');
+      var at = ids.indexOf(id);
+      if (at === -1) ids.push(id); else ids.splice(at, 1);
       savePrefs();
       lastListSignature = '';
       lastFilterSignature = '';
       renderFilters();
       renderList();
       renderHeader();
+    }
+
+    function closeContextMenu() { contextMenu.hidden = true; }
+
+    function runContextAction(id, item, button) {
+      var copy = CONTEXT_COPY[id];
+      if (copy) {
+        var threadId = item.type === 'session' ? item.session.threadId : item.job.threadId;
+        if (threadId) copyText(copy.build(threadId), button, copy.done);
+        return;
+      }
+      if (id === 'dismiss') { toggleDismissed(item.session.id); return; }
+      if (id === 'stop') { selectSession(item.session.id, true); stopButton.click(); return; }
+      if (id === 'resume-job') { openResumeModal({ threadId: item.job.threadId, cwd: item.job.workspaceRoot }, item.job.title); return; }
+      if (id === 'cancel-job') { openCancelModal(item.job); return; }
+    }
+
+    function openContextMenu(event, item) {
+      var items = contextMenuItems(item);
+      if (!items.length) return;
+      event.preventDefault();
+      contextMenu.textContent = '';
+      items.forEach(function (entry) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = entry.label;
+        if (entry.danger) button.className = 'danger';
+        button.addEventListener('click', function () {
+          closeContextMenu();
+          runContextAction(entry.id, item, button);
+        });
+        contextMenu.appendChild(button);
+      });
+      contextMenu.hidden = false;
+      var pad = 8;
+      contextMenu.style.left = Math.max(pad, Math.min(event.clientX, window.innerWidth - contextMenu.offsetWidth - pad)) + 'px';
+      contextMenu.style.top = Math.max(pad, Math.min(event.clientY, window.innerHeight - contextMenu.offsetHeight - pad)) + 'px';
+    }
+
+    list.addEventListener('scroll', closeContextMenu, { passive: true });
+    // Capture phase: must run before the row handler that opens the menu, or it would close it again.
+    document.addEventListener('contextmenu', function (event) {
+      if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeContextMenu();
+    }, true);
+
+    document.getElementById('dismiss-button').addEventListener('click', function () {
+      if (!selected) return;
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+      toggleDismissed(selected);
     });
 
     stopButton.addEventListener('click', async function () {
