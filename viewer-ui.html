@@ -2046,12 +2046,16 @@
     });
     followButton.addEventListener('click', function () {
       prefs.autoFollow = true;
+      prefs.home = false;
+      lastHomeSignature = '';
       var running = newestRunning();
       followRunningSession(running);
       savePrefs();
       applyPrefs();
       renderFilters();
       renderList();
+      renderHeader();
+      renderFeed();
     });
     jumpLatest.addEventListener('click', scrollToLatest);
     feed.addEventListener('scroll', function () {
