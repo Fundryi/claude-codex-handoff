@@ -256,6 +256,7 @@
     .status.DONE { background: #173923; color: #72dc8c; }
     .status.STOPPED { background: #43181d; color: #ff8f88; }
     .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
+    .status.FAST { background: #3d2a14; color: #ffb86b; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
 
@@ -605,7 +606,7 @@
       <div id="header-top">
         <button id="show-side" class="icon-button" type="button" title="Show session list" aria-label="Show session list">&#x2630;</button>
         <div id="task-copy">
-          <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-title">Select a task</span></div>
+          <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-fast" class="status FAST" title="Priority processing (fast tier)" hidden>FAST</span><span id="task-title">Select a task</span></div>
           <div id="task-meta"><span class="meta-item">Running tasks are selected automatically</span></div>
         </div>
         <div id="header-actions">
@@ -715,6 +716,7 @@
     var jumpLatest = document.getElementById('jump-latest');
     var taskTitle = document.getElementById('task-title');
     var taskStatus = document.getElementById('task-status');
+    var taskFast = document.getElementById('task-fast');
     var taskMeta = document.getElementById('task-meta');
     var actionMenu = document.getElementById('action-menu');
     var actionsButton = document.getElementById('actions-button');
@@ -849,7 +851,6 @@
       if (job.heartbeatAt) parts.push('last activity ' + duration(now - Date.parse(job.heartbeatAt)) + ' ago');
       if (job.model) parts.push(job.model);
       if (job.effort) parts.push(job.effort);
-      if (job.fast) parts.push('fast');
       if (job.sandbox) parts.push(job.sandbox);
       if (job.diedReason) parts.push(job.diedReason);
       return parts.join(' \u00b7 ');
@@ -857,6 +858,13 @@
     function sessionFastJob(session, jobs) {
       if (!session || !session.threadId) return null;
       return (jobs || []).find(function (job) { return !!job.fast && job.threadId === session.threadId; }) || null;
+    }
+    function fastChip() {
+      var chip = document.createElement('span');
+      chip.className = 'status FAST';
+      chip.textContent = 'FAST';
+      chip.title = 'Priority processing (fast tier)';
+      return chip;
     }
     function taskFormBody(f) {
       const b = { cwd: String(f.cwd || '').trim(), prompt: String(f.prompt || '').trim() };
@@ -1050,6 +1058,7 @@
         badge.className = 'status ' + badgeStatus;
         badge.textContent = jobStatusLabel(job);
         top.appendChild(badge);
+        if (job.fast) top.appendChild(fastChip());
         var time = document.createElement('span');
         time.className = 'session-time';
         time.textContent = relativeTime(Date.parse(job.updatedAt || ''));
@@ -1137,6 +1146,7 @@
         badge.textContent = STATUS[badgeStatus].label;
         badge.title = waitReason(session) || STATUS[badgeStatus].help;
         top.appendChild(badge);
+        if (sessionFastJob(session, jobs)) top.appendChild(fastChip());
         if (unread.has(session.id)) {
           var marker = document.createElement('span');
           marker.className = 'unread';
@@ -1213,6 +1223,7 @@
       taskMeta.textContent = '';
       if (!session) {
         taskStatus.hidden = true;
+        taskFast.hidden = true;
         taskTitle.textContent = 'Select a task';
         var hint = document.createElement('span');
         hint.className = 'meta-item';
@@ -1232,6 +1243,7 @@
       taskStatus.className = 'status ' + headerStatus;
       taskStatus.textContent = STATUS[headerStatus].label;
       taskStatus.title = waitReason(session) || STATUS[headerStatus].help;
+      taskFast.hidden = !sessionFastJob(session, jobs);
       taskTitle.textContent = session.title || 'Untitled Codex task';
       taskTitle.title = session.title || '';
       var pluginSession = jobs.some(function (job) { return job.threadId && job.threadId === session.threadId; });
@@ -1410,6 +1422,7 @@
       jobModalMeta.textContent = '';
       jobModalMeta.appendChild(modalRow('Summary', job.summary || ''));
       jobModalMeta.appendChild(modalRow('Thread', job.threadId || '', true));
+      if (job.fast) jobModalMeta.appendChild(modalRow('Tier', 'fast (priority)'));
       jobModalResult.textContent = 'Loading job result\u2026';
       var resumable = !!job.threadId && (job.live === 'dead' || job.live === 'failed');
       jobModalResume.hidden = !resumable;
@@ -1427,6 +1440,7 @@
         jobModalMeta.textContent = '';
         jobModalMeta.appendChild(modalRow('Summary', detail.summary || ''));
         jobModalMeta.appendChild(modalRow('Thread', detail.threadId || '', true));
+        if (job.fast) jobModalMeta.appendChild(modalRow('Tier', 'fast (priority)'));
         jobModalResult.textContent = detail.rendered
           || [detail.errorMessage, detail.stderrTail].filter(Boolean).join('\n\n')
           || 'No rendered result is available.';

@@ -35,7 +35,7 @@ test("jobDetailLine includes phase, heartbeat age, effort/model and died reason"
   assert.ok(dead.includes("Codex auth expired"));
 });
 
-test("jobDetailLine includes fast for priority jobs", () => {
+test("jobDetailLine no longer includes fast text (chip renders it)", () => {
   const { jobDetailLine } = ctx();
-  assert.ok(jobDetailLine({ phase: "running", fast: true }, Date.now()).includes("fast"));
+  assert.ok(!jobDetailLine({ phase: "running", fast: true }, Date.now()).includes("fast"));
 });
