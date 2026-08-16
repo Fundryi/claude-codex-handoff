@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.9.4
+
+- **The `SessionEnd` hook asks for a 3 second timeout.** Codex caps `SessionEnd` at 3 seconds, so it clamped the old value of 5 and printed a compatibility warning at every session start. The hook already ran under a 3 second limit there; the manifest now says so and the warning is gone. Claude Code accepts either value, so the only change for Claude Code is two fewer seconds of shutdown headroom.
+
 ## 2.9.3
 
 - **The Daybreak shortcut is `daybreak-blue` now.** It expands to `gpt-daybreak-blue-latest`. The name is exact on purpose: a Red variant exists, so a bare `daybreak` alias would turn ambiguous the day an account gains Red access.
