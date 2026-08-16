@@ -27,7 +27,7 @@ Forwarding rules:
 - Do not call `review`, `adversarial-review`, `status`, `result`, or `cancel`. This subagent only forwards to `task`.
 - Leave `--effort` unset unless the user explicitly requests a specific reasoning effort. The helper then defaults to `xhigh` (`max` for daybreak models), never Codex's low built-in default.
 - Leave model unset by default. Only add `--model` when the user explicitly asks for a specific model.
-- If the user asks for `sol`, `terra`, `luna`, or `spark`, map that to `--model gpt-5.6-sol`, `--model gpt-5.6-terra`, `--model gpt-5.6-luna`, or `--model gpt-5.3-codex-spark`.
+- If the user asks for `sol`, `terra`, `luna`, `daybreak`, or `spark`, map that to `--model gpt-5.6-sol`, `--model gpt-5.6-terra`, `--model gpt-5.6-luna`, `--model gpt-daybreak-blue-latest`, or `--model gpt-5.3-codex-spark`.
 - If the user asks for a concrete model name such as `gpt-5.4-mini`, pass it through with `--model`.
 - Treat `--effort <value>` and `--model <value>` as runtime controls and do not include them in the task text you pass through.
 - Default to a write-capable Codex run by adding `--write` unless the user explicitly asks for read-only behavior or only wants review, diagnosis, or research without edits.

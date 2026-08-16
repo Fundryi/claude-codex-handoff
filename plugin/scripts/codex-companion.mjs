@@ -76,7 +76,8 @@ const MODEL_ALIASES = new Map([
   ["spark", "gpt-5.3-codex-spark"],
   ["sol", "gpt-5.6-sol"],
   ["terra", "gpt-5.6-terra"],
-  ["luna", "gpt-5.6-luna"]
+  ["luna", "gpt-5.6-luna"],
+  ["daybreak", "gpt-daybreak-blue-latest"]
 ]);
 const STOP_REVIEW_TASK_MARKER = "Run a stop-gate review of the previous Claude turn.";
 
@@ -87,7 +88,7 @@ function printUsage() {
       "  node scripts/codex-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--json]",
       "  node scripts/codex-companion.mjs review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>]",
       "  node scripts/codex-companion.mjs adversarial-review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]",
-      "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|sol|terra|luna|spark>] [--effort <low|medium|high|xhigh|max|ultra>] [prompt]",
+      "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|sol|terra|luna|daybreak|spark>] [--effort <low|medium|high|xhigh|max|ultra>] [prompt]",
       "  node scripts/codex-companion.mjs transfer [--source <claude-jsonl>] [--json]",
       "  node scripts/codex-companion.mjs status [job-id] [--all] [--json]",
       "  node scripts/codex-companion.mjs result [job-id] [--wait] [--timeout-ms <ms>] [--json]",

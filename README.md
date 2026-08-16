@@ -77,7 +77,9 @@ Recovery is always flag-only: the dashboard marks, you click. It never resumes o
 
 When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo. If you set no effort, the plugin applies `xhigh` (`max` for daybreak models) instead of Codex's own low default.
 
-**Model shortcuts:** `--model sol`, `terra`, `luna`, and `spark` expand to `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and `gpt-5.3-codex-spark`. Leave the model unset to get Codex's default (`gpt-5.6-sol`). `max` works on every GPT-5.6 model; `ultra` needs `sol` or `terra`.
+**Model shortcuts:** `--model sol`, `terra`, `luna`, `daybreak`, and `spark` expand to `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-daybreak-blue-latest`, and `gpt-5.3-codex-spark`. Leave the model unset to get Codex's default (`gpt-5.6-sol`). `max` works on every GPT-5.6 model; `ultra` needs `sol` or `terra`.
+
+`daybreak` is Daybreak Blue, the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work; unset effort defaults to `max` there instead of `xhigh`.
 
 `--fast` is orthogonal: it buys priority processing (faster turnaround, more quota) at whatever effort you chose, and never changes the effort tier. Use it when you are actively waiting on the result; it is always opt-in, never the default.
 

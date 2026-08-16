@@ -48,6 +48,7 @@ test("model aliases cover sol, terra, luna, spark", () => {
   assert.match(src, /\["sol", "gpt-5\.6-sol"\]/);
   assert.match(src, /\["terra", "gpt-5\.6-terra"\]/);
   assert.match(src, /\["luna", "gpt-5\.6-luna"\]/);
+  assert.match(src, /\["daybreak", "gpt-daybreak-blue-latest"\]/);
   assert.match(src, /\["spark", "gpt-5\.3-codex-spark"\]/);
 });
 
