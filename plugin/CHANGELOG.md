@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.9.0
+
+Model and effort handling now matches what Codex actually ships, and healthy jobs stop looking stuck.
+
+- **Model shortcuts for the GPT-5.6 family.** `--model sol`, `terra`, and `luna` map to `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`; `spark` still maps to `gpt-5.3-codex-spark`. The mapping lives in the companion CLI, so it works from `/codex:rescue`, the rescue agent, and the dashboard alike.
+- **The effort list is real now.** `none` and `minimal` were never valid Codex efforts and are gone. `max` and `ultra` are in: every current model accepts `max` except the pre-5.6 line, and `ultra` needs `gpt-5.6-sol` or `gpt-5.6-terra`. The list was verified against the installed Codex CLI (0.147.0) through its own app-server `model/list`.
+- **Unset effort no longer means low effort.** When a run has no `--effort`, the companion applies `xhigh` (`max` for daybreak models) instead of falling through to Codex's built-in default, which is `low` on the default model `gpt-5.6-sol`. A handoff you did not tune now runs smart, not cheap; `max` and `ultra` stay opt-in.
+- **Healthy jobs stop reading as possibly-stuck.** The heartbeat used to advance only on progress events, and a long quiet thinking phase emits none, so a live run drifted into "possibly-stuck" after five minutes. The worker now also beats on a 30-second timer for the whole run. A stale heartbeat with a live process finally means what it says: the worker itself is wedged.
+- **Home gets a "Needs attention" section.** Possibly-stuck jobs, dead-but-resumable jobs, and stale sessions now sit in their own amber-bordered section at the top of Home instead of blending into the active grid. Home cards also gained the same right-click menu as the session and job rows, so you can resume, cancel, or copy commands straight from the overview.
+
 ## 2.8.0
 
 Waiting on a long handoff costs nothing now, and the viewer got a Home page.
