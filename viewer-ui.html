@@ -197,6 +197,7 @@
       min-width: 0;
     }
     .home-card:hover, .home-finished:hover { background: var(--hover); }
+    .home-card.attention { border-color: #f0a254; }
     .home-finished { display: block; width: 100%; margin-bottom: 6px; }
     .history-caption {
       padding: 10px 12px 4px;
@@ -913,6 +914,7 @@
       return chip;
     }
     function homeCards(sessions, jobs, now) {
+      var attention = [];
       var active = [];
       var finished = [];
       var byThread = {};
@@ -926,9 +928,11 @@
           tokens: 0, detail: jobDetailLine(job, now),
           lastMs: Date.parse(job.heartbeatAt || job.updatedAt || '') || 0
         };
-        var isLive = job.live === 'working' || job.live === 'possibly-stuck';
+        var needsEyes = job.live === 'possibly-stuck' || job.live === 'dead';
+        var isLive = job.live === 'working' || needsEyes;
         if (card.threadId && (isLive || !byThread[card.threadId])) byThread[card.threadId] = card;
-        if (isLive) active.push(card);
+        if (needsEyes) attention.push(card);
+        else if (isLive) active.push(card);
         else finished.push(card);
       });
       (sessions || []).forEach(function (session) {
@@ -949,13 +953,15 @@
           tokens: session.tokensUsed || 0, detail: session.lastEvent || '',
           lastMs: session.lastGrow || 0
         };
-        if (session.status === 'LIVE' || session.status === 'IDLE' || session.status === 'STALE') active.push(card);
+        if (session.status === 'STALE') attention.push(card);
+        else if (session.status === 'LIVE' || session.status === 'IDLE') active.push(card);
         else finished.push(card);
       });
       function newestFirst(a, b) { return b.lastMs - a.lastMs; }
+      attention.sort(newestFirst);
       active.sort(newestFirst);
       finished.sort(newestFirst);
-      return { active: active, finished: finished.slice(0, 5) };
+      return { attention: attention, active: active, finished: finished.slice(0, 5) };
     }
     function contextMenuItems(item) {
       var items = [];
@@ -1505,6 +1511,15 @@
       meta.textContent = parts.filter(Boolean).join(' · ');
       el.append(top, title, project, meta);
       el.addEventListener('click', function () { openHomeCard(card); });
+      el.addEventListener('contextmenu', function (event) {
+        if (card.type === 'job') {
+          var job = jobs.find(function (entry) { return entry.id === card.id; });
+          if (job) openContextMenu(event, { type: 'job', job: job });
+          return;
+        }
+        var session = sessions.find(function (s) { return s.id === card.sessionId; });
+        if (session) openContextMenu(event, { type: 'session', session: session, dismissed: isDismissed(session.id) });
+      });
       return el;
     }
 
@@ -1523,7 +1538,7 @@
       // same shape as renderJobList: stable card fields plus a 10s bucket so relative times still refresh
       var signature = JSON.stringify([
         Math.floor(Date.now() / 10000),
-        data.active.concat(data.finished).map(function (card) {
+        data.attention.concat(data.active, data.finished).map(function (card) {
           return [card.id, card.sessionId, card.status, card.live, card.title, card.project,
             card.fast, card.model, card.effort, card.tokens, card.lastMs];
         })
@@ -1533,6 +1548,20 @@
       feedInner.textContent = '';
       var wrap = document.createElement('div');
       wrap.id = 'home-view';
+      if (data.attention.length) {
+        var attnHeading = document.createElement('div');
+        attnHeading.className = 'home-heading';
+        attnHeading.textContent = 'Needs attention (' + data.attention.length + ')';
+        wrap.appendChild(attnHeading);
+        var attnGrid = document.createElement('div');
+        attnGrid.className = 'home-grid';
+        data.attention.forEach(function (card) {
+          var el = homeCardElement(card, true);
+          el.classList.add('attention');
+          attnGrid.appendChild(el);
+        });
+        wrap.appendChild(attnGrid);
+      }
       var heading = document.createElement('div');
       heading.className = 'home-heading';
       heading.textContent = data.active.length ? 'Active now (' + data.active.length + ')' : 'Nothing running right now';
@@ -1724,8 +1753,8 @@
 
     function effortSelect() {
       return controlSelect([
-        ['', 'Default'], ['none', 'None'], ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'],
-        ['high', 'High'], ['xhigh', 'XHigh']
+        ['', 'Default (xhigh)'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'],
+        ['xhigh', 'XHigh'], ['max', 'Max'], ['ultra', 'Ultra']
       ]);
     }
 

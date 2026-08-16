@@ -67,7 +67,7 @@ test("a resumed thread's session merges onto the working job card, not the compl
   assert.equal(workingFirst.finished[0].tokens, 0);
 });
 
-test("stuck sessions count as active; archived are dropped; finished capped at 5", () => {
+test("stuck sessions go to attention; archived are dropped; finished capped at 5", () => {
   const { homeCards } = ctx();
   const sessions = [
     { id: "stuck", status: "STALE", title: "Stuck", cwd: "", lastGrow: NOW },
@@ -75,7 +75,21 @@ test("stuck sessions count as active; archived are dropped; finished capped at 5
   ];
   const jobs = [];
   for (let i = 0; i < 8; i++) jobs.push({ id: "d" + i, live: "completed", status: "completed", title: "x", workspaceRoot: "", updatedAt: new Date(NOW - i * 1000).toISOString() });
-  const { active, finished } = homeCards(sessions, jobs, NOW);
-  assert.deepEqual(plain(active.map(c => c.id)), ["stuck"]);
+  const { attention, active, finished } = homeCards(sessions, jobs, NOW);
+  assert.deepEqual(plain(attention.map(c => c.id)), ["stuck"]);
+  assert.equal(active.length, 0);
   assert.equal(finished.length, 5);
+});
+
+test("possibly-stuck and dead jobs go to attention, working jobs stay active", () => {
+  const { homeCards } = ctx();
+  const jobs = [
+    { id: "ok", live: "working", status: "running", title: "Fine", workspaceRoot: "", heartbeatAt: new Date(NOW).toISOString() },
+    { id: "quiet", live: "possibly-stuck", status: "running", title: "Wedged", workspaceRoot: "", heartbeatAt: new Date(NOW - 600000).toISOString() },
+    { id: "gone", live: "dead", status: "running", title: "Died", workspaceRoot: "", updatedAt: new Date(NOW - 1000).toISOString() }
+  ];
+  const { attention, active, finished } = homeCards([], jobs, NOW);
+  assert.deepEqual(plain(attention.map(c => c.id).sort()), ["gone", "quiet"]);
+  assert.deepEqual(plain(active.map(c => c.id)), ["ok"]);
+  assert.equal(finished.length, 0);
 });
