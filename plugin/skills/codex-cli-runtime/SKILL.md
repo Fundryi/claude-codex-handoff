@@ -18,9 +18,9 @@ Execution rules:
 - Use `task` for every rescue request, including diagnosis, planning, research, and explicit fix requests.
 - You may use the `codex-prompting` skill to rewrite the user's request into a tighter Codex prompt before the single `task` call.
 - That prompt drafting is the only Claude-side work allowed. Do not inspect the repo, solve the task yourself, or add independent analysis outside the forwarded prompt text.
-- Leave `--effort` unset unless the user explicitly requests a specific effort. The helper then defaults to `xhigh` (`max` for daybreak models), never Codex's low built-in default.
+- Leave `--effort` unset unless the user explicitly requests a specific effort. The helper then defaults to `xhigh`, never Codex's low built-in default. Use `max` or `ultra` only when the user asks for them.
 - Leave model unset by default. Add `--model` only when the user explicitly asks for one.
-- Model shortcuts: `sol` → `--model gpt-5.6-sol`, `terra` → `--model gpt-5.6-terra`, `luna` → `--model gpt-5.6-luna`, `daybreak` → `--model gpt-daybreak-blue-latest`, `spark` → `--model gpt-5.3-codex-spark`. Daybreak Blue is the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work. (A Red variant exists but this account has no access to it.)
+- Model shortcuts: `sol` → `--model gpt-5.6-sol`, `terra` → `--model gpt-5.6-terra`, `luna` → `--model gpt-5.6-luna`, `daybreak-blue` → `--model gpt-daybreak-blue-latest`, `spark` → `--model gpt-5.3-codex-spark`. Daybreak Blue is the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work. Daybreak access is verification-gated per account; the helper checks availability before starting the run and fails fast with a clear message if the account has no access, so do not pre-test access yourself. (A Red variant exists but is not available here.)
 - Default to a write-capable Codex run by adding `--write` unless the user explicitly asks for read-only behavior or only wants review, diagnosis, or research without edits.
 
 Command selection:

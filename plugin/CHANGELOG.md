@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.9.3
+
+- **The Daybreak shortcut is `daybreak-blue` now.** It expands to `gpt-daybreak-blue-latest`. The name is exact on purpose: a Red variant exists, so a bare `daybreak` alias would turn ambiguous the day an account gains Red access.
+- **Daybreak runs preflight account access.** Daybreak models are verification-gated per account. Before starting a Daybreak turn, the worker asks the app-server's `model/list`; without access the run fails immediately with a clear message instead of an opaque API error mid-run.
+- **The default effort is `xhigh` everywhere, Daybreak included.** The `max` default for Daybreak from 2.9.0 is gone; `max` and `ultra` are only ever used when asked for.
+
 ## 2.9.2
 
 - **`daybreak` model shortcut.** `--model daybreak` expands to `gpt-daybreak-blue-latest` (Daybreak Blue), the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis, for security reviews, audits, vulnerability hunting, and reversing. It already got the `max` default effort; now it has the shortcut, and the skill and README explain what it is for.

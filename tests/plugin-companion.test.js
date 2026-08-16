@@ -33,13 +33,10 @@ test("job records carry model, effort, sandbox", () => {
 });
 
 // Codex's built-in default effort is low on gpt-5.6-sol; an unset --effort must
-// never fall through to it. See defaultReasoningEffort in codex-companion.mjs.
-test("unset effort falls back to xhigh, and daybreak models to max", () => {
-  const body = functionBody("function defaultReasoningEffort(");
-  assert.match(body, /gpt-daybreak/);
-  assert.match(body, /return "max";/);
-  assert.match(body, /return "xhigh";/);
-  assert.match(src, /normalizeReasoningEffort\(options\.effort\) \?\? defaultReasoningEffort\(model\)/);
+// never fall through to it. max and ultra stay opt-in.
+test("unset effort falls back to xhigh", () => {
+  assert.match(src, /DEFAULT_REASONING_EFFORT = "xhigh"/);
+  assert.match(src, /normalizeReasoningEffort\(options\.effort\) \?\? DEFAULT_REASONING_EFFORT/);
   assert.equal(src.includes('"minimal"'), false, "minimal is not a real Codex effort");
   assert.equal(/VALID_REASONING_EFFORTS = new Set\(\[[^\]]*"none"/.test(src), false, "none is not a real Codex effort");
 });
@@ -48,7 +45,7 @@ test("model aliases cover sol, terra, luna, spark", () => {
   assert.match(src, /\["sol", "gpt-5\.6-sol"\]/);
   assert.match(src, /\["terra", "gpt-5\.6-terra"\]/);
   assert.match(src, /\["luna", "gpt-5\.6-luna"\]/);
-  assert.match(src, /\["daybreak", "gpt-daybreak-blue-latest"\]/);
+  assert.match(src, /\["daybreak-blue", "gpt-daybreak-blue-latest"\]/);
   assert.match(src, /\["spark", "gpt-5\.3-codex-spark"\]/);
 });
 

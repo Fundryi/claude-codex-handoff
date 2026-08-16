@@ -1162,6 +1162,18 @@ export async function runAppServerTurn(cwd, options = {}) {
   return withAppServer(cwd, async (client) => {
     let threadId;
 
+    // Daybreak models are verification-gated per account. Fail fast with a
+    // clear message instead of letting the turn die on an opaque API error.
+    // If model/list itself fails, skip the check and let the run proceed.
+    if (typeof options.model === "string" && options.model.startsWith("gpt-daybreak")) {
+      const models = await client.request("model/list", {}).catch(() => null);
+      if (models?.data && !models.data.some((m) => m.id === options.model || m.model === options.model)) {
+        throw new Error(
+          `Model ${options.model} is not available to this Codex account (Daybreak access is verification-gated). Use another model or leave the model unset.`
+        );
+      }
+    }
+
     if (options.resumeThreadId) {
       emitProgress(options.onProgress, `Resuming thread ${options.resumeThreadId}.`, "starting");
       const response = await resumeThread(client, options.resumeThreadId, cwd, {

@@ -75,11 +75,11 @@ Recovery is always flag-only: the dashboard marks, you click. It never resumes o
 | `max` | The hardest problems (GPT-5.6 models only) |
 | `ultra` | Max reasoning plus automatic task delegation (`gpt-5.6-sol` / `gpt-5.6-terra` only) |
 
-When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo. If you set no effort, the plugin applies `xhigh` (`max` for daybreak models) instead of Codex's own low default.
+When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo. If you set no effort, the plugin applies `xhigh` instead of Codex's own low default. `max` and `ultra` are never applied on their own; ask for them.
 
-**Model shortcuts:** `--model sol`, `terra`, `luna`, `daybreak`, and `spark` expand to `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-daybreak-blue-latest`, and `gpt-5.3-codex-spark`. Leave the model unset to get Codex's default (`gpt-5.6-sol`). `max` works on every GPT-5.6 model; `ultra` needs `sol` or `terra`.
+**Model shortcuts:** `--model sol`, `terra`, `luna`, `daybreak-blue`, and `spark` expand to `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-daybreak-blue-latest`, and `gpt-5.3-codex-spark`. Leave the model unset to get Codex's default (`gpt-5.6-sol`). `max` works on every GPT-5.6 model; `ultra` needs `sol` or `terra`.
 
-`daybreak` is Daybreak Blue, the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work; unset effort defaults to `max` there instead of `xhigh`.
+`daybreak-blue` is Daybreak Blue, the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work. Daybreak access is verification-gated per account, so the plugin checks availability before starting a Daybreak run; without access the run fails immediately with a clear message instead of an opaque API error.
 
 `--fast` is orthogonal: it buys priority processing (faster turnaround, more quota) at whatever effort you chose, and never changes the effort tier. Use it when you are actively waiting on the result; it is always opt-in, never the default.
 
