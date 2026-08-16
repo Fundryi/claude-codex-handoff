@@ -45,7 +45,7 @@ The dashboard's JOBS tab classifies every job from ground truth (real PID + hear
 | Badge | Means | You do |
 |---|---|---|
 | `RUNNING` | Heartbeat fresh, or the process is alive on a long command | Nothing. Long tasks are never misflagged. |
-| `QUIET` | Process alive but silent for 5+ minutes | Peek at it. Maybe it's thinking, maybe it's wedged. |
+| `QUIET` | Process alive but its heartbeat stopped for 5+ minutes | Peek at it. The worker beats on a timer even while Codex thinks silently, so a stopped heartbeat means the worker itself is likely wedged. |
 | `DEAD` | Process gone before finishing | Click **Resume**, optionally with more effort or another model. |
 | `FAILED` | Died with a known cause | Read the reason (broken sandbox, expired `codex login`, rate limit) and its fix hint. |
 
@@ -76,6 +76,8 @@ Recovery is always flag-only: the dashboard marks, you click. It never resumes o
 | `ultra` | Max reasoning plus automatic task delegation (`gpt-5.6-sol` / `gpt-5.6-terra` only) |
 
 When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo. If you set no effort, the plugin applies `xhigh` (`max` for daybreak models) instead of Codex's own low default.
+
+**Model shortcuts:** `--model sol`, `terra`, `luna`, and `spark` expand to `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and `gpt-5.3-codex-spark`. Leave the model unset to get Codex's default (`gpt-5.6-sol`). `max` works on every GPT-5.6 model; `ultra` needs `sol` or `terra`.
 
 `--fast` is orthogonal: it buys priority processing (faster turnaround, more quota) at whatever effort you chose, and never changes the effort tier. Use it when you are actively waiting on the result; it is always opt-in, never the default.
 
