@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.9.1
+
+- **The prompting skill is now `codex-prompting`.** The old folder and skill name `gpt-5-4-prompting` claimed one model version; the guidance covers Codex across GPT-5.4 through the GPT-5.6 family, so the name now says what it is. All internal references moved with it. If you invoked it by its old internal name anywhere, use `codex:codex-prompting`.
+
 ## 2.9.0
 
 Model and effort handling now matches what Codex actually ships, and healthy jobs stop looking stuck.
