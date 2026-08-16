@@ -68,20 +68,21 @@ Recovery is always flag-only: the dashboard marks, you click. It never resumes o
 
 | Effort | Use for |
 |---|---|
-| `none` / `minimal` | Trivial one-liners, mechanical renames |
-| `low` | Small well-specified fixes, boilerplate |
+| `low` | Trivial one-liners, mechanical renames, boilerplate |
 | `medium` | Quick tweaks; simple browser-testing checklists |
 | `high` | Browser testing and live verification runs, larger mechanical work |
 | `xhigh` | The everyday default: bugfixes, features, reviews, designs, root-cause hunts |
+| `max` | The hardest problems (GPT-5.6 models only) |
+| `ultra` | Max reasoning plus automatic task delegation (`gpt-5.6-sol` / `gpt-5.6-terra` only) |
 
-When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo.
+When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo. If you set no effort, the plugin applies `xhigh` (`max` for daybreak models) instead of Codex's own low default.
 
 `--fast` is orthogonal: it buys priority processing (faster turnaround, more quota) at whatever effort you chose, and never changes the effort tier. Use it when you are actively waiting on the result; it is always opt-in, never the default.
 
 **In the browser** (`localhost:8377`):
 
 - every Codex session on the machine, streaming live, however it was started
-- start new tasks and reviews: project, prompt, effort (`none` to `xhigh`), model, write access, sandbox, fast mode
+- start new tasks and reviews: project, prompt, effort (`low` to `ultra`), model, write access, sandbox, fast mode
 - one-click resume and cancel, with in-app confirmation
 - one job store shared with the CLI, so `/codex:status` and the JOBS tab always agree
 - search across all recorded sessions, effort/sandbox/token display, archived sessions, unread markers, saved layout

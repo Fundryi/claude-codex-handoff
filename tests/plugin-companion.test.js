@@ -32,6 +32,25 @@ test("job records carry model, effort, sandbox", () => {
   assert.match(src, /model,\s*\n?\s*effort,/);
 });
 
+// Codex's built-in default effort is low on gpt-5.6-sol; an unset --effort must
+// never fall through to it. See defaultReasoningEffort in codex-companion.mjs.
+test("unset effort falls back to xhigh, and daybreak models to max", () => {
+  const body = functionBody("function defaultReasoningEffort(");
+  assert.match(body, /gpt-daybreak/);
+  assert.match(body, /return "max";/);
+  assert.match(body, /return "xhigh";/);
+  assert.match(src, /normalizeReasoningEffort\(options\.effort\) \?\? defaultReasoningEffort\(model\)/);
+  assert.equal(src.includes('"minimal"'), false, "minimal is not a real Codex effort");
+  assert.equal(/VALID_REASONING_EFFORTS = new Set\(\[[^\]]*"none"/.test(src), false, "none is not a real Codex effort");
+});
+
+test("model aliases cover sol, terra, luna, spark", () => {
+  assert.match(src, /\["sol", "gpt-5\.6-sol"\]/);
+  assert.match(src, /\["terra", "gpt-5\.6-terra"\]/);
+  assert.match(src, /\["luna", "gpt-5\.6-luna"\]/);
+  assert.match(src, /\["spark", "gpt-5\.3-codex-spark"\]/);
+});
+
 test("task and review commands accept --fast", () => {
   assert.match(src, /async function handleTask\(argv\)[\s\S]*?booleanOptions:\s*\[[^\]]*"fast"/);
   assert.match(src, /async function handleReviewCommand\(argv, config\)[\s\S]*?booleanOptions:\s*\[[^\]]*"fast"/);

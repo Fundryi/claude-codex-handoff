@@ -71,8 +71,13 @@ import {
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REVIEW_SCHEMA = path.join(ROOT_DIR, "schemas", "review-output.schema.json");
-const VALID_REASONING_EFFORTS = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
-const MODEL_ALIASES = new Map([["spark", "gpt-5.3-codex-spark"]]);
+const VALID_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
+const MODEL_ALIASES = new Map([
+  ["spark", "gpt-5.3-codex-spark"],
+  ["sol", "gpt-5.6-sol"],
+  ["terra", "gpt-5.6-terra"],
+  ["luna", "gpt-5.6-luna"]
+]);
 const STOP_REVIEW_TASK_MARKER = "Run a stop-gate review of the previous Claude turn.";
 
 function printUsage() {
@@ -82,7 +87,7 @@ function printUsage() {
       "  node scripts/codex-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--json]",
       "  node scripts/codex-companion.mjs review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>]",
       "  node scripts/codex-companion.mjs adversarial-review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]",
-      "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|spark>] [--effort <none|minimal|low|medium|high|xhigh>] [prompt]",
+      "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|sol|terra|luna|spark>] [--effort <low|medium|high|xhigh|max|ultra>] [prompt]",
       "  node scripts/codex-companion.mjs transfer [--source <claude-jsonl>] [--json]",
       "  node scripts/codex-companion.mjs status [job-id] [--all] [--json]",
       "  node scripts/codex-companion.mjs result [job-id] [--wait] [--timeout-ms <ms>] [--json]",
@@ -124,10 +129,20 @@ function normalizeReasoningEffort(effort) {
   }
   if (!VALID_REASONING_EFFORTS.has(normalized)) {
     throw new Error(
-      `Unsupported reasoning effort "${effort}". Use one of: none, minimal, low, medium, high, xhigh.`
+      `Unsupported reasoning effort "${effort}". Use one of: low, medium, high, xhigh, max, ultra.`
     );
   }
   return normalized;
+}
+
+// Codex's own defaults are too low for handoffs (gpt-5.6-sol defaults to
+// "low"). Every model here supports xhigh; daybreak is the security-analysis
+// specialty model, where depth matters most, so it gets max.
+function defaultReasoningEffort(model) {
+  if (typeof model === "string" && model.startsWith("gpt-daybreak")) {
+    return "max";
+  }
+  return "xhigh";
 }
 
 function normalizeArgv(argv) {
@@ -842,7 +857,7 @@ async function handleTask(argv) {
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
   const model = normalizeRequestedModel(options.model);
-  const effort = normalizeReasoningEffort(options.effort);
+  const effort = normalizeReasoningEffort(options.effort) ?? defaultReasoningEffort(model);
   const prompt = readTaskPrompt(cwd, options, positionals);
 
   const resumeLast = Boolean(options["resume-last"] || options.resume);
