@@ -8,8 +8,9 @@ export function classifyJobLiveness(job, pidIsAlive, now) {
   if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") return job.status;
   if (!pidIsAlive) return "dead";
   const beatMs = job.heartbeatAt ? now - Date.parse(job.heartbeatAt) : Infinity;
-  // ponytail: heartbeat freshness only; if pid is alive we never flag before
-  // STUCK_AFTER_MS, so long-running commands are not misreported as stuck.
+  // The worker beats on a 30s timer while a turn runs (tracked-jobs.mjs), so a
+  // stale heartbeat with a live pid means the worker itself is wedged - long
+  // quiet thinking no longer trips this.
   return beatMs < STUCK_AFTER_MS ? "working" : "possibly-stuck";
 }
 

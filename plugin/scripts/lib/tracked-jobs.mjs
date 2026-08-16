@@ -178,6 +178,24 @@ export async function runTrackedJob(job, runner, options = {}) {
   writeJobFile(job.workspaceRoot, job.id, runningRecord);
   upsertJob(job.workspaceRoot, runningRecord);
 
+  // Timer heartbeat: progress events go quiet during long Codex thinking, and a
+  // stale heartbeat made healthy jobs read as possibly-stuck. Beating on a timer
+  // makes the heartbeat mean "this worker is alive and responsive", so
+  // possibly-stuck only fires when the worker itself is actually wedged.
+  const beat = setInterval(() => {
+    const heartbeatAt = nowIso();
+    try {
+      upsertJob(job.workspaceRoot, { id: job.id, heartbeatAt });
+      const jobFile = resolveJobFile(job.workspaceRoot, job.id);
+      if (fs.existsSync(jobFile)) {
+        writeJobFile(job.workspaceRoot, job.id, { ...readJobFile(jobFile), heartbeatAt });
+      }
+    } catch {
+      // state file busy (viewer read race) - the next beat will land
+    }
+  }, options.heartbeatMs ?? 30_000);
+  beat.unref?.();
+
   try {
     const execution = await runner();
     // interrupted = the run was stopped via native turn/interrupt after a cancel
@@ -250,5 +268,7 @@ export async function runTrackedJob(job, runner, options = {}) {
     });
     notifyViewer({ jobId: job.id, status: "failed", title: job.title ?? "", workspaceRoot: job.workspaceRoot });
     throw error;
+  } finally {
+    clearInterval(beat);
   }
 }

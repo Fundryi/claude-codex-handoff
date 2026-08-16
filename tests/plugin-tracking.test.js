@@ -31,3 +31,25 @@ test("progress updater writes a throttled heartbeat", async () => {
   assert.ok(Date.now() - Date.parse(job.heartbeatAt) < 5000);
   delete process.env.CODEX_COMPANION_STATE_ROOT;
 });
+
+// Long Codex thinking emits no progress events; without the timer beat a healthy
+// run went possibly-stuck after STUCK_AFTER_MS and looked frozen in the viewer.
+test("runTrackedJob beats on a timer even when the runner emits no progress", async () => {
+  const os = require("node:os");
+  const fs = require("node:fs");
+  process.env.CODEX_COMPANION_STATE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "clv-hb2-"));
+  const { runTrackedJob } = await import(mjs("tracked-jobs.mjs"));
+  const { listJobs } = await import(mjs("state.mjs"));
+  const ws = process.cwd();
+  const job = { id: "job-hb-2", workspaceRoot: ws, title: "Quiet task" };
+  await runTrackedJob(
+    job,
+    () => new Promise((resolve) => setTimeout(() => resolve({
+      exitStatus: 0, threadId: "t", turnId: "u", payload: {}, rendered: "", summary: "ok"
+    }), 150)),
+    { heartbeatMs: 25 }
+  );
+  const stored = listJobs(ws).find((j) => j.id === "job-hb-2");
+  assert.ok(stored.heartbeatAt, "the timer must write heartbeatAt with zero progress events");
+  delete process.env.CODEX_COMPANION_STATE_ROOT;
+});
