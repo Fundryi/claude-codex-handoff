@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.5.0";
+const APP_VERSION = "2.11.0";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 function parseFlags(argv) {
   const flags = { cmd: null, host: null, tunnel: false, tunnelToken: null, token: null, flagArgv: [] };
@@ -111,7 +111,6 @@ const SESSIONS_DIR = path.join(CODEX_HOME, "sessions");
 const ARCHIVED_DIR = path.join(CODEX_HOME, "archived_sessions");
 const POLL_MS = 1000;          // how often we check files for growth
 const LIVE_WINDOW_MS = 20000;  // file grew within this window => LIVE
-const STALE_AFTER_MS = 10 * 60 * 1000; // quiet this long without task_complete => STALE
 const MAX_SESSIONS = 40;       // most recent sessions to track
 const MAX_EVENTS_KEPT = 500;   // per-session event ring buffer
 
@@ -159,7 +158,8 @@ function simplify(line) {
 
   // session metadata
   if (t === "session_meta" || p.cwd && p.id && !p.type) {
-    return { kind: "meta", ts, cwd: p.cwd || "", id: p.id || "", model: p.model || (p.turn_context && p.turn_context.model) || "", instructions: undefined };
+    return { kind: "meta", ts, cwd: p.cwd || "", id: p.id || "", model: p.model || (p.turn_context && p.turn_context.model) || "",
+      parentThreadId: p.parent_thread_id || "", agentNickname: p.agent_nickname || "", instructions: undefined };
   }
   // event_msg wrapper (agent messages, token counts, etc.)
   if (t === "event_msg") {
@@ -181,11 +181,13 @@ function simplify(line) {
     const it = p.type || "";
     if (it === "message") {
       const role = p.role || "";
-      // user-role response_items are either injected context dumps (plugin lists,
-      // env blocks) or duplicates of event_msg user_message - skip them
-      if (role === "user") return null;
       const text = (p.content || []).map(c => c.text || c.input_text || c.output_text || "").join("");
       if (!text.trim()) return null;
+      // Codex 0.153 records the prompt only here (no event_msg user_message any
+      // more). Injected context dumps start with a <tag>; hook output and system
+      // blocks arrive as role developer. Both are internal, not speech.
+      if (role === "user") return text.trimStart().startsWith("<") ? { kind: "user", ts, text, internal: true } : { kind: "user", ts, text };
+      if (role === "developer") return { kind: "agent", ts, text, internal: true };
       return { kind: "agent", ts, text };
     }
     if (it === "function_call") {
@@ -228,6 +230,17 @@ function simplify(line) {
   return null;
 }
 
+// Session title from a prompt: the first line that is not an XML tag and not one
+// of the routing lines a rescue prompt opens with. Text after "Task:" wins. Same
+// rule as taskTitleFromPrompt in the companion, kept in sync by hand.
+function promptTitle(text) {
+  const line = String(text || "").split("\n").map(l => l.trim())
+    .find(l => l && !l.startsWith("<") && !/^(dispatch flags|binding contract)\s*:/i.test(l));
+  if (!line) return "";
+  const task = line.match(/\btask\s*:\s*(.+)$/i);
+  return (task ? task[1] : line).slice(0, 100);
+}
+
 // ---------------- metadata search index (all sessions, not just top-40) ----------------
 function indexEntry(file) {
   let st;
@@ -254,11 +267,9 @@ function indexEntry(file) {
       if (!ev) continue;
       if (ev.kind === "meta") {
         if (ev.cwd) entry.cwd = ev.cwd;
-        if (ev.id) entry.threadId = ev.id;
-      } else if (ev.kind === "user" && !entry.title) {
-        const first = String(ev.text).split("\n").map(l => l.trim())
-          .find(l => l && !l.startsWith("<") && !l.startsWith("</"));
-        if (first) entry.title = first.slice(0, 100);
+        if (ev.id && !entry.threadId) entry.threadId = ev.id;
+      } else if (ev.kind === "user" && !ev.internal && !entry.title) {
+        entry.title = promptTitle(ev.text);
       }
       if (entry.title && entry.threadId && entry.cwd) break;
     }
@@ -320,15 +331,15 @@ function ingest(file) {
       if (ev.effort) s.meta.effort = ev.effort;
       if (ev.sandbox) s.meta.sandbox = ev.sandbox;
       if (ev.tokens) s.meta.tokens = ev.tokens;
-      if (ev.id) s.meta.threadId = ev.id;
+      // First session_meta wins. A child agent's rollout repeats the parent's
+      // session_meta after its own; taking the last one made the child carry the
+      // parent's thread id and become its own parent.
+      if (ev.id && !s.meta.threadId) s.meta.threadId = ev.id;
+      if (ev.parentThreadId && !s.meta.parentThreadId) s.meta.parentThreadId = ev.parentThreadId;
+      if (ev.agentNickname && !s.meta.agentNickname) s.meta.agentNickname = ev.agentNickname;
       continue;
     }
-    if (ev.kind === "user" && !s.meta.title) {
-      // first line that looks like an actual prompt - skip injected <context> tag lines
-      const line = String(ev.text).split("\n").map(l => l.trim())
-        .find(l => l && !l.startsWith("<") && !l.startsWith("</"));
-      if (line) s.meta.title = line.slice(0, 100);
-    }
+    if (ev.kind === "user" && !ev.internal && !s.meta.title) s.meta.title = promptTitle(ev.text);
     s.events.push(ev);
     fresh.push(ev);
     if (s.events.length > MAX_EVENTS_KEPT) s.events.splice(0, s.events.length - MAX_EVENTS_KEPT);
@@ -348,21 +359,24 @@ function ingest(file) {
 function sessionSummary(s, threadJobStatus) {
   // LIVE: file is growing, or the thread's companion job process is alive with
   // a fresh heartbeat (long thinking writes nothing to the rollout). DONE: wrote
-  // task_complete. STALE: quiet >10min and never completed, or the job process
-  // died without completing. IDLE: quiet but recent, no job evidence either way.
+  // task_complete. STALE: only with job evidence - the job process died or its
+  // heartbeat stopped. A quiet session with no job is an interactive window the
+  // user left open, not a stuck handoff, so it stays IDLE however long it sits.
   // STOPPED: quiet because the companion job for this thread was cancelled.
   const quiet = Date.now() - s.lastGrow;
   const jobLive = threadJobStatus ? threadJobStatus.get(s.meta.threadId) : undefined;
   let status = quiet < LIVE_WINDOW_MS ? "LIVE"
     : s.events.some(e => e.kind === "done") ? "DONE"
     : jobLive === "working" ? "LIVE"
-    : jobLive === "dead" ? "STALE"
-    : quiet < STALE_AFTER_MS ? "IDLE" : "STALE";
+    : jobLive === "dead" || jobLive === "possibly-stuck" ? "STALE"
+    : "IDLE";
   if ((status === "IDLE" || status === "STALE") && jobLive === "cancelled") status = "STOPPED";
   const last = s.events[s.events.length - 1];
   return {
     id: s.id,
     threadId: s.meta.threadId || "",
+    parentThreadId: s.meta.parentThreadId || "",
+    agentNickname: s.meta.agentNickname || "",
     title: s.meta.title || "",
     cwd: s.meta.cwd || "",
     model: s.meta.model || "",

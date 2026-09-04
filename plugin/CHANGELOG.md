@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.11.0
+
+Every run has a readable name, only real handoffs can be stuck, hook noise stays out of the feed, and Codex child agents show under their parent.
+
+- **Child agents show under their parent.** When Codex spawns agents, each one writes its own rollout with a parent thread id and a nickname. The dashboard now nests those sessions under the parent card with the nickname as a chip, counts them on the parent ("2 agents"), and folds them into the parent's Home card. A finished job records the agents it used, and the job line in the dashboard lists them.
+- **Jobs get a real title.** Every job used to be called "Codex Task". The title now comes from the first meaningful line of the prompt: XML tags and the "Dispatch flags" and "Binding contract" lines are skipped, and text after "Task:" wins. The dashboard borrows that title for the session on the same thread.
+- **Prompts are back in the feed.** Codex 0.153 records the user's prompt only as a user-role response item, which the viewer dropped. It now shows as USER, and the session title comes from it again.
+- **Hook output stops posing as Codex.** Codex hooks and system blocks arrive as developer-role items. They rendered as CODEX speech; they are internal now and hidden until you toggle Internals. Injected `<tag>` blocks in user items are hidden the same way.
+- **"Possibly stuck" needs job evidence.** A quiet session with no companion job is an interactive window you left open, not a stuck handoff. It stays Waiting however long it sits. Only a job whose process died or whose heartbeat stopped is marked stuck, so the "Needs attention" box stops crying wolf.
+- **A child agent keeps its own thread id.** A child's rollout repeats the parent's session_meta after its own. The viewer used to take the last one, so the child carried the parent's id and looked like its own parent. The list now draws each session once and nests one level only, so bad data can never grow the page without end.
+- **The dashboard reports its real version.** The `/health` version string was stuck at 2.5.0. A test now keeps it equal to package.json.
+
 ## 2.10.0
 
 - **GPT-6 Astra is supported.** `--model astra` expands to `gpt-6-astra`, the top model in the Codex catalog. Verified against the installed Codex CLI (0.153.0) through its own model catalog: Astra accepts `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`, supports `--fast`, and ships with a `medium` built-in default. The plugin keeps `xhigh` as its default on Astra too. The skills, the rescue command, the rescue agent, and the README now name Astra next to the GPT-5.6 models.

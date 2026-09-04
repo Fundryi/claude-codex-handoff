@@ -227,6 +227,11 @@ function emitLogEvent(onProgress, options = {}) {
   });
 }
 
+// Child agents Codex spawned during the turn, by nickname (thread id when unnamed).
+export function collectAgentLabels(state) {
+  return [...state.threadIds].map((threadId) => labelForThread(state, threadId)).filter(Boolean);
+}
+
 function labelForThread(state, threadId) {
   if (!threadId || threadId === state.rootThreadId || threadId === state.threadId) {
     return null;
@@ -1245,7 +1250,8 @@ export async function runAppServerTurn(cwd, options = {}) {
       stderr: cleanCodexStderr(client.stderr),
       fileChanges: turnState.fileChanges,
       touchedFiles: collectTouchedFiles(turnState.fileChanges),
-      commandExecutions: turnState.commandExecutions
+      commandExecutions: turnState.commandExecutions,
+      agents: collectAgentLabels(turnState)
     };
   }, fastConnectOptions(options.fast));
 }

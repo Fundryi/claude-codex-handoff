@@ -177,6 +177,8 @@
     .session:hover { background: var(--hover); }
     .session.selected { background: var(--selected); border-left-color: var(--blue); }
     .session.dismissed { opacity: .55; }
+    .session.child { padding-left: 24px; border-left-color: #2e2846; background: rgba(140, 120, 220, .04); }
+    .session.child.selected { border-left-color: var(--blue); }
     #home-view { padding: 4px 0 30px; }
     .home-heading {
       color: var(--faint);
@@ -279,6 +281,7 @@
     .status.STOPPED { background: #43181d; color: #ff8f88; }
     .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
     .status.FAST { background: #3d2a14; color: #ffb86b; }
+    .status.AGENT { background: #2a2440; color: #c9b6ff; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
 
@@ -792,7 +795,7 @@
     var STATUS = {
       LIVE: { label: 'Running', help: 'The session is writing new events, or its job process is alive and streaming.' },
       IDLE: { label: 'Waiting', help: 'No new events for 20 seconds and no live job process. It may be running a quiet tool.' },
-      STALE: { label: 'Possibly stuck', help: 'No new events for more than 10 minutes, or the job process died without completing.' },
+      STALE: { label: 'Possibly stuck', help: 'The job process died or stopped its heartbeat before completing.' },
       DONE: { label: 'Finished', help: 'The session reported that the task completed.' },
       STOPPED: { label: 'Stopped', help: 'The job for this session was cancelled on request.' },
       ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' }
@@ -900,11 +903,44 @@
       if (job.effort) parts.push(job.effort);
       if (job.sandbox) parts.push(job.sandbox);
       if (job.diedReason) parts.push(job.diedReason);
+      if (job.agents && job.agents.length) parts.push('agents: ' + job.agents.join(', '));
       return parts.join(' \u00b7 ');
     }
     function sessionFastJob(session, jobs) {
       if (!session || !session.threadId) return null;
       return (jobs || []).find(function (job) { return !!job.fast && job.threadId === session.threadId; }) || null;
+    }
+    // Interactive sessions rarely carry a title now (the prompt sits behind
+    // injected context), so borrow the companion job's title for the same thread,
+    // then the child agent's nickname.
+    function sessionTitle(session, jobs) {
+      if (!session) return 'Untitled Codex task';
+      if (session.title) return session.title;
+      var job = session.threadId ? (jobs || []).find(function (entry) { return entry.threadId === session.threadId && entry.title; }) : null;
+      if (job) return job.title;
+      if (session.agentNickname) return 'Agent ' + session.agentNickname;
+      return 'Untitled Codex task';
+    }
+    // Codex child agents write their own rollout with parentThreadId set. Group
+    // them under the parent when the parent is loaded; otherwise they stay top level.
+    function childSessions(sessions) {
+      var known = {};
+      (sessions || []).forEach(function (s) { if (s.threadId) known[s.threadId] = true; });
+      var byParent = {};
+      var childIds = {};
+      (sessions || []).forEach(function (s) {
+        if (!s.parentThreadId || !known[s.parentThreadId] || s.parentThreadId === s.threadId) return;
+        (byParent[s.parentThreadId] = byParent[s.parentThreadId] || []).push(s);
+        childIds[s.id] = true;
+      });
+      return { byParent: byParent, isChild: function (id) { return !!childIds[id]; } };
+    }
+    function agentChip(nickname, count) {
+      var chip = document.createElement('span');
+      chip.className = 'status AGENT';
+      chip.textContent = nickname ? nickname : count + (count === 1 ? ' agent' : ' agents');
+      chip.title = nickname ? 'Child agent spawned by the parent session' : 'This session spawned child agents';
+      return chip;
     }
     function fastChip() {
       var chip = document.createElement('span');
@@ -935,18 +971,30 @@
         else if (isLive) active.push(card);
         else finished.push(card);
       });
+      // Child agents fold into their parent's card as an agent count.
+      var knownThreads = {};
+      (sessions || []).forEach(function (s) { if (s.threadId) knownThreads[s.threadId] = true; });
+      var agentCounts = {};
+      var children = (sessions || []).filter(function (s) {
+        if (!s.parentThreadId || !knownThreads[s.parentThreadId]) return false;
+        agentCounts[s.parentThreadId] = (agentCounts[s.parentThreadId] || 0) + 1;
+        return true;
+      });
       (sessions || []).forEach(function (session) {
+        if (children.indexOf(session) !== -1) return;
         var merged = session.threadId ? byThread[session.threadId] : null;
         if (merged) {
           merged.sessionId = session.id;
           if (session.tokensUsed) merged.tokens = session.tokensUsed;
           if (!merged.model && session.model) merged.model = session.model;
+          merged.agents = agentCounts[session.threadId] || 0;
           return;
         }
         if (session.archived) return;
         var card = {
           type: 'session', id: session.id, sessionId: session.id, threadId: session.threadId || null,
-          title: session.title || 'Untitled Codex task',
+          agents: agentCounts[session.threadId] || 0,
+          title: session.title || (session.agentNickname ? 'Agent ' + session.agentNickname : 'Untitled Codex task'),
           project: session.cwd || '', fast: false,
           model: session.model || '', effort: '',
           status: session.status || '', live: '',
@@ -1074,7 +1122,8 @@
     function statusCount(id) {
       if (id === 'JOBS') return jobs.length;
       if (id === 'ALL') return sessions.length;
-      var pool = sessions.filter(function (s) { return !isDismissed(s.id); });
+      var grouped = childSessions(sessions);
+      var pool = sessions.filter(function (s) { return !isDismissed(s.id) && !grouped.isChild(s.id); });
       return pool.filter(function (s) { return filterIncludes(s, id); }).length;
     }
 
@@ -1103,12 +1152,18 @@
 
     function visibleSessions() {
       var query = String(prefs.query || '').trim().toLowerCase();
+      var grouped = childSessions(sessions);
       return sessions.filter(function (session) {
+        if (grouped.isChild(session.id)) return false;
         if (dismissedHides(session, prefs.filter, prefs.dismissed)) return false;
         if (!filterIncludes(session, prefs.filter)) return false;
         if (!query) return true;
-        return [session.title, session.cwd, session.threadId, session.id, session.model]
-          .some(function (value) { return String(value || '').toLowerCase().includes(query); });
+        function matches(s) {
+          return [s.title, s.cwd, s.threadId, s.id, s.model, s.agentNickname]
+            .some(function (value) { return String(value || '').toLowerCase().includes(query); });
+        }
+        // A parent stays visible when one of its child agents matches the search.
+        return matches(session) || (grouped.byParent[session.threadId] || []).some(matches);
       });
     }
 
@@ -1248,18 +1303,25 @@
         prefs.query,
         selected,
         Math.floor(Date.now() / 10000),
-        shown.map(function (session) {
-          return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id), isDismissed(session.id), !!session.archived];
+        sessions.map(function (session) {
+          return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id), isDismissed(session.id), !!session.archived, session.parentThreadId];
         }),
+        jobs.map(function (job) { return [job.threadId, job.title]; }),
         historyResults.map(function (entry) { return entry.id; })
       ]);
       if (signature === lastListSignature) return;
       lastListSignature = signature;
       list.textContent = '';
-      shown.forEach(function (session) {
+      var grouped = childSessions(sessions);
+      // Draw each session at most once and nest one level only. A parent link
+      // that points back at itself or forms a cycle must never grow the list.
+      var drawn = {};
+      function sessionCard(session, depth) {
+        if (drawn[session.id]) return;
+        drawn[session.id] = true;
         var button = document.createElement('button');
         button.type = 'button';
-        button.className = 'session' + (session.id === selected ? ' selected' : '') + (isDismissed(session.id) ? ' dismissed' : '');
+        button.className = 'session' + (depth ? ' child' : '') + (session.id === selected ? ' selected' : '') + (isDismissed(session.id) ? ' dismissed' : '');
         button.setAttribute('aria-pressed', session.id === selected ? 'true' : 'false');
 
         var top = document.createElement('div');
@@ -1271,6 +1333,9 @@
         badge.title = waitReason(session) || STATUS[badgeStatus].help;
         top.appendChild(badge);
         if (sessionFastJob(session, jobs)) top.appendChild(fastChip());
+        var kids = grouped.byParent[session.threadId] || [];
+        if (depth) top.appendChild(agentChip(session.agentNickname || 'agent'));
+        else if (kids.length) top.appendChild(agentChip(null, kids.length));
         if (unread.has(session.id)) {
           var marker = document.createElement('span');
           marker.className = 'unread';
@@ -1284,8 +1349,8 @@
 
         var title = document.createElement('div');
         title.className = 'session-title';
-        title.textContent = session.title || 'Untitled Codex task';
-        title.title = session.title || '';
+        title.textContent = sessionTitle(session, jobs);
+        title.title = sessionTitle(session, jobs);
         var project = document.createElement('div');
         project.className = 'session-project';
         project.textContent = sessionMetaLine(session);
@@ -1300,7 +1365,9 @@
           openContextMenu(event, { type: 'session', session: session, dismissed: isDismissed(session.id) });
         });
         list.appendChild(button);
-      });
+        if (!depth) kids.forEach(function (kid) { sessionCard(kid, 1); });
+      }
+      shown.forEach(function (session) { sessionCard(session, 0); });
 
       if (!shown.length) {
         var empty = document.createElement('div');
@@ -1387,8 +1454,8 @@
       taskStatus.textContent = STATUS[headerStatus].label;
       taskStatus.title = waitReason(session) || STATUS[headerStatus].help;
       taskFast.hidden = !sessionFastJob(session, jobs);
-      taskTitle.textContent = session.title || 'Untitled Codex task';
-      taskTitle.title = session.title || '';
+      taskTitle.textContent = sessionTitle(session, jobs);
+      taskTitle.title = sessionTitle(session, jobs);
       var pluginSession = jobs.some(function (job) { return job.threadId && job.threadId === session.threadId; });
       resumeSessionButton.hidden = session.status !== 'STALE' || !session.threadId || !!session.archived || pluginSession;
 
@@ -1428,6 +1495,7 @@
     }
 
     function isInternal(event) {
+      if (event.internal) return true;
       if (event.kind !== 'agent') return false;
       var text = String(event.text || '').trim();
       return /^<(permissions|skills|apps|plugins|recommended_plugins|environment_context|developer|multi_agent_mode)/i.test(text) ||
@@ -1493,6 +1561,7 @@
         : (STATUS[card.status] ? STATUS[card.status].label : card.status);
       top.appendChild(badge);
       if (card.fast) top.appendChild(fastChip());
+      if (card.agents) top.appendChild(agentChip(null, card.agents));
       var time = document.createElement('span');
       time.className = 'session-time';
       time.textContent = relativeTime(card.lastMs);

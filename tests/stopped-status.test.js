@@ -16,7 +16,7 @@ function serverContext() {
     src.match(/function sessionSummary[\s\S]*?\n\}/)[0] +
     "\n" +
     src.match(/function threadJobStatuses[\s\S]*?\n\}/)[0];
-  const context = { Date, Map, process, LIVE_WINDOW_MS: 20000, STALE_AFTER_MS: 600000, ARCHIVED_DIR: "Z:\\archived" };
+  const context = { Date, Map, process, LIVE_WINDOW_MS: 20000, ARCHIVED_DIR: "Z:\\archived" };
   vm.runInNewContext(slice, context);
   return context;
 }
@@ -63,11 +63,18 @@ test("quiet session with a dead job reports STALE without the 10min wait", () =>
   assert.equal(ctx.sessionSummary(makeSession(60000), jobs).status, "STALE");
 });
 
-test("possibly-stuck job falls back to quiet-time behavior", () => {
+test("possibly-stuck job reports STALE", () => {
   const ctx = serverContext();
   const jobs = ctx.threadJobStatuses([{ threadId: "t-1", status: "running", pid: ALIVE_PID, heartbeatAt: beat(20 * 60000) }]);
-  assert.equal(ctx.sessionSummary(makeSession(60000), jobs).status, "IDLE");
-  assert.equal(ctx.sessionSummary(makeSession(20 * 60 * 1000), jobs).status, "STALE");
+  assert.equal(ctx.sessionSummary(makeSession(60000), jobs).status, "STALE");
+});
+
+// An interactive Codex window left open is not a stuck handoff. Without job
+// evidence a quiet session stays IDLE however long it sits.
+test("quiet session without a job never becomes STALE", () => {
+  const ctx = serverContext();
+  assert.equal(ctx.sessionSummary(makeSession(20 * 60 * 1000), new Map()).status, "IDLE");
+  assert.equal(ctx.sessionSummary(makeSession(3 * 60 * 60 * 1000)).status, "IDLE");
 });
 
 test("done beats a working job", () => {
@@ -99,5 +106,5 @@ test("UI knows the STOPPED status", () => {
 test("UI help text explains job-liveness-aware statuses", () => {
   assert.match(html, /LIVE: \{ label: 'Running', help: 'The session is writing new events, or its job process is alive and streaming\.' \}/);
   assert.match(html, /IDLE: \{ label: 'Waiting', help: 'No new events for 20 seconds and no live job process\. It may be running a quiet tool\.' \}/);
-  assert.match(html, /STALE: \{ label: 'Possibly stuck', help: 'No new events for more than 10 minutes, or the job process died without completing\.' \}/);
+  assert.match(html, /STALE: \{ label: 'Possibly stuck', help: 'The job process died or stopped its heartbeat before completing\.' \}/);
 });

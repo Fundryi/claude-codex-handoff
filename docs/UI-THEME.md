@@ -22,7 +22,7 @@ Status color has one meaning everywhere: session cards, filters, and the selecte
 |---|---|---|
 | Running | Blue `#67a8ff` | Circular spinner indicates active work |
 | Waiting | Yellow `#e5b849` | Quiet for at least 20 seconds |
-| Possibly stuck | Orange `#ee964b` | Quiet for more than 10 minutes without completion |
+| Possibly stuck | Orange `#ee964b` | The job process died or its heartbeat stopped. Sessions without a job never get this |
 | Finished | Green `#4ac26b` | Completion event received |
 | All | Gray `#7b8794` | Neutral collection, not a task state |
 

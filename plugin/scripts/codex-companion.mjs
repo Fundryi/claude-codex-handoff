@@ -506,7 +506,8 @@ async function executeTaskRun(request) {
     threadId: result.threadId,
     rawOutput,
     touchedFiles: result.touchedFiles,
-    reasoningSummary: result.reasoningSummary
+    reasoningSummary: result.reasoningSummary,
+    agents: result.agents
   };
 
   return {
@@ -514,6 +515,7 @@ async function executeTaskRun(request) {
     interrupted: Boolean(result.interrupted),
     threadId: result.threadId,
     turnId: result.turnId,
+    agents: result.agents,
     payload,
     rendered,
     summary: firstMeaningfulLine(rawOutput, firstMeaningfulLine(failureMessage, `${taskMetadata.title} finished.`)),
@@ -539,12 +541,27 @@ function buildTaskRunMetadata({ prompt, resumeLast = false }) {
     };
   }
 
-  const title = resumeLast ? "Codex Resume" : "Codex Task";
+  const title = taskTitleFromPrompt(prompt) || (resumeLast ? "Codex Resume" : "Codex Task");
   const fallbackSummary = resumeLast ? DEFAULT_CONTINUE_PROMPT : "Task";
   return {
     title,
     summary: shorten(prompt || fallbackSummary)
   };
+}
+
+// The dashboard and /codex:status show this title, so it has to say what the
+// run is about. Skip XML tags and the routing lines the rescue prompt opens
+// with; if a line carries "Task:", the part after it is the title.
+function taskTitleFromPrompt(prompt) {
+  const line = String(prompt ?? "")
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .find((value) => value && !value.startsWith("<") && !/^(dispatch flags|binding contract)\s*:/i.test(value));
+  if (!line) {
+    return "";
+  }
+  const task = line.match(/\btask\s*:\s*(.+)$/i);
+  return shorten(task ? task[1] : line, 80);
 }
 
 function renderQueuedTaskLaunch(payload) {
