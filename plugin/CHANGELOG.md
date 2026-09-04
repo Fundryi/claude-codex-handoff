@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.11.2
+
+- **`start --no-open` skips the browser tab.** Every restart of the dashboard used to open a fresh tab. The flag keeps a detached start silent. The plugin autostart never opened tabs and is unchanged.
+
 ## 2.11.1
 
 - **Agent teams read as one unit.** A parent session and its child agents sit inside one purple bracket with an "Agent team" caption and a tree line to each child. The parent carries a `lead` badge, each child its nickname. Sessions without agents stay plain, so you see at a glance what belongs together and what runs alone.
