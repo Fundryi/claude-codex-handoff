@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.11.4
+
+- **Flags pasted into the prompt now count.** A rescue prompt that opens with a line like `--model astra --effort high` used to run on the wrong model with the default effort, and the job was titled after that line. The companion lifts leading flag lines out of the prompt and applies them. Flags given on the command line still win.
+
 ## 2.11.3
 
 - **The rescue command hint names `astra`.** The argument hint for `/codex:rescue` listed every model shortcut except the new one. Docs only.

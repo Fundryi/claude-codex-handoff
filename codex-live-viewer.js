@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.11.3";
+const APP_VERSION = "2.11.4";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 function parseFlags(argv) {
   const flags = { cmd: null, host: null, tunnel: false, tunnelToken: null, token: null, noOpen: false, flagArgv: [] };

@@ -660,6 +660,22 @@ async function executeTransfer(cwd, options = {}) {
   };
 }
 
+// A caller sometimes pastes its routing flags into the prompt text, so the
+// prompt opens with "--model astra --effort high". Codex then runs on the wrong
+// model and the job is titled after the flag line. Lift leading flag lines out
+// of the prompt; explicit CLI flags still win over lifted ones.
+function liftInlineFlags(prompt) {
+  const lines = String(prompt ?? "").split(/\r?\n/);
+  const flags = [];
+  while (lines.length && /^--[a-z]/i.test(lines[0].trim())) {
+    flags.push(...splitRawArgumentString(lines.shift().trim()));
+  }
+  while (lines.length && !lines[0].trim()) {
+    lines.shift();
+  }
+  return { prompt: lines.join("\n"), flags };
+}
+
 function readTaskPrompt(cwd, options, positionals) {
   if (options["prompt-file"]) {
     return fs.readFileSync(path.resolve(cwd, options["prompt-file"]), "utf8");
@@ -860,19 +876,26 @@ async function handleReview(argv) {
 }
 
 async function handleTask(argv) {
-  const { options, positionals } = parseCommandInput(argv, {
+  const taskArgConfig = {
     valueOptions: ["model", "effort", "cwd", "prompt-file", "resume-thread"],
     booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background", "fast"],
     aliasMap: {
       m: "model"
     }
-  });
+  };
+  const { options, positionals } = parseCommandInput(argv, taskArgConfig);
 
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
+  const lifted = liftInlineFlags(readTaskPrompt(cwd, options, positionals));
+  if (lifted.flags.length) {
+    for (const [key, value] of Object.entries(parseCommandInput(lifted.flags, taskArgConfig).options)) {
+      options[key] ??= value;
+    }
+  }
+  const prompt = lifted.prompt;
   const model = normalizeRequestedModel(options.model);
   const effort = normalizeReasoningEffort(options.effort) ?? DEFAULT_REASONING_EFFORT;
-  const prompt = readTaskPrompt(cwd, options, positionals);
 
   const resumeLast = Boolean(options["resume-last"] || options.resume);
   const resumeThreadId = options["resume-thread"] || null;

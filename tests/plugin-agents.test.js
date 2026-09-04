@@ -68,3 +68,16 @@ test("runTrackedJob stores the agents a run used on the job record", async () =>
   assert.equal("agents" in listJobs(ws).find((j) => j.id === "job-agents-2"), false);
   delete process.env.CODEX_COMPANION_STATE_ROOT;
 });
+
+// A caller pasted "--model astra --effort high" as the first prompt line. The
+// run then ignored the flags and the job was titled after them.
+test("liftInlineFlags moves leading flag lines out of the prompt", async () => {
+  const { splitRawArgumentString } = await import(mjs("args.mjs"));
+  const context = { splitRawArgumentString };
+  vm.runInNewContext(companionSrc.match(/function liftInlineFlags[\s\S]*?\n\}/)[0], context);
+  const lifted = context.liftInlineFlags("--model astra --effort high\nTask: fix unit 5\n\nDetails");
+  assert.deepEqual(JSON.parse(JSON.stringify(lifted.flags)), ["--model", "astra", "--effort", "high"]);
+  assert.equal(lifted.prompt, "Task: fix unit 5\n\nDetails");
+  assert.equal(context.liftInlineFlags("Task: plain\n--not a flag line").flags.length, 0);
+  assert.match(companionSrc, /options\[key\] \?\?= value;/);
+});
