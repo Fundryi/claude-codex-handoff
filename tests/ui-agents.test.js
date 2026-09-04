@@ -62,7 +62,8 @@ test("childSessions ignores self-parent links and the list never recurses past o
   assert.equal(grouped.isChild("self"), false);
   assert.equal(grouped.byParent["t-self"], undefined);
   assert.match(html, /if \(drawn\[session\.id\]\) return;/);
-  assert.match(html, /if \(!depth\) kids\.forEach/);
+  assert.match(html, /if \(!depth && kids\.length\) \{/);
+  assert.match(html, /sessionCard\(kid, 1, group\)/);
 });
 
 test("homeCards folds child agents into the parent card", () => {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.11.1
+
+- **Agent teams read as one unit.** A parent session and its child agents sit inside one purple bracket with an "Agent team" caption and a tree line to each child. The parent carries a `lead` badge, each child its nickname. Sessions without agents stay plain, so you see at a glance what belongs together and what runs alone.
+
 ## 2.11.0
 
 Every run has a readable name, only real handoffs can be stuck, hook noise stays out of the feed, and Codex child agents show under their parent.

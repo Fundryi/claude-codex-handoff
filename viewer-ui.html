@@ -177,8 +177,16 @@
     .session:hover { background: var(--hover); }
     .session.selected { background: var(--selected); border-left-color: var(--blue); }
     .session.dismissed { opacity: .55; }
-    .session.child { padding-left: 24px; border-left-color: #2e2846; background: rgba(140, 120, 220, .04); }
-    .session.child.selected { border-left-color: var(--blue); }
+    /* Parent + child agents render as one bracketed group; loose sessions stay plain. */
+    .session-group { border-left: 3px solid #7c6bd6; margin: 4px 0 4px 6px; border-radius: 0 6px 6px 0; background: rgba(124, 107, 214, .06); }
+    .session-group .session { border-left-color: transparent; }
+    .session-group .session.selected { border-left-color: var(--blue); }
+    .session-group > .group-caption + .session { border-bottom-color: rgba(124, 107, 214, .35); }
+    .session.child { position: relative; padding-left: 30px; }
+    .session.child::before { content: ''; position: absolute; left: 12px; top: 0; bottom: 50%; width: 9px; border-left: 1px solid #7c6bd6; border-bottom: 1px solid #7c6bd6; border-radius: 0 0 0 4px; opacity: .8; }
+    .session.child:not(:last-child)::after { content: ''; position: absolute; left: 12px; top: 50%; bottom: 0; border-left: 1px solid #7c6bd6; opacity: .8; }
+    .session.child:last-child { border-bottom: 0; }
+    .group-caption { padding: 4px 12px 2px; color: #b7a9ff; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
     #home-view { padding: 4px 0 30px; }
     .home-heading {
       color: var(--faint);
@@ -939,7 +947,8 @@
       var chip = document.createElement('span');
       chip.className = 'status AGENT';
       chip.textContent = nickname ? nickname : count + (count === 1 ? ' agent' : ' agents');
-      chip.title = nickname ? 'Child agent spawned by the parent session' : 'This session spawned child agents';
+      chip.title = nickname === 'lead' ? 'Parent session that spawned the agents below'
+        : nickname ? 'Child agent spawned by the parent session' : 'This session spawned child agents';
       return chip;
     }
     function fastChip() {
@@ -1316,7 +1325,7 @@
       // Draw each session at most once and nest one level only. A parent link
       // that points back at itself or forms a cycle must never grow the list.
       var drawn = {};
-      function sessionCard(session, depth) {
+      function sessionCard(session, depth, container) {
         if (drawn[session.id]) return;
         drawn[session.id] = true;
         var button = document.createElement('button');
@@ -1335,7 +1344,7 @@
         if (sessionFastJob(session, jobs)) top.appendChild(fastChip());
         var kids = grouped.byParent[session.threadId] || [];
         if (depth) top.appendChild(agentChip(session.agentNickname || 'agent'));
-        else if (kids.length) top.appendChild(agentChip(null, kids.length));
+        else if (kids.length) top.appendChild(agentChip('lead'));
         if (unread.has(session.id)) {
           var marker = document.createElement('span');
           marker.className = 'unread';
@@ -1364,8 +1373,18 @@
         button.addEventListener('contextmenu', function (event) {
           openContextMenu(event, { type: 'session', session: session, dismissed: isDismissed(session.id) });
         });
-        list.appendChild(button);
-        if (!depth) kids.forEach(function (kid) { sessionCard(kid, 1); });
+        if (!depth && kids.length) {
+          var group = document.createElement('div');
+          group.className = 'session-group';
+          var caption = document.createElement('div');
+          caption.className = 'group-caption';
+          caption.textContent = 'Agent team · ' + (kids.length + 1);
+          group.append(caption, button);
+          kids.forEach(function (kid) { sessionCard(kid, 1, group); });
+          list.appendChild(group);
+          return;
+        }
+        (container || list).appendChild(button);
       }
       shown.forEach(function (session) { sessionCard(session, 0); });
 
