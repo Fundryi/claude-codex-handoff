@@ -69,3 +69,12 @@ test("APP_VERSION matches package.json", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   assert.match(src, new RegExp(`const APP_VERSION = "${pkg.version.replace(/\\./g, "\\\\.")}"`));
 });
+
+test("start --no-open skips the browser tab", () => {
+  const c = {};
+  vm.runInNewContext(src.match(/function parseFlags\(argv\) \{[\s\S]*?\n\}/)[0], c);
+  assert.equal(c.parseFlags(["start", "--no-open"]).noOpen, true);
+  assert.equal(c.parseFlags(["start", "--no-open"]).cmd, "start");
+  assert.equal(c.parseFlags(["start"]).noOpen, false);
+  assert.match(src, /function openBrowser\(\) \{\s*if \(FLAGS\.noOpen\) return;/);
+});

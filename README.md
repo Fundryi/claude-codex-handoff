@@ -108,7 +108,7 @@ Patterns from daily use that make handoffs reliable:
 The dashboard runs on its own and only reads `~/.codex/sessions/`:
 
 ```sh
-node codex-live-viewer.js start    # background + open browser
+node codex-live-viewer.js start    # background + open browser (add --no-open to skip the tab)
 node codex-live-viewer.js serve    # foreground
 node codex-live-viewer.js stop
 ```

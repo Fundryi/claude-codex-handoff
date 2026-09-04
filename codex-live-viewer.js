@@ -23,7 +23,7 @@ const APP_ID = "codex-live-viewer";
 const APP_VERSION = "2.11.1";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 function parseFlags(argv) {
-  const flags = { cmd: null, host: null, tunnel: false, tunnelToken: null, token: null, flagArgv: [] };
+  const flags = { cmd: null, host: null, tunnel: false, tunnelToken: null, token: null, noOpen: false, flagArgv: [] };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -31,6 +31,7 @@ function parseFlags(argv) {
     else if (a === "--tunnel") { flags.tunnel = true; flags.flagArgv.push(a); }
     else if (a === "--tunnel-token") { flags.tunnelToken = argv[++i] || null; flags.tunnel = true; flags.flagArgv.push(a, flags.tunnelToken); }
     else if (a === "--token") { flags.token = argv[++i] || null; flags.flagArgv.push(a, flags.token); }
+    else if (a === "--no-open") flags.noOpen = true; // start without opening a browser tab
     else rest.push(a);
   }
   flags.cmd = rest[0] || "serve";
@@ -1063,6 +1064,7 @@ function ping(cb) {
 }
 
 function openBrowser() {
+  if (FLAGS.noOpen) return;
   const url = "http://localhost:" + PORT;
   const opts = { detached: true, stdio: "ignore" };
   try {
