@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.11.3
+
+- **The rescue command hint names `astra`.** The argument hint for `/codex:rescue` listed every model shortcut except the new one. Docs only.
+
 ## 2.11.2
 
 - **`start --no-open` skips the browser tab.** Every restart of the dashboard used to open a fresh tab. The flag keeps a detached start silent. The plugin autostart never opened tabs and is unchanged.
