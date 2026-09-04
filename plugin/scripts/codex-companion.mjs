@@ -73,6 +73,7 @@ const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REVIEW_SCHEMA = path.join(ROOT_DIR, "schemas", "review-output.schema.json");
 const VALID_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
 const MODEL_ALIASES = new Map([
+  ["astra", "gpt-6-astra"],
   ["spark", "gpt-5.3-codex-spark"],
   ["sol", "gpt-5.6-sol"],
   ["terra", "gpt-5.6-terra"],
@@ -88,7 +89,7 @@ function printUsage() {
       "  node scripts/codex-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--json]",
       "  node scripts/codex-companion.mjs review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>]",
       "  node scripts/codex-companion.mjs adversarial-review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]",
-      "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|sol|terra|luna|daybreak-blue|spark>] [--effort <low|medium|high|xhigh|max|ultra>] [prompt]",
+      "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|astra|sol|terra|luna|daybreak-blue|spark>] [--effort <low|medium|high|xhigh|max|ultra>] [prompt]",
       "  node scripts/codex-companion.mjs transfer [--source <claude-jsonl>] [--json]",
       "  node scripts/codex-companion.mjs status [job-id] [--all] [--json]",
       "  node scripts/codex-companion.mjs result [job-id] [--wait] [--timeout-ms <ms>] [--json]",
@@ -136,8 +137,9 @@ function normalizeReasoningEffort(effort) {
   return normalized;
 }
 
-// Codex's own defaults are too low for handoffs (gpt-5.6-sol defaults to
-// "low"). Every model supports xhigh; max and ultra stay opt-in.
+// Codex's own defaults are too low for handoffs (gpt-6-astra defaults to
+// "medium", gpt-5.6-sol to "low"). Every model supports xhigh; max and ultra
+// stay opt-in.
 const DEFAULT_REASONING_EFFORT = "xhigh";
 
 function normalizeArgv(argv) {

@@ -41,7 +41,8 @@ test("unset effort falls back to xhigh", () => {
   assert.equal(/VALID_REASONING_EFFORTS = new Set\(\[[^\]]*"none"/.test(src), false, "none is not a real Codex effort");
 });
 
-test("model aliases cover sol, terra, luna, spark", () => {
+test("model aliases cover astra, sol, terra, luna, spark", () => {
+  assert.match(src, /\["astra", "gpt-6-astra"\]/);
   assert.match(src, /\["sol", "gpt-5\.6-sol"\]/);
   assert.match(src, /\["terra", "gpt-5\.6-terra"\]/);
   assert.match(src, /\["luna", "gpt-5\.6-luna"\]/);

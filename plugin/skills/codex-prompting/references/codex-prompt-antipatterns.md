@@ -1,6 +1,6 @@
 # Codex Prompt Anti-Patterns
 
-Avoid these when prompting Codex (GPT-5.4 through the GPT-5.6 family).
+Avoid these when prompting Codex (GPT-5.4 through GPT-6 Astra).
 
 ## Vague task framing
 

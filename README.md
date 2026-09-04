@@ -72,12 +72,12 @@ Recovery is always flag-only: the dashboard marks, you click. It never resumes o
 | `medium` | Quick tweaks; simple browser-testing checklists |
 | `high` | Browser testing and live verification runs, larger mechanical work |
 | `xhigh` | The everyday default: bugfixes, features, reviews, designs, root-cause hunts |
-| `max` | The hardest problems (GPT-5.6 models only) |
-| `ultra` | Max reasoning plus automatic task delegation (`gpt-5.6-sol` / `gpt-5.6-terra` only) |
+| `max` | The hardest problems (GPT-6 Astra and GPT-5.6 models) |
+| `ultra` | Max reasoning plus automatic task delegation (`gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-terra`) |
 
 When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo. If you set no effort, the plugin applies `xhigh` instead of Codex's own low default. `max` and `ultra` are never applied on their own; ask for them.
 
-**Model shortcuts:** `--model sol`, `terra`, `luna`, `daybreak-blue`, and `spark` expand to `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-daybreak-blue-latest`, and `gpt-5.3-codex-spark`. Leave the model unset to get Codex's default (`gpt-5.6-sol`). `max` works on every GPT-5.6 model; `ultra` needs `sol` or `terra`.
+**Model shortcuts:** `--model astra`, `sol`, `terra`, `luna`, `daybreak-blue`, and `spark` expand to `gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-daybreak-blue-latest`, and `gpt-5.3-codex-spark`. Leave the model unset to get the default from your Codex config (`gpt-6-astra` on a fresh install). `astra` is GPT-6 Astra, the top model in the Codex catalog. `max` works on Astra and every GPT-5.6 model; `ultra` needs `astra`, `sol`, or `terra`.
 
 `daybreak-blue` is Daybreak Blue, the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work. Daybreak access is verification-gated per account, so the plugin checks availability before starting a Daybreak run; without access the run fails immediately with a clear message instead of an opaque API error.
 

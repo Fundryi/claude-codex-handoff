@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.10.0
+
+- **GPT-6 Astra is supported.** `--model astra` expands to `gpt-6-astra`, the top model in the Codex catalog. Verified against the installed Codex CLI (0.153.0) through its own model catalog: Astra accepts `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`, supports `--fast`, and ships with a `medium` built-in default. The plugin keeps `xhigh` as its default on Astra too. The skills, the rescue command, the rescue agent, and the README now name Astra next to the GPT-5.6 models.
+- **The effort table names Astra.** `max` works on Astra and every GPT-5.6 model; `ultra` needs `astra`, `sol`, or `terra`.
+
 ## 2.9.4
 
 - **The `SessionEnd` hook asks for a 3 second timeout.** Codex caps `SessionEnd` at 3 seconds, so it clamped the old value of 5 and printed a compatibility warning at every session start. The hook already ran under a 3 second limit there; the manifest now says so and the warning is gone. Claude Code accepts either value, so the only change for Claude Code is two fewer seconds of shutdown headroom.
