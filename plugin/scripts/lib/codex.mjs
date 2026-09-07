@@ -65,6 +65,13 @@ export function fastConnectOptions(fast) {
   return fast ? { disableBroker: true, configOverrides: [`service_tier=${fastTier()}`] } : {};
 }
 
+// Detached workers never ride the shared broker: a SessionEnd in ANY Claude
+// session of the workspace sends broker/shutdown, which aborts every turn the
+// broker hosts. Their own app-server dies only with them.
+export function turnConnectOptions(options = {}) {
+  return { ...fastConnectOptions(options.fast), ...(options.detached ? { disableBroker: true } : {}) };
+}
+
 function cleanCodexStderr(stderr) {
   return stderr
     .split(/\r?\n/)
@@ -581,9 +588,16 @@ function applyTurnNotification(state, message) {
   }
 }
 
-async function captureTurn(client, threadId, startRequest, options = {}) {
+export async function captureTurn(client, threadId, startRequest, options = {}) {
   const state = createTurnCaptureState(threadId, options);
   const previousHandler = client.notificationHandler;
+
+  // The connection closing mid-turn must fail the turn. Otherwise the promise
+  // hangs, every timer is unref'd, the event loop drains, and the worker exits 0
+  // with nothing written - the job then reads as "process-vanished" with no reason.
+  client.exitPromise?.then(() => {
+    state.rejectCompletion(client.exitError ?? new Error("codex app-server connection closed before the turn completed."));
+  });
 
   client.setNotificationHandler((message) => {
     if (!state.turnId) {
@@ -1077,7 +1091,7 @@ export async function runAppServerReview(cwd, options = {}) {
       error: turnState.error,
       stderr: cleanCodexStderr(client.stderr)
     };
-  }, fastConnectOptions(options.fast));
+  }, turnConnectOptions(options));
 }
 
 export async function importExternalAgentSession(cwd, options = {}) {
@@ -1253,7 +1267,7 @@ export async function runAppServerTurn(cwd, options = {}) {
       commandExecutions: turnState.commandExecutions,
       agents: collectAgentLabels(turnState)
     };
-  }, fastConnectOptions(options.fast));
+  }, turnConnectOptions(options));
 }
 
 export async function findLatestTaskThread(cwd) {

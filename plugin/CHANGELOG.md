@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.11.5
+
+- **Detached jobs no longer die when another session ends.** Rescue and review workers used to share the per-workspace Codex broker. When any Claude session in that repo ended, its SessionEnd hook shut the broker down, Codex aborted the turn, and the worker exited without writing a result. The job then showed `process-vanished` with no reason. Workers now spawn their own `codex app-server`, and a connection that closes mid-turn is recorded as a failure with its reason.
+
 ## 2.11.4
 
 - **Flags pasted into the prompt now count.** A rescue prompt that opens with a line like `--model astra --effort high` used to run on the wrong model with the default effort, and the job was titled after that line. The companion lifts leading flag lines out of the prompt and applies them. Flags given on the command line still win.

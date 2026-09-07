@@ -21,6 +21,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 - The viewer never *edits* Codex session files or anything under `~/.codex`. It DOES spawn codex via `plugin/scripts/codex-companion.mjs` (task/review/resume/cancel) and shares plugin job state at `~/.codex-companion/state`. All state-changing endpoints are POST, origin-guarded (`trustedControlOrigin`), and confirmed in-app — never `window.confirm`/`alert`.
 - Recovery is flag-only: the classifier marks jobs working / possibly-stuck / dead; the user clicks Resume. No auto-resume, no auto-kill. The one permitted automatic state write is liveness bookkeeping — a `queued`/`running` record whose pid is gone is reconciled to `failed` on read (`reconcileDeadJobs`), because nothing else will ever correct it and a frozen record permanently jams `/codex:result`.
 - Every companion run is detached. Codex is never a child of the calling process, so no harness timeout can end a run. `--background` returns a job id; the default follows the detached job and hands back a job id if it outlives the follow budget.
+- Detached workers spawn their own `codex app-server` (`detached: true` → `disableBroker`). They never ride the shared broker: a SessionEnd in any Claude session of the workspace shuts the broker down and aborts every turn on it.
 
 ## Env vars
 

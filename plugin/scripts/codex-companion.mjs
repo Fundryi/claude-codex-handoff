@@ -360,6 +360,7 @@ async function executeReviewRun(request) {
       target: reviewTarget,
       model: request.model,
       fast: request.fast,
+      detached: true,
       onProgress: request.onProgress
     });
     const payload = {
@@ -402,6 +403,7 @@ async function executeReviewRun(request) {
     prompt,
     model: request.model,
     fast: request.fast,
+    detached: true,
     sandbox: companionSandbox(),
     outputSchema: readOutputSchema(REVIEW_SCHEMA),
     onProgress: request.onProgress
@@ -480,6 +482,7 @@ async function executeTaskRun(request) {
     model: request.model,
     effort: request.effort,
     fast: request.fast,
+    detached: true,
     sandbox: companionSandbox(),
     onProgress: request.onProgress,
     shouldCancel: request.shouldCancel,
