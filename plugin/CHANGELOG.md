@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.11.6
+
+- **SessionEnd no longer kills your jobs.** The SessionEnd hook used to terminate every queued or running job the ending session had started and delete its record and log. Hosts like CloudCLI end the Claude process on every new message, so a long rescue died the moment you typed anything and `/codex:status` said "No jobs recorded yet". Workers are detached and own their app-server, so the hook now leaves them alone. The next prompt re-announces the job and `/codex:result <id>` still works from the new session.
+
 ## 2.11.5
 
 - **Detached jobs no longer die when another session ends.** Rescue and review workers used to share the per-workspace Codex broker. When any Claude session in that repo ended, its SessionEnd hook shut the broker down, Codex aborted the turn, and the worker exited without writing a result. The job then showed `process-vanished` with no reason. Workers now spawn their own `codex app-server`, and a connection that closes mid-turn is recorded as a failure with its reason.

@@ -49,7 +49,7 @@ The dashboard's JOBS tab classifies every job from ground truth (real PID + hear
 | `DEAD` | Process gone before finishing | Click **Resume**, optionally with more effort or another model. |
 | `FAILED` | Died with a known cause | Read the reason (broken sandbox, expired `codex login`, rate limit) and its fix hint. |
 
-Recovery is always flag-only: the dashboard marks, you click. It never resumes or kills anything on its own. And because job workers are detached, restarting Claude Code doesn't kill your handoffs.
+Recovery is always flag-only: the dashboard marks, you click. It never resumes or kills anything on its own. Job workers are detached and the SessionEnd hook leaves them alone, so restarting Claude Code, or sending a new message under a host like CloudCLI that ends the session per turn, doesn't kill your handoffs. The next prompt re-announces them.
 
 ## What you get
 
