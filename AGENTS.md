@@ -50,3 +50,12 @@ node scripts/upstream-diff.mjs   # diff plugin/ against upstream (--full for who
 - Feature work follows spec → plan → TDD implementation; plans live in `docs/superpowers/plans/` with checkbox steps.
 - Commit style: conventional commits (`feat(server):`, `feat(ui):`, `feat(plugin):`, `docs:`, `chore(release):`).
 - Windows dev machine; paths in tests use `\\`. Shell scripts must work in both PowerShell and Git Bash contexts.
+
+## Shared knowledge base
+
+If the shared KB is configured and `../knowledge-base/AGENTS.md` exists, search it before domain answers or code changes and follow its operating rules.
+
+- Project knowledge: `../knowledge-base/wiki/projects/claude-handoff-improvment/`
+- Freshness: when a registered source path changes, follow `../knowledge-base/wiki/meta/knowledge-freshness.md`.
+
+If the shared KB is unavailable, state that access is unavailable and do not invent its contents.

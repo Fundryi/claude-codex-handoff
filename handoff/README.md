@@ -28,4 +28,4 @@ If you use the claude-codex-handoff plugin, Claude picks these files up automati
 
 ## Maintenance
 
-Contracts hold boundaries, gates, and return formats. Project rules live in their canonical homes (CLAUDE.md, your coding guidelines, docs); contracts point at them instead of copying them. When a review catches a new failure mode: add the rule to its canonical home, add one self-check line to the matching contract, done. The self-check gate is the part that compounds.
+Contracts hold boundaries, gates, and return formats. Project rules live in their canonical homes (AGENTS.md, your coding guidelines, docs); contracts point at them instead of copying them. When a review catches a new failure mode: add the rule to its canonical home, add one self-check line to the matching contract, done. The self-check gate is the part that compounds.
