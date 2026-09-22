@@ -5,6 +5,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { sortJobsNewestFirst } from "./lib/job-control.mjs";
+import { extractSection } from "./lib/render.mjs";
 import {
   listJobs,
   readJobFile,
@@ -24,16 +25,44 @@ function ageLabel(iso, now) {
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60}m`;
 }
 
-export function buildPendingJobsReport(jobs, now) {
+const MAX_DETAILED = 3;
+const MAX_LINES = 40;
+const MAX_CHARS = 3000;
+
+// The Summary section when Codex wrote the headings, otherwise the start of the
+// answer. Bounded by lines and characters: this lands in Claude's context.
+export function shortResult(stored) {
+  const raw = String(stored?.result?.rawOutput || stored?.errorMessage || stored?.rendered || "").trim();
+  if (!raw) return [];
+  let text = (extractSection(raw, "Summary") || raw).split(/\r?\n/).slice(0, MAX_LINES).join("\n");
+  if (text.length > MAX_CHARS) text = `${text.slice(0, MAX_CHARS)} [cut]`;
+  return text.split("\n");
+}
+
+export function buildPendingJobsReport(jobs, now, readStored = () => null) {
   const lines = [];
+  let detailed = 0;
   for (const job of jobs) {
     if (TERMINAL.has(job.status)) {
       if (job.announcedAt) continue;
       const label = job.title ? `${job.title} — ` : "";
       const age = ageLabel(job.completedAt, now) || "unknown time";
-      lines.push(
-        `${job.id}  ${job.status} ${age} ago  — ${label}result not delivered; run: /codex:result ${job.id}`
-      );
+      const stored = detailed < MAX_DETAILED ? readStored(job) : null;
+      const body = shortResult(stored);
+      if (body.length === 0) {
+        lines.push(`${job.id}  ${job.status} ${age} ago  — ${label}result not delivered; run: /codex:result ${job.id}`);
+        continue;
+      }
+      detailed += 1;
+      lines.push(`${job.id}  ${job.status} ${age} ago  — ${job.title ?? "Codex job"}`);
+      lines.push(...body.map((line) => `  ${line}`));
+      const question = job.needsDecision ?? stored?.needsDecision;
+      if (question) {
+        const thread = job.threadId ?? stored?.threadId;
+        lines.push("  Codex asks:", ...question.split(/\r?\n/).map((line) => `    ${line}`));
+        lines.push(`  Follow the codex-result-handling skill before you answer.${thread ? ` Resume with --resume-thread ${thread}.` : ""}`);
+      }
+      lines.push(`  Full text: /codex:result ${job.id}`);
       continue;
     }
     if (job.status !== "queued" && job.status !== "running") continue;
@@ -77,7 +106,11 @@ function main() {
   if (!fs.existsSync(resolveStateDir(workspaceRoot))) return;
 
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
-  const report = buildPendingJobsReport(jobs, Date.now());
+  const readStored = (job) => {
+    const jobFile = resolveJobFile(workspaceRoot, job.id);
+    return fs.existsSync(jobFile) ? readJobFile(jobFile) : null;
+  };
+  const report = buildPendingJobsReport(jobs, Date.now(), readStored);
   if (!report) return;
 
   process.stdout.write(report);

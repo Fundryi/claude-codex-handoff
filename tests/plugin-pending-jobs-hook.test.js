@@ -4,10 +4,11 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { pathToFileURL } = require("node:url");
+const { spawn, spawnSync } = require("node:child_process");
 
-const hookUrl = pathToFileURL(
-  path.join(__dirname, "..", "plugin", "scripts", "pending-jobs-hook.mjs")
-).href;
+const hookPath = path.join(__dirname, "..", "plugin", "scripts", "pending-jobs-hook.mjs");
+const hookUrl = pathToFileURL(hookPath).href;
+const libUrl = (name) => pathToFileURL(path.join(__dirname, "..", "plugin", "scripts", "lib", name)).href;
 
 // The hook's main() runs unconditionally on import (same pattern as
 // codex-companion.mjs), and this repo dogfoods the plugin on itself - so the real
@@ -164,4 +165,83 @@ test("markAnnounced stamps announcedAt in both stores without touching updatedAt
   assert.equal(marked.updatedAt, targetUpdatedAt, "(b) the state.json entry's updatedAt must be untouched");
   assert.equal(untouched.announcedAt, undefined, "(c) the untouched job must not gain announcedAt");
   assert.equal(untouched.updatedAt, otherUpdatedAt, "(b) the untouched job's updatedAt must also be untouched");
+});
+
+const ANSWER = "Done.\n\n## Summary\nRetry added.\n\n## Checks run\nnpm test\n\n## Needs decision\nKeep the old API? Options: keep (recommended), delete.";
+
+// CloudCLI ends the Claude process on every new message and the session id can
+// change. The result must still reach the next prompt, once.
+test("a job finished after its Claude process died is delivered to the next session, once", async () => {
+  const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "clv-hook-cloudcli-"));
+  const env = { ...process.env, CODEX_COMPANION_STATE_ROOT: stateRoot, CODEX_VIEWER_PORT: "1" };
+  const runHook = (sessionId) =>
+    spawnSync(process.execPath, [hookPath], {
+      cwd: process.cwd(),
+      env: { ...env, CODEX_COMPANION_SESSION_ID: sessionId },
+      input: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: sessionId }),
+      encoding: "utf8"
+    });
+
+  const previous = process.env.CODEX_COMPANION_STATE_ROOT;
+  process.env.CODEX_COMPANION_STATE_ROOT = stateRoot;
+  process.env.CODEX_VIEWER_PORT = "1";
+  const worker = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { stdio: "ignore" });
+  try {
+    const { runTrackedJob } = await import(`${libUrl("tracked-jobs.mjs")}?c=1`);
+    const { readNeedsDecision } = await import(libUrl("render.mjs"));
+    const { upsertJob } = await import(`${libUrl("state.mjs")}?c=1`);
+    const { resolveWorkspaceRoot } = await import(libUrl("workspace.mjs"));
+    const ws = resolveWorkspaceRoot(process.cwd());
+    const job = { id: "task-cloudcli", workspaceRoot: ws, title: "Add retry", sessionId: "session-A" };
+
+    upsertJob(ws, { ...job, status: "running", pid: worker.pid, startedAt: new Date().toISOString() });
+    const running = runHook("session-A");
+    assert.match(running.stdout, /task-cloudcli  running/, running.stderr);
+
+    worker.kill();
+    await runTrackedJob(job, async () => ({
+      exitStatus: 0, threadId: "thr-9", turnId: "u", summary: "Retry added.",
+      payload: { rawOutput: ANSWER, threadId: "thr-9" }, rendered: `${ANSWER}\n`,
+      needsDecision: readNeedsDecision(ANSWER)
+    }), { heartbeatMs: 25 });
+
+    const first = runHook("session-B");
+    fs.writeFileSync(path.join(stateRoot, "hook-first-run.txt"), first.stdout);
+    assert.match(first.stdout, /task-cloudcli  completed/);
+    assert.match(first.stdout, /Retry added\./);
+    assert.match(first.stdout, /Codex asks:\n {4}Keep the old API\?/);
+    assert.match(first.stdout, /--resume-thread thr-9/);
+    assert.match(first.stdout, /Full text: \/codex:result task-cloudcli/);
+    assert.equal(first.stdout.includes("npm test"), false, "Checks run is not part of the short result");
+
+    const second = runHook("session-B");
+    assert.equal(second.stdout.includes("task-cloudcli"), false, "delivered once");
+  } finally {
+    worker.kill();
+    process.env.CODEX_COMPANION_STATE_ROOT = previous;
+    delete process.env.CODEX_VIEWER_PORT;
+  }
+});
+
+test("only 3 jobs get a short result; others, missing files and no-heading answers degrade safely", async () => {
+  const { buildPendingJobsReport } = await import(hookUrl);
+  const finished = (id) => ({ id, status: "completed", title: id, completedAt: iso(60_000) });
+  const stored = {
+    a: { result: { rawOutput: "## Summary\nA done." } },
+    b: { result: { rawOutput: Array.from({ length: 60 }, (_, i) => `line ${i}`).join("\n") } },
+    c: { result: { rawOutput: "x".repeat(10_000) } },
+    d: { result: { rawOutput: "## Summary\nD done." } }
+  };
+  const report = buildPendingJobsReport(
+    ["a", "b", "c", "d", "gone"].map(finished),
+    NOW,
+    (job) => stored[job.id] ?? null
+  );
+  assert.match(report, /A done\./);
+  assert.match(report, /line 39/);
+  assert.equal(report.includes("line 40"), false, "40 lines per job at most");
+  assert.ok(report.length < 12_000, "a single huge line is capped by characters");
+  assert.equal(report.includes("D done."), false, "the 4th job gets a pointer only");
+  assert.match(report, /d  completed 1m ago  — d — result not delivered; run: \/codex:result d/);
+  assert.match(report, /gone  completed 1m ago  — gone — result not delivered/);
 });
