@@ -1,49 +1,35 @@
 ---
 description: Delegate investigation, an explicit fix request, or follow-up rescue work to the Codex rescue subagent
-argument-hint: "[--background] [--resume|--fresh] [--model <model|astra|sol|terra|luna|daybreak-blue>] [--effort <low|medium|high|xhigh|max|ultra>] [what Codex should investigate, solve, or continue]"
+argument-hint: "[--background] [--resume|--fresh] [--resume-thread <id>] [--model <model|astra|sol|terra|luna|daybreak-blue>] [--effort <low|medium|high|xhigh|max|ultra>] [what Codex should investigate, solve, or continue]"
 allowed-tools: Bash(node:*), AskUserQuestion, Agent
 ---
 
-Invoke the `codex:codex-rescue` subagent via the `Agent` tool (`subagent_type: "codex:codex-rescue"`), forwarding the raw user request as the prompt.
-`codex:codex-rescue` is a subagent, not a skill — do not call `Skill(codex:codex-rescue)` (no such skill) or `Skill(codex:rescue)` (that re-enters this command and hangs the session). The command runs inline so the `Agent` tool stays in scope; forked general-purpose subagents do not expose it.
-The final user-visible response must be Codex's output verbatim.
+Invoke the `codex:codex-rescue` subagent via the `Agent` tool (`subagent_type: "codex:codex-rescue"`, `run_in_background: true`). It waits for Codex by itself and sends you one message with the final result; keep working meanwhile.
+`codex:codex-rescue` is a subagent, not a skill. Do not call `Skill(codex:codex-rescue)` (no such skill) or `Skill(codex:rescue)` (that re-enters this command and hangs the session). The command runs inline so the `Agent` tool stays in scope; forked general-purpose subagents do not expose it.
 
 Raw user request:
 $ARGUMENTS
 
-Execution mode:
+Before you call the subagent:
 
-- Codex always runs detached, so no timeout can end a run. Nothing here needs to predict how long a task will take.
-- If the request includes `--background`, forward it: the command returns a job id immediately instead of waiting for the result.
-- Without `--background`, the companion follows the detached job and prints its output. If the job outlives the follow budget, the companion returns a job id and the job keeps running — collect it by running `result <job-id> --wait` as a background Bash task (`run_in_background: true`); the harness delivers the report when the job finishes. Never re-arm foreground waits on a timer.
-- `--wait` is accepted as a no-op alias for the default and must not be forwarded to `task`.
-- `--model` and `--effort` are runtime-selection flags. Preserve them for the forwarded `task` call, but do not treat them as part of the natural-language task text.
-- If the request includes `--resume`, do not ask whether to continue. The user already chose.
-- If the request includes `--fresh`, do not ask whether to continue. The user already chose.
-- Otherwise, before starting Codex, check for a resumable rescue thread from this Claude session by running:
+- Write the handoff as the `codex-prompting` skill describes (goal, rules, done_when, files). You can see this conversation and the subagent cannot, so the handoff must carry what Codex needs to know.
+- Put the routing flags from the raw request (`--background`, `--resume`, `--fresh`, `--resume-thread <id>`, `--model`, `--effort`, `--fast`) on the first line, before the handoff. Drop `--wait`; it is a no-op.
+- If the request is already a complete instruction, forward it unchanged.
+- If the request has `--resume`, `--fresh`, or `--resume-thread`, the user already chose. Do not ask about continuing.
+- Otherwise check for a resumable rescue thread from this Claude session:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" task-resume-candidate --json
 ```
 
-- If that helper reports `available: true`, use `AskUserQuestion` exactly once to ask whether to continue the current Codex thread or start a new one.
-- The two choices must be:
-  - `Continue current Codex thread`
-  - `Start a new Codex thread`
-- If the user is clearly giving a follow-up instruction such as "continue", "keep going", "resume", "apply the top fix", or "dig deeper", put `Continue current Codex thread (Recommended)` first.
-- Otherwise put `Start a new Codex thread (Recommended)` first.
-- If the user chooses continue, add `--resume` before routing to the subagent.
-- If the user chooses a new thread, add `--fresh` before routing to the subagent.
-- If the helper reports `available: false`, do not ask. Route normally.
+- If it reports `available: true`, use `AskUserQuestion` once: `Continue current Codex thread` or `Start a new Codex thread`. Put `(Recommended)` on continue when the user is clearly following up ("continue", "keep going", "apply the top fix", "dig deeper"), otherwise on the new thread. Add `--resume` or `--fresh` to match.
+- If it reports `available: false`, do not ask.
 
-Operating rules:
+After the subagent returns:
 
-- The subagent is a thin forwarder only. It should use one `Bash` call to invoke `node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" task ...` and return that command's stdout as-is.
-- Return the Codex companion stdout verbatim to the user.
-- Do not paraphrase, summarize, rewrite, or add commentary before or after it.
-- Do not ask the subagent to inspect files, monitor progress, poll `/codex:status`, fetch `/codex:result`, call `/codex:cancel`, summarize output, or do follow-up work of its own.
-- Leave `--effort` unset unless the user explicitly asks for a specific reasoning effort. The helper then applies its own default of `xhigh`, never Codex's low built-in default. `max` and `ultra` are used only when the user asks for them.
-- Leave the model unset unless the user explicitly asks for one. Map the shortcuts `astra`, `sol`, `terra`, `luna`, `daybreak-blue` to `gpt-6-astra`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-6-luna`, `gpt-daybreak-blue-latest`.
-- Leave `--resume` and `--fresh` in the forwarded request. The subagent handles that routing when it builds the `task` command.
-- If the helper reports that Codex is missing or unauthenticated, stop and tell the user to run `/codex:setup`.
+- The subagent returns only when the Codex job has ended. If this process ends first, as it does under hosts like CloudCLI, the prompt hook delivers the result on the next message. Do not start your own waiter.
+- Show Codex's output to the user verbatim, with no paraphrase or commentary around it. Then follow the `codex-result-handling` skill, which covers a "Needs decision" question.
+- If the output says Codex is missing or unauthenticated, tell the user to run `/codex:setup`.
 - If the user did not supply a request, ask what Codex should investigate or fix.
+
+Flag rules (model shortcuts, effort, resume, write) live in the `codex-cli-runtime` skill. Do not restate them here.

@@ -6,9 +6,30 @@ user-invocable: false
 
 # Codex Prompting
 
-Use this skill when `codex:codex-rescue` needs to ask Codex for help. The guidance was written against GPT-5.4 and applies to the GPT-6 models (astra, sol, luna) and the GPT-5.6 models (sol, terra, luna).
+Use this skill when you write a Codex handoff for `/codex:rescue` or the `codex:codex-rescue` agent. The guidance was written against GPT-5.4 and applies to the GPT-6 models (astra, sol, luna) and the GPT-5.6 models (sol, terra, luna).
 
 Prompt Codex like an operator, not a collaborator. Keep prompts compact and block-structured with XML tags. State the task, the output contract, the follow-through defaults, and the small set of extra constraints that matter.
+
+## Handoff form
+
+Write every task handoff with these four blocks, each tag on its own line. You can see the conversation; the forwarding agent and Codex cannot, so this is where Codex gets its context.
+
+```
+<goal>
+What must be true when Codex is done, in one or two sentences.
+</goal>
+<rules>
+Limits: files or areas not to touch, read-only if so, repo rules that matter.
+</rules>
+<done_when>
+The checks that prove it is done: tests to run, output to show.
+</done_when>
+<files>
+Paths that matter, and what is already known or tried. Mark guesses as guesses.
+</files>
+```
+
+If the repo has a handoff contract, its line comes first, before `<goal>`, as the `handoff-contracts` skill says. Add blocks from the recipe below only when the task needs them. The companion appends the return format (Summary, Changed files, Checks run, Needs decision) to every task, so do not add another output contract to a task handoff.
 
 Core rules:
 - Prefer one clear task per Codex run. Split unrelated asks into separate runs.
@@ -18,8 +39,7 @@ Core rules:
 - Use XML tags consistently so the prompt has stable internal structure.
 
 Default prompt recipe:
-- `<task>`: the concrete job and the relevant repository or failure context.
-- `<structured_output_contract>` or `<compact_output_contract>`: exact shape, ordering, and brevity requirements.
+- `<goal>`, `<rules>`, `<done_when>`, `<files>`: the handoff form above.
 - `<default_follow_through_policy>`: what Codex should do by default instead of asking routine questions.
 - `<verification_loop>` or `<completeness_contract>`: required for debugging, implementation, or risky fixes.
 - `<grounding_rules>` or `<citation_rules>`: required for review, research, or anything that could drift into unsupported claims.
@@ -33,7 +53,7 @@ When to add blocks:
 How to choose prompt shape:
 - Use built-in `review` or `adversarial-review` commands when the job is reviewing local git changes. Those prompts already carry the review contract.
 - Use `task` when the task is diagnosis, planning, research, or implementation and you need to control the prompt more directly.
-- Use `task --resume-last` for follow-up instructions on the same Codex thread. Send only the delta instruction instead of restating the whole prompt unless the direction changed materially.
+- Use `--resume-thread <id>` (or `--resume-last`) for follow-up instructions on the same Codex thread. Send only the delta instruction.
 
 Working rules:
 - Prefer explicit prompt contracts over vague nudges.
