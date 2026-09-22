@@ -32,7 +32,17 @@ test("readNeedsDecision finds a real question and ignores empty answers", async 
   assert.equal(readNeedsDecision(ANSWER.replace(/\n/g, "\r\n")), "Should the old API stay? Options: keep it (recommended), delete it.");
   assert.equal(readNeedsDecision("### Needs Decision:\nPick a name?\n## Other\nx"), "Pick a name?");
   assert.equal(readNeedsDecision("**Needs decision:**\nPick a name?"), "Pick a name?");
-  for (const empty of ["None", "none.", "-", "N/A", ""]) {
+  assert.equal(
+    readNeedsDecision("## Needs decision\n**Keep the old API?**\n- keep\n- delete"),
+    "**Keep the old API?**\n- keep\n- delete",
+    "a bold-line question keeps its options"
+  );
+  assert.equal(
+    readNeedsDecision("## Needs decision\nKeep the old API?\n**Options:**\n- keep\n- delete\n**Summary**\nx"),
+    "Keep the old API?\n**Options:**\n- keep\n- delete",
+    "a bold label inside the section does not end it; a known bold heading does"
+  );
+  for (const empty of ["None", "none.", "-", "N/A", "", "None - all clear.", "No decision needed.", "No questions."]) {
     assert.equal(readNeedsDecision(`## Summary\nok\n## Needs decision\n${empty}`), null, `"${empty}" is not a question`);
   }
   assert.equal(readNeedsDecision("No headings at all."), null);

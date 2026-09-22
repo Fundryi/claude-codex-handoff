@@ -326,9 +326,12 @@ export function extractSection(text, heading) {
     new RegExp(`^(?:#{2,3}\\s*${name}\\s*:?|\\*\\*${name}\\s*:?\\s*\\*\\*\\s*:?)\\s*$`, "i").test(line.trim())
   );
   if (start === -1) return null;
+  // A section ends at a real heading or at one of the four return headings in bold.
+  // Other bold lines ("**Keep the old API?**", "**Options:**") belong to the body.
+  const end = /^(#{1,3}\s|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i;
   const body = [];
   for (const line of lines.slice(start + 1)) {
-    if (/^(#{1,3}\s|\*\*[^*]+\*\*\s*:?\s*$)/.test(line.trim())) break;
+    if (end.test(line.trim())) break;
     body.push(line);
   }
   return body.join("\n").trim();
@@ -336,7 +339,7 @@ export function extractSection(text, heading) {
 
 export function readNeedsDecision(text) {
   const body = extractSection(text, "Needs decision");
-  if (!body || /^(none\.?|-|n\/a)$/i.test(body)) return null;
+  if (!body || /^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body)) return null;
   return body.slice(0, 1000);
 }
 
