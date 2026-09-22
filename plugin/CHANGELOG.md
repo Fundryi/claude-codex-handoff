@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.13.0
+
+- **Results come back on their own.** The prompt hook used to print a pointer to `/codex:result`. It now prints a short result for up to 3 finished jobs: the Summary, any question Codex asks, and the job id for the full text. This works under hosts like CloudCLI too, where the Claude process ends on every message.
+- **Codex can ask, Claude can answer.** Every task ends with the headings Summary, Changed files, Checks run and Needs decision. A question under Needs decision flags the job. Claude answers only when it is sure, and asks you otherwise, then resumes the same thread with `--resume-thread`. It gives at most 2 automatic answers per thread.
+- **One handoff form.** Main Claude writes goal, rules, done_when and files, because it can see the conversation. The rescue agent forwards the text unchanged through a heredoc and no longer rewrites it.
+- **The rescue agent runs in the background and waits by itself.** `/codex:rescue` starts it as a background subagent, so Claude keeps working. On a long job the agent waits in 9-minute steps and sends one message with the final result, instead of an early "Waiting..." reply.
+- **Less noise.** The follower no longer copies the whole Codex log into Claude's context, so the answer appears once. The companion adds its own list of recorded file edits.
+- **Fixes.** A task passed as one string keeps its line breaks, quotes and backslashes. `/codex:result` marks the job delivered, so the hook stops reporting it again. The stop review gate now waits the full 15 minutes instead of blocking after 100 seconds.
+
 ## 2.12.0
 
 - **`sol` and `luna` now run GPT-6.** `--model sol` expands to `gpt-6-sol` and `--model luna` to `gpt-6-luna`. Both are new in the Codex catalog and both answered a live run. `terra` stays on `gpt-5.6-terra` because there is no GPT-6 Terra. For the older models, pass the full name, such as `--model gpt-5.6-sol`.
