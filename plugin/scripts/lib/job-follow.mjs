@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import process from "node:process";
 
 import { buildSingleJobSnapshot } from "./job-control.mjs";
@@ -60,40 +59,11 @@ export async function waitForSingleJobSnapshot(cwd, reference, options = {}) {
   };
 }
 
-// runTrackedJob flips the job terminal and only then appends this block, so the
-// final drain races that append: land after it and the answer goes to stderr and
-// then again to stdout. Matches appendLogBlock's "\n[<iso>] Final output\n".
-const FINAL_OUTPUT_MARKER = /\n\[[^\]]+\] Final output\n/;
-
-export async function followJob(cwd, jobId, logFile, options = {}) {
-  let emitted = 0;
-  const drainLog = (isFinal = false) => {
-    if (!logFile) return;
-    let text = "";
-    try {
-      text = fs.readFileSync(logFile, "utf8");
-    } catch {
-      return;
-    }
-    if (text.length <= emitted) return;
-    let pending = text.slice(emitted);
-    if (isFinal) {
-      const cut = pending.search(FINAL_OUTPUT_MARKER);
-      if (cut !== -1) pending = pending.slice(0, cut);
-    }
-    // Advance past the whole remainder either way so nothing repeats later.
-    emitted = text.length;
-    if (pending) process.stderr.write(pending);
-  };
-
-  const quiet = Boolean(options.quiet);
-  const snapshot = await waitForSingleJobSnapshot(cwd, jobId, {
+export async function followJob(cwd, jobId, options = {}) {
+  return waitForSingleJobSnapshot(cwd, jobId, {
     timeoutMs: options.budgetMs ?? FOLLOW_BUDGET_MS,
-    pollIntervalMs: FOLLOW_POLL_INTERVAL_MS,
-    onPoll: quiet ? undefined : drainLog
+    pollIntervalMs: FOLLOW_POLL_INTERVAL_MS
   });
-  if (!quiet) drainLog(true);
-  return snapshot;
 }
 
 export function renderFollowHandback(payload) {

@@ -739,7 +739,7 @@ function markJobAnnounced(job, stored) {
 }
 
 async function followAndReport(cwd, job, logFile, options = {}) {
-  const snapshot = await followJob(cwd, job.id, logFile, { quiet: Boolean(options.json) });
+  const snapshot = await followJob(cwd, job.id);
 
   if (snapshot.waitTimedOut) {
     const payload = {
