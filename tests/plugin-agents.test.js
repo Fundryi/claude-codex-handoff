@@ -35,6 +35,7 @@ test("task title comes from the first meaningful prompt line", () => {
   assert.equal(buildTaskRunMetadata({ prompt: "", resumeLast: true }).title, "Codex Resume");
   assert.equal(buildTaskRunMetadata({ prompt: "x".repeat(200) }).title.length, 80);
   assert.equal(buildTaskRunMetadata({ prompt: "Run a stop-gate review of the previous Claude turn." }).title, "Codex Stop Gate Review");
+  assert.equal(buildTaskRunMetadata({ prompt: "<goal>\nAdd retry to the uploader\n</goal>\n<rules>\nNone\n</rules>" }).title, "Add retry to the uploader");
 });
 
 test("collectAgentLabels lists child agents by nickname, never the root thread", async () => {
@@ -80,4 +81,20 @@ test("liftInlineFlags moves leading flag lines out of the prompt", async () => {
   assert.equal(lifted.prompt, "Task: fix unit 5\n\nDetails");
   assert.equal(context.liftInlineFlags("Task: plain\n--not a flag line").flags.length, 0);
   assert.match(companionSrc, /options\[key\] \?\?= value;/);
+});
+
+// A task passed as one string used to be split on every space and joined again:
+// line breaks were lost, "Don't" became "Dont", and backslashes vanished.
+test("splitLeadingFlags keeps a task prompt byte for byte after its leading flags", async () => {
+  const { splitLeadingFlags } = await import(mjs("args.mjs"));
+  const config = { valueOptions: ["model", "effort", "cwd"], aliasMap: { m: "model", C: "cwd" } };
+  const prompt = "<goal>\nDon't touch C:\\Users\\x \"quoted\" file\n</goal>\n\n  indented, and use --force carefully";
+  assert.deepEqual(
+    splitLeadingFlags(`--model astra -m sol --cwd "D:\\GIT\\my repo" --write ${prompt}`, config),
+    ["--model", "astra", "-m", "sol", "--cwd", "D:\\GIT\\my repo", "--write", prompt]
+  );
+  assert.deepEqual(splitLeadingFlags("--effort=high fix it", config), ["--effort=high", "fix it"]);
+  assert.deepEqual(splitLeadingFlags("--resume", config), ["--resume"]);
+  assert.deepEqual(splitLeadingFlags("Don't split me", config), ["Don't split me"]);
+  assert.deepEqual(splitLeadingFlags("", config), []);
 });

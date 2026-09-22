@@ -6,7 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { parseArgs, splitRawArgumentString } from "./lib/args.mjs";
+import { parseArgs, splitLeadingFlags, splitRawArgumentString } from "./lib/args.mjs";
 import {
     buildPersistentTaskThreadName,
     companionSandbox,
@@ -882,10 +882,15 @@ async function handleTask(argv) {
     valueOptions: ["model", "effort", "cwd", "prompt-file", "resume-thread"],
     booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background", "fast"],
     aliasMap: {
-      m: "model"
+      m: "model",
+      C: "cwd"
     }
   };
-  const { options, positionals } = parseCommandInput(argv, taskArgConfig);
+  // One string = the caller passed "$ARGUMENTS": keep the prompt exact. Bypasses
+  // parseCommandInput, whose normalizeArgv would split the prompt again.
+  const { options, positionals } = argv.length === 1
+    ? parseArgs(splitLeadingFlags(argv[0], taskArgConfig), taskArgConfig)
+    : parseCommandInput(argv, taskArgConfig);
 
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);

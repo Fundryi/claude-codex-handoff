@@ -126,3 +126,51 @@ export function splitRawArgumentString(raw) {
 
   return tokens;
 }
+
+// For `task` only: lift the leading flags and keep the rest of the string as the
+// prompt, byte for byte. Flag values honour quotes but not backslash escapes, so
+// Windows paths survive. Anything after the first non-flag token is prompt text,
+// even if it looks like a flag.
+export function splitLeadingFlags(raw, { valueOptions = [], aliasMap = {} } = {}) {
+  const text = String(raw ?? "");
+  const tokens = [];
+  let pos = 0;
+  const readToken = () => {
+    while (pos < text.length && /\s/.test(text[pos])) pos += 1;
+    let token = "";
+    let quote = null;
+    while (pos < text.length) {
+      const ch = text[pos];
+      if (quote) {
+        if (ch === quote) quote = null;
+        else token += ch;
+      } else if (ch === '"' || ch === "'") {
+        quote = ch;
+      } else if (/\s/.test(ch)) {
+        break;
+      } else {
+        token += ch;
+      }
+      pos += 1;
+    }
+    return token;
+  };
+
+  while (pos < text.length) {
+    const start = pos;
+    const token = readToken();
+    if (!/^--?[a-z]/i.test(token)) {
+      pos = start;
+      break;
+    }
+    tokens.push(token);
+    const name = token.replace(/^--?/, "");
+    if (!name.includes("=") && valueOptions.includes(aliasMap[name] ?? name)) {
+      tokens.push(readToken());
+    }
+  }
+
+  const prompt = text.slice(pos).replace(/^\s+/, "");
+  if (prompt) tokens.push(prompt);
+  return tokens;
+}
