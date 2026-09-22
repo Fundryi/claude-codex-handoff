@@ -1118,6 +1118,7 @@ async function handleResult(argv) {
       renderStoredJobResult(snapshot.job, storedJob),
       options.json
     );
+    markJobAnnounced({ workspaceRoot: snapshot.workspaceRoot, id: snapshot.job.id }, storedJob);
     return;
   }
 
@@ -1129,6 +1130,7 @@ async function handleResult(argv) {
   };
 
   outputCommandResult(payload, renderStoredJobResult(job, storedJob), options.json);
+  markJobAnnounced({ workspaceRoot, id: job.id }, storedJob);
 }
 
 function handleTaskResumeCandidate(argv) {

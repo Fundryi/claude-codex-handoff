@@ -52,6 +52,7 @@ test("result --wait returns immediately for an already-terminal job", async () =
   const payload = JSON.parse(stdout);
   assert.equal(payload.job.status, "completed");
   assert.equal(payload.storedJob.rendered, "done\n");
+  assert.ok(state.loadState(process.cwd()).jobs.find((job) => job.id === record.id).announcedAt);
 });
 
 test("result --wait resolves when a dead-pid job is reconciled to failed", async () => {
@@ -87,4 +88,29 @@ test("result --wait without a job id fails fast instead of guessing across sessi
       return true;
     }
   );
+});
+
+// /codex:result printed the answer but never stamped announcedAt, so the prompt
+// hook reported the same job as "not delivered" on the next message.
+test("result marks a finished job delivered, and leaves a running one alone", async () => {
+  const { root, state } = await freshState();
+  const done = jobRecord({ id: "task-done", status: "completed", rendered: "done\n", exitCode: 0, pid: null });
+  const live = jobRecord({ id: "task-live", status: "running", pid: process.pid });
+  for (const record of [done, live]) {
+    state.writeJobFile(process.cwd(), record.id, record);
+    state.upsertJob(process.cwd(), record);
+  }
+
+  // Plain branch: result on a finished job marks it delivered
+  await runResult(root, [done.id]);
+
+  // --wait branch: result on a running job with timeout returns a payload
+  const { stdout } = await runResult(root, [live.id, "--wait", "--timeout-ms", "100"]);
+  const payload = JSON.parse(stdout);
+  assert.equal(payload.waitTimedOut, true, "result times out on running job");
+
+  const jobs = state.loadState(process.cwd()).jobs;
+  assert.ok(jobs.find((job) => job.id === "task-done").announcedAt, "finished job is delivered");
+  assert.equal(jobs.find((job) => job.id === "task-live").announcedAt, undefined, "running job is not marked");
+  assert.ok(state.readJobFile(state.resolveJobFile(process.cwd(), "task-done")).announcedAt);
 });
