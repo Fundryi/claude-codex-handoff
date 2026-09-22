@@ -14,6 +14,8 @@ Present the full command output to the user. Do not summarize or condense it. Pr
 - Any error messages or parse errors
 - Follow-up commands such as `/codex:status <id>` and `/codex:review`
 
+If the result ends with a question under "Needs decision", follow the `codex-result-handling` skill.
+
 If the job is still running, do not poll or re-arm foreground waits. This
 slash command itself runs `result` in the foreground at prompt-expansion time,
 so `--wait` is not for it. Instead, invoke the Bash tool directly with:

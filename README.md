@@ -49,7 +49,7 @@ The dashboard's JOBS tab classifies every job from ground truth (real PID + hear
 | `DEAD` | Process gone before finishing | Click **Resume**, optionally with more effort or another model. |
 | `FAILED` | Died with a known cause | Read the reason (broken sandbox, expired `codex login`, rate limit) and its fix hint. |
 
-Recovery is always flag-only: the dashboard marks, you click. It never resumes or kills anything on its own. Job workers are detached and the SessionEnd hook leaves them alone, so restarting Claude Code, or sending a new message under a host like CloudCLI that ends the session per turn, doesn't kill your handoffs. The next prompt re-announces them.
+Recovery is always flag-only: the dashboard marks, you click. It never resumes or kills anything on its own. Job workers are detached and the SessionEnd hook leaves them alone, so restarting Claude Code, or sending a new message under a host like CloudCLI that ends the session per turn, doesn't kill your handoffs. The next prompt brings back a short result for each finished job: its Summary, any question Codex asks, and the job id for the full text.
 
 ## What you get
 
@@ -95,10 +95,10 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 
 Patterns from daily use that make handoffs reliable:
 
-1. **Write a contract, not an essay.** Keep short per-task-type instruction files in your repo and open every prompt with `Follow handoff/coding.md (binding). Task: ...`. A ready-to-copy set ships in [`handoff/`](handoff/): copy the folder, fill in the `ADAPT:` markers, done. The plugin spots contract files and names the right one automatically.
+1. **Write a contract, not an essay.** Keep short per-task-type instruction files in your repo and open every prompt with the line `Follow handoff/coding.md (binding).` on its own, then the task as `<goal>`, `<rules>`, `<done_when>` and `<files>`. A ready-to-copy set ships in [`handoff/`](handoff/): copy the folder, fill in the `ADAPT:` markers, done. The plugin spots contract files and names the right one automatically.
 2. **Scope limits writes, not reads.** Codex may read anything to trace the real flow; name the files it may change.
 3. **Demand a self-check gate.** End your contract with checks Codex runs before returning. Every bug a review catches becomes a permanent check, so quality compounds.
-4. **Fix a return format.** Uniform returns (findings, diff, manifest, gate results) are reviewable at a glance.
+4. **Fix a return format.** Uniform returns (findings, diff, manifest, gate results) are reviewable at a glance. The plugin ends every task with Summary, Changed files, Checks run and Needs decision; your contract's sections come before those.
 5. **Match effort to the task, and round up.** `xhigh` for everything that involves judgment; `medium`/`high` fit verification runs like browser testing, where the checklist does the thinking. `--fast` only when you're actively waiting.
 6. **Let the dashboard carry the anxiety.** Kick off jobs, keep working, act when a badge asks you to.
 

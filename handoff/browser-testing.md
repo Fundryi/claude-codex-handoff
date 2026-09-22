@@ -16,6 +16,8 @@ Binding when the handoff prompt names this file. The prompt supplies the checkli
 
 ## Return format
 
+Write these sections first. If the prompt also asks for closing headings (the claude-codex-handoff plugin appends Summary, Changed files, Checks run, Needs decision), write those last and keep them short.
+
 1. PASS/FAIL per checklist step, one-line observation each.
 2. Screenshot path per step, stored with descriptive names.
 3. Exact error text for any failure.

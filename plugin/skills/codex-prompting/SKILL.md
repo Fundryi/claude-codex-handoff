@@ -46,7 +46,7 @@ Default prompt recipe:
 
 When to add blocks:
 - Coding or debugging: add `completeness_contract`, `verification_loop`, and `missing_context_gating`.
-- Review or adversarial review: add `grounding_rules`, `structured_output_contract`, and `dig_deeper_nudge`.
+- Review or diagnosis as a task handoff: add `grounding_rules` and `dig_deeper_nudge`. The companion supplies the return format.
 - Research or recommendation tasks: add `research_mode` and `citation_rules`.
 - Write-capable tasks: add `action_safety` so Codex stays narrow and avoids unrelated refactors.
 

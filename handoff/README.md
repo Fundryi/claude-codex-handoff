@@ -10,10 +10,22 @@ Rules you improvise per prompt get forgotten, and quality varies with your mood.
 
 1. Copy this folder into your repo (keep the name `handoff/` or adjust the references).
 2. Fill in the `ADAPT:` markers in each file with your stack's commands and rules.
-3. Open every handoff prompt with one line:
+3. Open every handoff prompt with the contract line alone, then the task:
 
 ```
-Follow handoff/coding.md (binding). Task: <what to do, which files may change, when it's done>
+Follow handoff/coding.md (binding).
+<goal>
+What must be true when Codex is done.
+</goal>
+<rules>
+Which files may change, and task-specific limits.
+</rules>
+<done_when>
+The checks that prove it is done.
+</done_when>
+<files>
+Paths that matter, and what is already known.
+</files>
 ```
 
 If you use the claude-codex-handoff plugin, Claude picks these files up automatically when composing `/codex:rescue` prompts for a repo that has them.

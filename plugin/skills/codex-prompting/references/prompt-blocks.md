@@ -5,17 +5,28 @@ Wrap each block in the XML tag shown in its heading.
 
 ## Core Wrapper
 
-### `task`
+### `goal`, `rules`, `done_when`, `files`
 
-Use in nearly every prompt.
+Use all four in every task handoff. The `codex-prompting` skill describes each one.
 
 ```xml
-<task>
-Describe the concrete job, the relevant repository or failure context, and the expected end state.
-</task>
+<goal>
+What must be true when Codex is done.
+</goal>
+<rules>
+Limits: files or areas not to touch, read-only if so, repo rules that matter.
+</rules>
+<done_when>
+The checks that prove it is done.
+</done_when>
+<files>
+Paths that matter, and what is already known or tried.
+</files>
 ```
 
 ## Output and Format
+
+Not for task handoffs: the companion appends the return format (Summary, Changed files, Checks run, Needs decision) to every task. Use these only in prompts that do not go through `task`.
 
 ### `structured_output_contract`
 

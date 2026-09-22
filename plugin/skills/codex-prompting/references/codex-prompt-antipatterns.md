@@ -13,12 +13,12 @@ Take a look at this and let me know what you think.
 Better:
 
 ```xml
-<task>
+<goal>
 Review this change for material correctness and regression risks.
-</task>
+</goal>
 ```
 
-## Missing output contract
+## Missing done condition
 
 Bad:
 
@@ -29,13 +29,12 @@ Investigate and report back.
 Better:
 
 ```xml
-<structured_output_contract>
-Return:
-1. root cause
-2. evidence
-3. smallest safe next step
-</structured_output_contract>
+<done_when>
+The answer names the root cause, its evidence, and the smallest safe next step.
+</done_when>
 ```
+
+A task handoff needs no output contract of its own. The companion appends the return format.
 
 ## No follow-through default
 

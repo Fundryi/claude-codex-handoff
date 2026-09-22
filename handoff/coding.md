@@ -31,6 +31,8 @@ Binding when the handoff prompt names this file. The prompt supplies the task, s
 
 ## 4. Return format (all six, every time)
 
+Write these six first. If the prompt also asks for closing headings (the claude-codex-handoff plugin appends Summary, Changed files, Checks run, Needs decision), write those last and keep them short: they may point back to the six.
+
 1. Step-0 verification result (issue state, per-finding validity).
 2. Per-finding FIXED / SKIPPED-with-reason list.
 3. Unified diff.

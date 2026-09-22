@@ -2,22 +2,21 @@
 
 Use these as starting templates for Codex task prompts or other Codex prompt construction (GPT-5.4 through the GPT-6 family).
 Copy the smallest recipe that fits the task, then trim anything you do not need.
+Every task handoff uses the four blocks from the skill. The recipes show `<goal>` and `<done_when>`; add `<rules>` and `<files>` for the task at hand.
+Do not add an output contract to a task handoff. The companion appends the return format (Summary, Changed files, Checks run, Needs decision), so put what the answer must contain in `<done_when>`.
 In `codex:codex-rescue`, run diagnosis and fix-oriented recipes in write mode by default unless the user explicitly asked for read-only behavior.
 
 ## Diagnosis
 
 ```xml
-<task>
+<goal>
 Diagnose why the failing test or command is breaking in this repository.
 Use the available repository context and tools to identify the most likely root cause.
-</task>
+</goal>
 
-<compact_output_contract>
-Return a compact diagnosis with:
-1. most likely root cause
-2. evidence
-3. smallest safe next step
-</compact_output_contract>
+<done_when>
+The answer names the most likely root cause, its evidence, and the smallest safe next step.
+</done_when>
 
 <default_follow_through_policy>
 Keep going until you have enough evidence to identify the root cause confidently.
@@ -37,18 +36,14 @@ If required context is absent, state exactly what remains unknown.
 ## Narrow Fix
 
 ```xml
-<task>
+<goal>
 Implement the smallest safe fix for the identified issue in this repository.
 Preserve existing behavior outside the failing path.
-</task>
+</goal>
 
-<structured_output_contract>
-Return:
-1. summary of the fix
-2. touched files
-3. verification performed
-4. residual risks or follow-ups
-</structured_output_contract>
+<done_when>
+The fix is applied and verified. The answer names residual risks or follow-ups.
+</done_when>
 
 <default_follow_through_policy>
 Default to the most reasonable low-risk interpretation and keep going.
@@ -72,17 +67,14 @@ Avoid unrelated refactors or cleanup.
 ## Root-Cause Review
 
 ```xml
-<task>
+<goal>
 Analyze this change for the most likely correctness or regression issues.
 Focus on the provided repository context only.
-</task>
+</goal>
 
-<structured_output_contract>
-Return:
-1. findings ordered by severity
-2. supporting evidence for each finding
-3. brief next steps
-</structured_output_contract>
+<done_when>
+The answer lists findings ordered by severity, with supporting evidence for each and brief next steps.
+</done_when>
 
 <grounding_rules>
 Ground every claim in the repository context or tool outputs.
@@ -101,17 +93,13 @@ Before finalizing, verify that each finding is material and actionable.
 ## Research Or Recommendation
 
 ```xml
-<task>
+<goal>
 Research the available options and recommend the best path for this task.
-</task>
+</goal>
 
-<structured_output_contract>
-Return:
-1. observed facts
-2. reasoned recommendation
-3. tradeoffs
-4. open questions
-</structured_output_contract>
+<done_when>
+The answer gives observed facts, a reasoned recommendation, tradeoffs, and open questions.
+</done_when>
 
 <research_mode>
 Separate observed facts, reasoned inferences, and open questions.
@@ -127,17 +115,13 @@ Prefer primary sources.
 ## Prompt-Patching
 
 ```xml
-<task>
+<goal>
 Diagnose why this existing prompt is underperforming and propose the smallest high-leverage changes to improve it for Codex (GPT-5.4 through the GPT-6 family).
-</task>
+</goal>
 
-<structured_output_contract>
-Return:
-1. failure modes
-2. root causes in the current prompt
-3. a revised prompt
-4. why the revision should work better
-</structured_output_contract>
+<done_when>
+The answer gives the failure modes, their root causes in the current prompt, a revised prompt, and why the revision should work better.
+</done_when>
 
 <grounding_rules>
 Base your diagnosis on the prompt text and the failure examples provided.

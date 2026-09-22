@@ -23,6 +23,8 @@ ADAPT: add greps for your project's repeat failure modes that tooling cannot cat
 
 ## Return format
 
+Write these sections first. If the prompt also asks for closing headings (the claude-codex-handoff plugin appends Summary, Changed files, Checks run, Needs decision), write those last and keep them short.
+
 1. Ranked findings (format above), or "no findings".
 2. Coverage statement: what you checked and found sound, so the orchestrator knows what the review actually covered.
 3. For diagnosis tasks: the root cause with its evidence chain, not just the symptom location.
