@@ -67,7 +67,8 @@ import {
   renderSetupReport,
   renderStatusReport,
   renderTaskResult,
-  readNeedsDecision
+  readNeedsDecision,
+  extractSection
 } from "./lib/render.mjs";
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -198,6 +199,12 @@ function firstMeaningfulLine(text, fallback) {
     .map((value) => value.trim())
     .find(Boolean);
   return line ?? fallback;
+}
+
+// The job summary shows in /codex:status and the viewer: read the Summary section
+// when Codex wrote the return headings, else the first line of the answer.
+function taskSummaryLine(rawOutput, fallback) {
+  return firstMeaningfulLine(extractSection(rawOutput, "Summary") || rawOutput, fallback);
 }
 
 async function buildSetupReport(cwd, actionsTaken = []) {
@@ -538,7 +545,7 @@ async function executeTaskRun(request) {
     agents: result.agents,
     payload,
     rendered,
-    summary: firstMeaningfulLine(rawOutput, firstMeaningfulLine(failureMessage, `${taskMetadata.title} finished.`)),
+    summary: taskSummaryLine(rawOutput, firstMeaningfulLine(failureMessage, `${taskMetadata.title} finished.`)),
     jobTitle: taskMetadata.title,
     jobClass: "task",
     needsDecision,

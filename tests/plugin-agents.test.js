@@ -38,6 +38,25 @@ test("task title comes from the first meaningful prompt line", () => {
   assert.equal(buildTaskRunMetadata({ prompt: "<goal>\nAdd retry to the uploader\n</goal>\n<rules>\nNone\n</rules>" }).title, "Add retry to the uploader");
 });
 
+// The job summary shows in /codex:status and the viewer. With the four return
+// headings it used to read "## Summary"; it now reads the Summary text.
+test("task summary line reads the Summary section, else the first line", async () => {
+  const { extractSection } = await import(mjs("render.mjs"));
+  const context = { extractSection };
+  vm.runInNewContext(
+    [
+      companionSrc.match(/function firstMeaningfulLine[\s\S]*?\n\}/)[0],
+      companionSrc.match(/function taskSummaryLine[\s\S]*?\n\}/)[0]
+    ].join("\n"),
+    context
+  );
+  const { taskSummaryLine } = context;
+  assert.equal(taskSummaryLine("Done.\n\n## Summary\nRetry added.", "fb"), "Retry added.");
+  assert.equal(taskSummaryLine("## Summary\nRetry added.\n## Checks run\nx", "fb"), "Retry added.");
+  assert.equal(taskSummaryLine("plain answer", "fb"), "plain answer");
+  assert.equal(taskSummaryLine("", "fb"), "fb");
+});
+
 test("collectAgentLabels lists child agents by nickname, never the root thread", async () => {
   const { collectAgentLabels } = await import(mjs("codex.mjs"));
   const state = {
