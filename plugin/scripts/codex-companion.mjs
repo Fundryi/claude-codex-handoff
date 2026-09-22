@@ -578,13 +578,20 @@ function buildTaskRunMetadata({ prompt, resumeLast = false }) {
 }
 
 // The dashboard and /codex:status show this title, so it has to say what the
-// run is about. Skip XML tags and the routing lines the rescue prompt opens
-// with; if a line carries "Task:", the part after it is the title.
+// run is about. Skip XML tags, the routing lines the rescue prompt opens with,
+// and a contract line that stands alone ("Follow handoff/coding.md (binding).");
+// if a line carries "Task:", the part after it is the title.
 function taskTitleFromPrompt(prompt) {
   const line = String(prompt ?? "")
     .split(/\r?\n/)
     .map((value) => value.trim())
-    .find((value) => value && !value.startsWith("<") && !/^(dispatch flags|binding contract)\s*:/i.test(value));
+    .find(
+      (value) =>
+        value &&
+        !value.startsWith("<") &&
+        !/^(dispatch flags|binding contract)\s*:/i.test(value) &&
+        !/^follow \S+ \(binding\)\.?$/i.test(value)
+    );
   if (!line) {
     return "";
   }

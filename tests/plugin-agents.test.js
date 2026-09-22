@@ -36,6 +36,7 @@ test("task title comes from the first meaningful prompt line", () => {
   assert.equal(buildTaskRunMetadata({ prompt: "x".repeat(200) }).title.length, 80);
   assert.equal(buildTaskRunMetadata({ prompt: "Run a stop-gate review of the previous Claude turn." }).title, "Codex Stop Gate Review");
   assert.equal(buildTaskRunMetadata({ prompt: "<goal>\nAdd retry to the uploader\n</goal>\n<rules>\nNone\n</rules>" }).title, "Add retry to the uploader");
+  assert.equal(buildTaskRunMetadata({ prompt: "Follow handoff/coding.md (binding).\n<goal>\nAdd retry\n</goal>" }).title, "Add retry");
 });
 
 // The job summary shows in /codex:status and the viewer. With the four return

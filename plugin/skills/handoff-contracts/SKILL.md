@@ -17,11 +17,25 @@ Before composing a handoff prompt for a target repo:
    - review, diagnosis, root-cause investigation: `review.md`
    - browser or live verification: `browser-testing.md`
    - a file whose name obviously matches a more specific task type wins over the generic mapping
-3. Open the prompt with one line naming it, then the task:
+3. Put the contract line alone on the first line, then the four blocks (`<goal>`, `<rules>`, `<done_when>`, `<files>`) as the `codex-prompting` skill describes:
 
 ```
-Follow handoff/coding.md (binding). Task: <scope, files that may change, done-criteria, task-specific decisions>
+Follow handoff/coding.md (binding).
+<goal>
+What must be true when Codex is done.
+</goal>
+<rules>
+Task-specific limits the contract does not already cover.
+</rules>
+<done_when>
+The checks that prove it is done.
+</done_when>
+<files>
+Paths that matter, and what is already known or tried.
+</files>
 ```
+
+   If the contract asks for its own return sections, Codex writes them; the companion's four headings still come last.
 
 4. Do not restate rules the contract already covers. The prompt carries only what is task-specific.
 5. If the contract and the prompt conflict, the prompt wins; Codex is expected to note the conflict in its report.
