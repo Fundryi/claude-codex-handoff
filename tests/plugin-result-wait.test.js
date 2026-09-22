@@ -114,3 +114,32 @@ test("result marks a finished job delivered, and leaves a running one alone", as
   assert.equal(jobs.find((job) => job.id === "task-live").announcedAt, undefined, "running job is not marked");
   assert.ok(state.readJobFile(state.resolveJobFile(process.cwd(), "task-done")).announcedAt);
 });
+
+// Delivery means the text really reached a reader. A `result --wait` whose reader
+// went away (EPIPE) must leave announcedAt unset so the prompt hook still shows it.
+test("result --wait does not mark a job delivered when stdout is gone", async () => {
+  const { root, state } = await freshState();
+  const record = jobRecord({ id: "task-epipe", status: "running", pid: process.pid });
+  state.writeJobFile(process.cwd(), record.id, record);
+  state.upsertJob(process.cwd(), record);
+
+  const { spawn } = require("node:child_process");
+  const child = spawn(process.execPath, [companion, "result", record.id, "--wait", "--json"], {
+    cwd: process.cwd(),
+    env: { ...process.env, CODEX_COMPANION_STATE_ROOT: root },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  child.stdout.destroy();
+  child.stderr.resume();
+  const exited = new Promise((resolve) => child.on("close", resolve));
+
+  const done = { ...record, status: "completed", rendered: "done\n", exitCode: 0, pid: null };
+  state.writeJobFile(process.cwd(), record.id, done);
+  state.upsertJob(process.cwd(), done);
+  await exited;
+
+  const job = state.loadState(process.cwd()).jobs.find((entry) => entry.id === record.id);
+  assert.equal(job.status, "completed");
+  assert.equal(job.announcedAt, undefined, "state not marked");
+  assert.equal(state.readJobFile(state.resolveJobFile(process.cwd(), record.id)).announcedAt, undefined, "job file not marked");
+});

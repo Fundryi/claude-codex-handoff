@@ -245,3 +245,50 @@ test("only 3 jobs get a short result; others, missing files and no-heading answe
   assert.match(report, /d  completed 1m ago  — d — result not delivered; run: \/codex:result d/);
   assert.match(report, /gone  completed 1m ago  — gone — result not delivered/);
 });
+
+// Seed one finished, unannounced job in a fresh state root. The job file holds
+// `jobFileText` as written, so a test can make it corrupt.
+async function seedFinishedJob(tag, id, jobFileText) {
+  const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), `clv-hook-${tag}-`));
+  const previous = process.env.CODEX_COMPANION_STATE_ROOT;
+  process.env.CODEX_COMPANION_STATE_ROOT = stateRoot;
+  try {
+    const state = await import(`${libUrl("state.mjs")}?${tag}=1`);
+    const { resolveWorkspaceRoot } = await import(libUrl("workspace.mjs"));
+    const ws = resolveWorkspaceRoot(process.cwd());
+    state.upsertJob(ws, { id, workspaceRoot: ws, title: "Add retry", status: "completed", completedAt: new Date().toISOString() });
+    const jobFile = state.resolveJobFile(ws, id);
+    fs.mkdirSync(path.dirname(jobFile), { recursive: true });
+    fs.writeFileSync(jobFile, jobFileText);
+    return { stateRoot, ws, state };
+  } finally {
+    process.env.CODEX_COMPANION_STATE_ROOT = previous;
+  }
+}
+
+// Delivered means written. If Claude's end of the pipe is gone, the job stays
+// unannounced so the next prompt still shows it, and the hook does not crash.
+test("the hook does not mark jobs delivered when its stdout is gone", async () => {
+  const answer = JSON.stringify({ id: "task-gone", status: "completed", result: { rawOutput: "## Summary\nRetry added." } });
+  const { stateRoot, ws, state } = await seedFinishedJob("epipe", "task-gone", answer);
+  const child = spawn(process.execPath, [hookPath], {
+    cwd: process.cwd(),
+    env: { ...process.env, CODEX_COMPANION_STATE_ROOT: stateRoot, CODEX_VIEWER_PORT: "1" },
+    stdio: ["pipe", "pipe", "pipe"]
+  });
+  child.stdout.destroy();
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  child.stdin.end(JSON.stringify({ hook_event_name: "UserPromptSubmit" }));
+  const code = await new Promise((resolve) => child.on("close", resolve));
+
+  assert.equal(code, 0, stderr);
+  const previous = process.env.CODEX_COMPANION_STATE_ROOT;
+  process.env.CODEX_COMPANION_STATE_ROOT = stateRoot;
+  try {
+    assert.equal(state.loadState(ws).jobs.find((job) => job.id === "task-gone").announcedAt, undefined, "state not marked");
+    assert.equal(state.readJobFile(state.resolveJobFile(ws, "task-gone")).announcedAt, undefined, "job file not marked");
+  } finally {
+    process.env.CODEX_COMPANION_STATE_ROOT = previous;
+  }
+});

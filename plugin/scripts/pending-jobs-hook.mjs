@@ -113,8 +113,17 @@ function main() {
   const report = buildPendingJobsReport(jobs, Date.now(), readStored);
   if (!report) return;
 
-  process.stdout.write(report);
-  markAnnounced(workspaceRoot, jobs, new Date().toISOString());
+  // Delivered means written: if Claude's end of the pipe is gone (EPIPE), leave
+  // the jobs unannounced so the next prompt shows them again.
+  process.stdout.on("error", () => {});
+  process.stdout.write(report, (error) => {
+    if (error) return;
+    try {
+      markAnnounced(workspaceRoot, jobs, new Date().toISOString());
+    } catch {
+      // Best-effort: a lost stamp only means the job is reported once more.
+    }
+  });
 }
 
 // Guards main() so importing this module (tests, or any future consumer of

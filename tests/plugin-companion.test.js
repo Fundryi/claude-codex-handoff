@@ -173,7 +173,7 @@ test("only the delivered paths in followAndReport mark a job announced", () => {
 
   const handbackBlock = body.slice(handbackStart, crashGuardStart);
   assert.equal(
-    handbackBlock.includes("markJobAnnounced"),
+    /markJobAnnounced|outputAndMarkDelivered/.test(handbackBlock),
     false,
     "the handback branch must not mark the job announced - it is still running and genuinely undelivered"
   );
@@ -181,16 +181,16 @@ test("only the delivered paths in followAndReport mark a job announced", () => {
   const crashGuardBlock = body.slice(crashGuardStart);
   assert.match(
     crashGuardBlock,
-    /process\.exitCode = 1;[\s\S]*?markJobAnnounced\(job, stored\);/,
+    /process\.exitCode = 1;[\s\S]*?outputAndMarkDelivered\([^;]*job, stored\);/,
     "the crash-guard branch reports the error to the user, so it must mark the job announced"
   );
 
-  const successTailStart = body.indexOf("outputResult(options.json ? stored.result");
+  const successTailStart = body.indexOf("outputAndMarkDelivered(options.json ? stored.result");
   assert.notEqual(successTailStart, -1);
   const successTail = body.slice(successTailStart);
   assert.match(
     successTail,
-    /markJobAnnounced\(job, stored\);/,
+    /^outputAndMarkDelivered\([^;]*job, stored\);/,
     "the success path prints the result, so it must mark the job announced"
   );
 });

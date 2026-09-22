@@ -110,6 +110,16 @@ function outputCommandResult(payload, rendered, asJson) {
   outputResult(asJson ? payload : rendered, asJson);
 }
 
+// Delivered means the text reached a reader. Mark only in the write callback: a
+// reader that went away (EPIPE) leaves announcedAt unset, so the prompt hook still
+// shows the result. Nothing may depend on the calling Claude process staying alive.
+function outputAndMarkDelivered(value, asJson, job, stored) {
+  const text = asJson ? `${JSON.stringify(value, null, 2)}\n` : String(value ?? "");
+  process.stdout.write(text, (error) => {
+    if (!error) markJobAnnounced(job, stored);
+  });
+}
+
 function normalizeRequestedModel(model) {
   if (model == null) {
     return null;
@@ -764,21 +774,16 @@ async function followAndReport(cwd, job, logFile, options = {}) {
   // on stdout with exit 0 - the exact failure this whole change exists to end.
   if (stored.rendered == null && stored.result == null) {
     const message = stored.errorMessage ?? `Job ${job.id} finished without recording a result.`;
-    outputCommandResult(
-      { jobId: job.id, status: stored.status ?? "failed", title: job.title, workspaceRoot: job.workspaceRoot, errorMessage: message },
-      `${message}\n`,
-      options.json
-    );
+    const payload = { jobId: job.id, status: stored.status ?? "failed", title: job.title, workspaceRoot: job.workspaceRoot, errorMessage: message };
     process.exitCode = 1;
-    markJobAnnounced(job, stored);
+    outputAndMarkDelivered(options.json ? payload : `${message}\n`, options.json, job, stored);
     return;
   }
 
-  outputResult(options.json ? stored.result : stored.rendered ?? "", options.json);
   if (typeof stored.exitCode === "number" && stored.exitCode !== 0) {
     process.exitCode = stored.exitCode;
   }
-  markJobAnnounced(job, stored);
+  outputAndMarkDelivered(options.json ? stored.result : stored.rendered ?? "", options.json, job, stored);
 }
 
 // Double-spawn on purpose: this launches a trampoline (`task-worker-launch`), which
@@ -1113,12 +1118,12 @@ async function handleResult(argv) {
       return;
     }
     const storedJob = readStoredJob(snapshot.workspaceRoot, snapshot.job.id);
-    outputCommandResult(
-      { job: snapshot.job, storedJob },
-      renderStoredJobResult(snapshot.job, storedJob),
-      options.json
+    outputAndMarkDelivered(
+      options.json ? { job: snapshot.job, storedJob } : renderStoredJobResult(snapshot.job, storedJob),
+      options.json,
+      { workspaceRoot: snapshot.workspaceRoot, id: snapshot.job.id },
+      storedJob
     );
-    markJobAnnounced({ workspaceRoot: snapshot.workspaceRoot, id: snapshot.job.id }, storedJob);
     return;
   }
 
@@ -1129,8 +1134,7 @@ async function handleResult(argv) {
     storedJob
   };
 
-  outputCommandResult(payload, renderStoredJobResult(job, storedJob), options.json);
-  markJobAnnounced({ workspaceRoot, id: job.id }, storedJob);
+  outputAndMarkDelivered(options.json ? payload : renderStoredJobResult(job, storedJob), options.json, { workspaceRoot, id: job.id }, storedJob);
 }
 
 function handleTaskResumeCandidate(argv) {
@@ -1297,6 +1301,10 @@ async function main() {
       throw new Error(`Unknown subcommand: ${subcommand}`);
   }
 }
+
+// A reader that went away (EPIPE) must not crash with an unhandled error. The
+// write callbacks above already skip the delivery stamp in that case.
+process.stdout.on("error", () => {});
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
