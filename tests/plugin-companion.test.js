@@ -41,13 +41,15 @@ test("unset effort falls back to xhigh", () => {
   assert.equal(/VALID_REASONING_EFFORTS = new Set\(\[[^\]]*"none"/.test(src), false, "none is not a real Codex effort");
 });
 
-test("model aliases cover astra, sol, terra, luna, spark", () => {
+// Aliases track the Codex catalog: sol and luna moved to GPT-6, terra has no
+// GPT-6 model yet, and spark was retired (the API rejects it).
+test("model aliases cover astra, sol, terra, luna, daybreak-blue", () => {
   assert.match(src, /\["astra", "gpt-6-astra"\]/);
-  assert.match(src, /\["sol", "gpt-5\.6-sol"\]/);
+  assert.match(src, /\["sol", "gpt-6-sol"\]/);
   assert.match(src, /\["terra", "gpt-5\.6-terra"\]/);
-  assert.match(src, /\["luna", "gpt-5\.6-luna"\]/);
+  assert.match(src, /\["luna", "gpt-6-luna"\]/);
   assert.match(src, /\["daybreak-blue", "gpt-daybreak-blue-latest"\]/);
-  assert.match(src, /\["spark", "gpt-5\.3-codex-spark"\]/);
+  assert.equal(src.includes("codex-spark"), false, "spark is retired");
 });
 
 test("task and review commands accept --fast", () => {

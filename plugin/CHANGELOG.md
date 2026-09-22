@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.12.0
+
+- **`sol` and `luna` now run GPT-6.** `--model sol` expands to `gpt-6-sol` and `--model luna` to `gpt-6-luna`. Both are new in the Codex catalog and both answered a live run. `terra` stays on `gpt-5.6-terra` because there is no GPT-6 Terra. For the older models, pass the full name, such as `--model gpt-5.6-sol`.
+- **The `spark` shortcut is gone.** `gpt-5.3-codex-spark` is no longer in the Codex catalog, and the API now rejects it for ChatGPT accounts.
+- **The effort rules match the catalog again.** `max` works on every GPT-6, GPT-5.6, and Daybreak model, but not on `gpt-5.5`. `ultra` works on `gpt-6-astra`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-daybreak-blue-latest`. The Luna models stop at `max`. Checked against Codex CLI 0.155.1 with `codex debug models`.
+
 ## 2.11.6
 
 - **SessionEnd no longer kills your jobs.** The SessionEnd hook used to terminate every queued or running job the ending session had started and delete its record and log. Hosts like CloudCLI end the Claude process on every new message, so a long rescue died the moment you typed anything and `/codex:status` said "No jobs recorded yet". Workers are detached and own their app-server, so the hook now leaves them alone. The next prompt re-announces the job and `/codex:result <id>` still works from the new session.
