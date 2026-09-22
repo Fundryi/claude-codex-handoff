@@ -140,4 +140,5 @@ test("the handback names the job, the workspace, and how to get the result", asy
   assert.match(text, /--cwd/, "must pin --cwd so a follow-up from another directory still finds it");
   assert.match(text, /D:\\GIT\\example/);
   assert.match(text, /Inside the codex-rescue agent: run it in the foreground/);
+  assert.match(text, /Anywhere else: run it as a background Bash task/);
 });

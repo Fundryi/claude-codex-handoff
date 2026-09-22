@@ -8,7 +8,7 @@ user-invocable: false
 
 Use this skill when you write a Codex handoff for `/codex:rescue` or the `codex:codex-rescue` agent. The guidance was written against GPT-5.4 and applies to the GPT-6 models (astra, sol, luna) and the GPT-5.6 models (sol, terra, luna).
 
-Prompt Codex like an operator, not a collaborator. Keep prompts compact and block-structured with XML tags. State the task, the output contract, the follow-through defaults, and the small set of extra constraints that matter.
+Prompt Codex like an operator, not a collaborator. Keep prompts compact and block-structured with XML tags. State the task, the follow-through defaults, and the small set of extra constraints that matter.
 
 ## Handoff form
 
@@ -63,8 +63,8 @@ Working rules:
 - Keep claims anchored to observed evidence. If something is a hypothesis, say so.
 
 Prompt assembly checklist:
-1. Define the exact task and scope in `<task>`.
-2. Choose the smallest output contract that still makes the answer easy to use.
+1. Fill `<goal>`, `<rules>`, `<done_when>` and `<files>`.
+2. For review prompts only, choose the smallest output contract that still makes the answer easy to use. Task handoffs get the return format from the companion.
 3. Decide whether Codex should keep going by default or stop for missing high-risk details.
 4. Add verification, grounding, and safety tags only where the task needs them.
 5. Remove redundant instructions before sending the prompt.

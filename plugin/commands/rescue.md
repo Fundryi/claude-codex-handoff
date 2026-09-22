@@ -27,7 +27,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" task-resume-candidate -
 
 After the subagent returns:
 
-- The subagent returns only when the Codex job has ended. If this process ends first, as it does under hosts like CloudCLI, the prompt hook delivers the result on the next message. Do not start your own waiter.
+- Without `--background`, the subagent returns only when the Codex job has ended. With `--background`, it returns the job id at once, and the result arrives through the prompt hook on the next message or through `/codex:result <id>`. If this process ends first, as it does under hosts like CloudCLI, the prompt hook delivers the result on the next message. Do not start your own waiter.
 - Show Codex's output to the user verbatim, with no paraphrase or commentary around it. Then follow the `codex-result-handling` skill, which covers a "Needs decision" question.
 - If the output says Codex is missing or unauthenticated, tell the user to run `/codex:setup`.
 - If the user did not supply a request, ask what Codex should investigate or fix.

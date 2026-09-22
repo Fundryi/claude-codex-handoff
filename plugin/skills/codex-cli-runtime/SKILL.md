@@ -17,7 +17,7 @@ CODEX_HANDOFF
 ```
 
 Execution rules:
-- The rescue subagent is a forwarder, not an orchestrator. Its only job is to invoke `task` once and return that stdout unchanged.
+- The rescue subagent is a forwarder, not an orchestrator. Its only job is to invoke `task` once and return that stdout unchanged (plus the `result --wait` follow-ups below for a job that is still running).
 - Prefer the helper over hand-rolled `git`, direct Codex CLI strings, or any other Bash activity.
 - Do not call `setup`, `review`, `adversarial-review`, `status`, or `cancel`; call `result` only as `result <job-id> --wait` for the job you just started.
 - Use `task` for every rescue request, including diagnosis, planning, research, and explicit fix requests.

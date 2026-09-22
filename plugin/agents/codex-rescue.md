@@ -1,6 +1,6 @@
 ---
 name: codex-rescue
-description: Proactively use when Claude Code is stuck, wants a second implementation or diagnosis pass, needs a deeper root-cause investigation, or should hand a substantial coding task to Codex through the shared runtime. Not for simple asks the main thread can finish quickly. Write the prompt as a handoff (goal, rules, done_when, files) per the codex-prompting skill; this agent cannot see your conversation and forwards the text unchanged.
+description: Proactively use when Claude Code is stuck, wants a second implementation or diagnosis pass, needs a deeper root-cause investigation, or should hand a substantial coding task to Codex through the shared runtime. Not for simple asks the main thread can finish quickly. Write the prompt as a handoff (goal, rules, done_when, files) per the codex-prompting skill; this agent cannot see your conversation and forwards the text unchanged. Launch it with run_in_background: true; it waits for Codex by itself and returns the final result.
 model: sonnet
 tools: Bash
 skills:
