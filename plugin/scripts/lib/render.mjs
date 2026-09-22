@@ -312,10 +312,46 @@ export function renderNativeReviewResult(result, meta) {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Codex ends a task with "## Summary", "## Changed files", "## Checks run" and
+// "## Needs decision" (prompts/task-return-format.md). Accept ###, a trailing
+// colon, and a bold line too: a missed heading only loses the flag, never the answer.
+export function extractSection(text, heading) {
+  const lines = String(text ?? "").split(/\r?\n/);
+  const name = escapeRegExp(heading);
+  const start = lines.findIndex((line) =>
+    new RegExp(`^(?:#{2,3}\\s*${name}\\s*:?|\\*\\*${name}\\s*:?\\s*\\*\\*\\s*:?)\\s*$`, "i").test(line.trim())
+  );
+  if (start === -1) return null;
+  const body = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^(#{1,3}\s|\*\*[^*]+\*\*\s*:?\s*$)/.test(line.trim())) break;
+    body.push(line);
+  }
+  return body.join("\n").trim();
+}
+
+export function readNeedsDecision(text) {
+  const body = extractSection(text, "Needs decision");
+  if (!body || /^(none\.?|-|n\/a)$/i.test(body)) return null;
+  return body.slice(0, 1000);
+}
+
+export function formatRecordedEdits(touchedFiles) {
+  const files = Array.isArray(touchedFiles) ? touchedFiles.filter(Boolean) : [];
+  if (files.length === 0) return "";
+  return ["Recorded file edits (patch tool only, shell edits are not listed):", ...files.map((file) => `- ${file}`)].join("\n");
+}
+
 export function renderTaskResult(parsedResult, meta) {
   const rawOutput = typeof parsedResult?.rawOutput === "string" ? parsedResult.rawOutput : "";
   if (rawOutput) {
-    return rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
+    const parts = [rawOutput.trimEnd(), formatRecordedEdits(meta?.touchedFiles)];
+    if (meta?.threadId) parts.push(`Codex thread: ${meta.threadId}`);
+    return `${parts.filter(Boolean).join("\n\n")}\n`;
   }
 
   const message = String(parsedResult?.failureMessage ?? "").trim() || "Codex did not return a final message.";
@@ -403,7 +439,8 @@ export function renderStoredJobResult(job, storedJob) {
     (typeof storedJob?.result?.codex?.stdout === "string" && storedJob.result.codex.stdout) ||
     "";
   if (rawOutput) {
-    const output = rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
+    const edits = formatRecordedEdits(storedJob?.result?.touchedFiles);
+    const output = `${rawOutput.trimEnd()}${edits ? `\n\n${edits}` : ""}\n`;
     if (!threadId) {
       return output;
     }

@@ -66,7 +66,8 @@ import {
   renderJobStatusReport,
   renderSetupReport,
   renderStatusReport,
-  renderTaskResult
+  renderTaskResult,
+  readNeedsDecision
 } from "./lib/render.mjs";
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -476,7 +477,10 @@ async function executeTaskRun(request) {
 
   const result = await runAppServerTurn(workspaceRoot, {
     resumeThreadId,
-    prompt: request.prompt,
+    prompt: withReturnFormat(
+      request.prompt || (resumeThreadId ? DEFAULT_CONTINUE_PROMPT : ""),
+      loadPromptTemplate(ROOT_DIR, "task-return-format").trim()
+    ),
     defaultPrompt: resumeThreadId ? DEFAULT_CONTINUE_PROMPT : "",
     model: request.model,
     effort: request.effort,
@@ -491,6 +495,7 @@ async function executeTaskRun(request) {
 
   const rawOutput = typeof result.finalMessage === "string" ? result.finalMessage : "";
   const failureMessage = result.error?.message ?? result.stderr ?? "";
+  const needsDecision = readNeedsDecision(rawOutput);
   const rendered = renderTaskResult(
     {
       rawOutput,
@@ -500,7 +505,9 @@ async function executeTaskRun(request) {
     {
       title: taskMetadata.title,
       jobId: request.jobId ?? null,
-      write: Boolean(request.write)
+      write: Boolean(request.write),
+      threadId: result.threadId,
+      touchedFiles: result.touchedFiles
     }
   );
   const payload = {
@@ -509,7 +516,8 @@ async function executeTaskRun(request) {
     rawOutput,
     touchedFiles: result.touchedFiles,
     reasoningSummary: result.reasoningSummary,
-    agents: result.agents
+    agents: result.agents,
+    needsDecision
   };
 
   return {
@@ -523,6 +531,7 @@ async function executeTaskRun(request) {
     summary: firstMeaningfulLine(rawOutput, firstMeaningfulLine(failureMessage, `${taskMetadata.title} finished.`)),
     jobTitle: taskMetadata.title,
     jobClass: "task",
+    needsDecision,
     write: Boolean(request.write)
   };
 }
@@ -564,6 +573,14 @@ function taskTitleFromPrompt(prompt) {
   }
   const task = line.match(/\btask\s*:\s*(.+)$/i);
   return shorten(task ? task[1] : line, 80);
+}
+
+// Every task ends with the same four headings so Claude can read the result and
+// the hook can lift "Needs decision". The stop gate needs ALLOW/BLOCK on line one,
+// so its prompt is left alone.
+function withReturnFormat(prompt, footer) {
+  if (!prompt || prompt.includes(STOP_REVIEW_TASK_MARKER)) return prompt;
+  return `${prompt}\n\n${footer}`;
 }
 
 function renderQueuedTaskLaunch(payload) {
