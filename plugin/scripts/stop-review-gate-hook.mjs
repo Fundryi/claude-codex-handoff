@@ -4,7 +4,7 @@ import fs from "node:fs";
 import process from "node:process";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { getCodexAvailability } from "./lib/codex.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
@@ -95,6 +95,28 @@ function parseStopReviewOutput(rawOutput) {
   };
 }
 
+export function waitForStopReviewJob(cwd, env, jobId, timeoutMs) {
+  const scriptPath = path.join(SCRIPT_DIR, "codex-companion.mjs");
+  const result = spawnSync(
+    process.execPath,
+    [scriptPath, "result", jobId, "--wait", "--json", "--timeout-ms", String(timeoutMs)],
+    { cwd, env, encoding: "utf8", timeout: timeoutMs + 5000 }
+  );
+  if (result.status !== 0) return null;
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    return null;
+  }
+}
+
+export function stopReviewRawOutput(taskPayload, waitForJob) {
+  if (!taskPayload?.waitTimedOut || !taskPayload.jobId) return { rawOutput: taskPayload?.rawOutput };
+  const waited = waitForJob(taskPayload.jobId);
+  if (waited?.waitTimedOut) return { timedOut: true };
+  return { rawOutput: waited?.storedJob?.result?.rawOutput };
+}
+
 function runStopReview(cwd, input = {}) {
   const scriptPath = path.join(SCRIPT_DIR, "codex-companion.mjs");
   const prompt = buildStopReviewPrompt(input);
@@ -102,6 +124,7 @@ function runStopReview(cwd, input = {}) {
     ...process.env,
     ...(input.session_id ? { [SESSION_ID_ENV]: input.session_id } : {})
   };
+  const startedAt = Date.now();
   const result = spawnSync(process.execPath, [scriptPath, "task", "--json", prompt], {
     cwd,
     env: childEnv,
@@ -127,9 +150,9 @@ function runStopReview(cwd, input = {}) {
     };
   }
 
+  let payload;
   try {
-    const payload = JSON.parse(result.stdout);
-    return parseStopReviewOutput(payload?.rawOutput);
+    payload = JSON.parse(result.stdout);
   } catch {
     return {
       ok: false,
@@ -137,6 +160,16 @@ function runStopReview(cwd, input = {}) {
         "The stop-time Codex review task returned invalid JSON. Run /codex:review manually or bypass the gate."
     };
   }
+  const remainingMs = Math.max(1000, STOP_REVIEW_TIMEOUT_MS - (Date.now() - startedAt));
+  const output = stopReviewRawOutput(payload, (jobId) => waitForStopReviewJob(cwd, childEnv, jobId, remainingMs));
+  if (output.timedOut) {
+    return {
+      ok: false,
+      reason:
+        "The stop-time Codex review task timed out after 15 minutes. Run /codex:review manually or bypass the gate."
+    };
+  }
+  return parseStopReviewOutput(output.rawOutput);
 }
 
 function main() {
@@ -175,10 +208,13 @@ function main() {
   logNote(runningTaskNote);
 }
 
-try {
-  main();
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
+// Same guard as pending-jobs-hook.mjs: importing this module (tests) must not run it.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    main();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  }
 }
