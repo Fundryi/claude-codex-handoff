@@ -13,7 +13,7 @@ import { sortJobsNewestFirst } from "./lib/job-control.mjs";
 import { SESSION_ID_ENV } from "./lib/tracked-jobs.mjs";
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
-const STOP_REVIEW_TIMEOUT_MS = 15 * 60 * 1000;
+const STOP_REVIEW_TIMEOUT_MS = 14 * 60 * 1000;
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, "..");
 const STOP_REVIEW_TASK_MARKER = "Run a stop-gate review of the previous Claude turn.";
@@ -136,7 +136,7 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason:
-        "The stop-time Codex review task timed out after 15 minutes. Run /codex:review manually or bypass the gate."
+        "The stop-time Codex review task timed out after 14 minutes. Run /codex:review manually or bypass the gate."
     };
   }
 
@@ -166,7 +166,7 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason:
-        "The stop-time Codex review task timed out after 15 minutes. Run /codex:review manually or bypass the gate."
+        "The stop-time Codex review task timed out after 14 minutes. Run /codex:review manually or bypass the gate."
     };
   }
   return parseStopReviewOutput(output.rawOutput);

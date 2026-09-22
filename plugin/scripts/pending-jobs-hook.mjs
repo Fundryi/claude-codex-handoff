@@ -27,7 +27,7 @@ function ageLabel(iso, now) {
 
 const MAX_DETAILED = 3;
 const MAX_LINES = 40;
-const MAX_CHARS = 3000;
+const MAX_CHARS = 2000;
 
 // The Summary section when Codex wrote the headings, otherwise the start of the
 // answer. Bounded by lines and characters: this lands in Claude's context.
@@ -106,9 +106,14 @@ function main() {
   if (!fs.existsSync(resolveStateDir(workspaceRoot))) return;
 
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
+  // A torn or corrupt job file falls back to the pointer line, never to silence.
   const readStored = (job) => {
-    const jobFile = resolveJobFile(workspaceRoot, job.id);
-    return fs.existsSync(jobFile) ? readJobFile(jobFile) : null;
+    try {
+      const jobFile = resolveJobFile(workspaceRoot, job.id);
+      return fs.existsSync(jobFile) ? readJobFile(jobFile) : null;
+    } catch {
+      return null;
+    }
   };
   const report = buildPendingJobsReport(jobs, Date.now(), readStored);
   if (!report) return;

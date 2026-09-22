@@ -240,7 +240,9 @@ test("only 3 jobs get a short result; others, missing files and no-heading answe
   assert.match(report, /A done\./);
   assert.match(report, /line 39/);
   assert.equal(report.includes("line 40"), false, "40 lines per job at most");
-  assert.ok(report.length < 12_000, "a single huge line is capped by characters");
+  assert.match(report, /x{2000} \[cut\]/, "a single huge line is capped at 2000 characters");
+  assert.equal(/x{2001}/.test(report), false, "a single huge line is capped at 2000 characters");
+  assert.ok(report.length < 10_000, "the injected text stays under 10,000 characters");
   assert.equal(report.includes("D done."), false, "the 4th job gets a pointer only");
   assert.match(report, /d  completed 1m ago  — d — result not delivered; run: \/codex:result d/);
   assert.match(report, /gone  completed 1m ago  — gone — result not delivered/);
@@ -265,6 +267,18 @@ async function seedFinishedJob(tag, id, jobFileText) {
     process.env.CODEX_COMPANION_STATE_ROOT = previous;
   }
 }
+
+// A torn or corrupt job file must not silence the hook: the job still gets its pointer.
+test("a corrupt job file falls back to the pointer line", async () => {
+  const { stateRoot } = await seedFinishedJob("corrupt", "task-torn", "{not json");
+  const run = spawnSync(process.execPath, [hookPath], {
+    cwd: process.cwd(),
+    env: { ...process.env, CODEX_COMPANION_STATE_ROOT: stateRoot, CODEX_VIEWER_PORT: "1" },
+    input: JSON.stringify({ hook_event_name: "UserPromptSubmit" }),
+    encoding: "utf8"
+  });
+  assert.match(run.stdout, /task-torn  completed .* result not delivered; run: \/codex:result task-torn/, run.stderr);
+});
 
 // Delivered means written. If Claude's end of the pipe is gone, the job stays
 // unannounced so the next prompt still shows it, and the hook does not crash.

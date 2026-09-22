@@ -40,3 +40,15 @@ test("the real result --wait output carries the review text where the gate reads
   assert.equal(waited.storedJob.result.rawOutput, "ALLOW: nothing to block");
   delete process.env.CODEX_COMPANION_STATE_ROOT;
 });
+
+// Claude Code kills the Stop hook at its hooks.json timeout. The gate's own budget
+// must end first, or its "timed out" block never prints.
+test("the gate's budget ends before the Stop hook timeout", () => {
+  const pluginDir = path.join(__dirname, "..", "plugin");
+  const hooks = JSON.parse(fs.readFileSync(path.join(pluginDir, "hooks", "hooks.json"), "utf8"));
+  const stopTimeoutS = hooks.hooks.Stop[0].hooks[0].timeout;
+  const src = fs.readFileSync(path.join(pluginDir, "scripts", "stop-review-gate-hook.mjs"), "utf8");
+  const [, minutes] = src.match(/const STOP_REVIEW_TIMEOUT_MS = (\d+) \* 60 \* 1000;/);
+  assert.ok(Number(minutes) * 60 < stopTimeoutS, `${minutes} min must be under ${stopTimeoutS} s`);
+  assert.equal(src.match(/timed out after (\d+) minutes/g).every((text) => text.includes(`${minutes} minutes`)), true);
+});
