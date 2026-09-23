@@ -115,8 +115,8 @@
     }
     #search::placeholder { color: var(--faint); }
     #filters { display: grid; gap: 2px; margin-top: 8px; }
+    [hidden] { display: none !important; }
     #jobs-actions { display: flex; gap: 6px; margin-top: 8px; }
-    #jobs-actions[hidden] { display: none; }
     #jobs-actions button { flex: 1; }
     .filter-button {
       border: 1px solid transparent;
@@ -423,7 +423,6 @@
       display: grid;
       place-items: center;
     }
-    #stop-modal[hidden], #job-modal[hidden], #control-modal[hidden] { display: none; }
     #stop-modal-box, #job-modal-box, #control-modal-box {
       width: min(92vw, 560px);
       max-height: 84vh;
@@ -1926,10 +1925,11 @@
       var grid = document.createElement('div');
       grid.className = 'control-grid';
       grid.append(controlField('Kind', kind), controlField('Model', model), fast.label);
-      controlModalBody.append(grid, controlField('Focus', focus));
+      var focusField = controlField('Focus', focus);
+      controlModalBody.append(grid, focusField);
       function updateFocus() {
-        focus.disabled = kind.value !== 'adversarial-review';
-        if (focus.disabled) focus.value = '';
+        focusField.hidden = kind.value !== 'adversarial-review';
+        if (focusField.hidden) focus.value = '';
       }
       kind.addEventListener('change', updateFocus);
       updateFocus();

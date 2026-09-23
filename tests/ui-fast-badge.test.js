@@ -23,3 +23,7 @@ test("sessionFastJob matches a fast job by threadId", () => {
   assert.equal(sessionFastJob(null, jobs), null);
   assert.equal(sessionFastJob({ threadId: "t2" }, null), null);
 });
+
+test("global [hidden] rule forces display:none with !important", () => {
+  assert.match(html, /\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/);
+});
