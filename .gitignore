@@ -17,6 +17,9 @@ node_modules/
 *.bak.*
 /*.lnk
 
+# playwright-cli session scratch (snapshots/console logs from ui-shots.js runs)
+.playwright-cli/
+
 # plans/specs/archive, kept local only
 /docs/superpowers/
 
