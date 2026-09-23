@@ -1,6 +1,6 @@
 ---
 description: Run a Codex review that challenges the implementation approach and design choices
-argument-hint: '[--background] [--base <ref>] [--scope auto|working-tree|branch] [focus ...]'
+argument-hint: '[--background] [--base <ref>] [--scope auto|working-tree|branch] [--model <model>] [--fast] [--cwd <folder>] [focus ...]'
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash(node:*), Bash(git:*)
 ---

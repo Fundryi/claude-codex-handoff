@@ -300,3 +300,37 @@ test("the review commands no longer offer an execution-mode choice", () => {
     assert.equal(/run_in_background/.test(text), false, `${name} must not background the Bash call`);
   }
 });
+
+function commandParts(name) {
+  const text = fs.readFileSync(path.join(pluginDir, "commands", name), "utf8").replace(/\r\n/g, "\n");
+  const [, front, body] = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
+  return { hint: (/^argument-hint: (.*)$/m.exec(front) || [])[1] || "", body };
+}
+
+test("/codex:rescue stays the same command as /codex:handoff", () => {
+  const handoff = commandParts("handoff.md");
+  const rescue = commandParts("rescue.md");
+  assert.equal(rescue.body, handoff.body);
+  assert.equal(rescue.hint, handoff.hint);
+});
+
+test("every flag a command's argument hint offers exists in the companion", () => {
+  const source = fs.readFileSync(path.join(pluginDir, "scripts", "codex-companion.mjs"), "utf8");
+  const optionsOf = (handler) => {
+    const at = source.indexOf("function " + handler + "(");
+    const block = source.slice(at, source.indexOf("});", at));
+    return new Set([...block.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]));
+  };
+  const handlers = {
+    "handoff.md": "handleTask", "rescue.md": "handleTask", "review.md": "handleReviewCommand",
+    "adversarial-review.md": "handleReviewCommand", "status.md": "handleStatus", "result.md": "handleResult",
+    "cancel.md": "handleCancel", "setup.md": "handleSetup", "transfer.md": "handleTransfer"
+  };
+  for (const [name, handler] of Object.entries(handlers)) {
+    const known = optionsOf(handler);
+    assert.ok(known.size > 0, handler + " not found");
+    for (const [, flag] of commandParts(name).hint.matchAll(/--([a-z-]+)/g)) {
+      assert.ok(known.has(flag), name + " offers --" + flag + ", which " + handler + " does not accept");
+    }
+  }
+});

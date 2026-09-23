@@ -28,7 +28,7 @@ Paths that matter, and what is already known.
 </files>
 ```
 
-If you use the claude-codex-handoff plugin, Claude picks these files up automatically when composing `/codex:rescue` prompts for a repo that has them.
+If you use the claude-codex-handoff plugin, Claude picks these files up automatically when composing `/codex:handoff` prompts for a repo that has them.
 
 ## Files
 

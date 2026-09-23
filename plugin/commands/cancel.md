@@ -1,6 +1,6 @@
 ---
-description: Cancel an active background Codex job in this repository
-argument-hint: '[job-id]'
+description: Cancel a running Codex job in this folder, or one started from here with --cwd
+argument-hint: '[job-id] [--cwd <folder>]'
 disable-model-invocation: true
 allowed-tools: Bash(node:*)
 ---

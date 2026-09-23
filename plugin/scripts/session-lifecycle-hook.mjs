@@ -132,6 +132,20 @@ export async function maybeStartViewer(env = process.env) {
   }
 }
 
+// This hook runs on every message under CloudCLI, so the "another program has the
+// port" notice is shown once per port and day, not on every message.
+export function firstForeignNoticeToday(env = process.env, today = new Date().toISOString().slice(0, 10)) {
+  const record = path.join(companionDir(env), "viewer-port-foreign.json");
+  const key = `${viewerPort(env)}@${today}`;
+  try { if (JSON.parse(fs.readFileSync(record, "utf8")).key === key) return false; } catch {}
+  try {
+    fs.mkdirSync(path.dirname(record), { recursive: true });
+    fs.writeFileSync(record, `${JSON.stringify({ key })}
+`, "utf8");
+  } catch {}
+  return true;
+}
+
 export async function sessionUpdateNotice(env = process.env) {
   try {
     const pluginRoot = env.CLAUDE_PLUGIN_ROOT;
@@ -169,8 +183,11 @@ async function handleSessionStart(input) {
   appendEnvVar(SESSION_ID_ENV, input.session_id);
   appendEnvVar(TRANSCRIPT_PATH_ENV, input.transcript_path);
   appendEnvVar(PLUGIN_DATA_ENV, process.env[PLUGIN_DATA_ENV]);
-  if ((await maybeStartViewer()) === "port-busy") {
-    console.log(`[codex plugin] An older Codex viewer on port ${viewerPort()} did not stop, so the updated viewer could not start. Stop the old viewer; the next session starts the new one. This is not retried for this plugin version.`);
+  const viewer = await maybeStartViewer();
+  if (viewer === "port-busy") {
+    console.log(`[codex plugin] An older Codex viewer on port ${viewerPort()} did not stop, so the updated viewer could not start. Run /codex:viewer restart, or /codex:viewer kill if it hangs. This is not retried for this plugin version.`);
+  } else if (viewer === "foreign" && firstForeignNoticeToday()) {
+    console.log(`[codex plugin] Port ${viewerPort()} is used by another program, so the Codex viewer did not start. Set CODEX_VIEWER_PORT to a free port (for example ${viewerPort() + 1}) where Claude and Codex run.`);
   }
   const notice = await sessionUpdateNotice();
   if (notice) console.log(notice);

@@ -1,5 +1,5 @@
 ---
-description: Same as /codex:handoff (the original command name, kept working)
+description: Hand a task to Codex (investigation, a fix, or follow-up on the same thread); it runs in the background and the result comes back by itself
 argument-hint: "[--background] [--cwd <folder>] [--resume|--fresh] [--resume-thread <id>] [--model <model|astra|sol|terra|luna|daybreak-blue>] [--effort <low|medium|high|xhigh|max|ultra>] [--fast] [what Codex should investigate, solve, or continue]"
 allowed-tools: Bash(node:*), AskUserQuestion, Agent
 ---

@@ -143,3 +143,12 @@ test("an old viewer that never frees its port is given up on in time, once per v
     }
   }
 });
+
+test("the another-program-on-the-port notice shows once per port and day", async () => {
+  const { firstForeignNoticeToday } = await import(hookUrl);
+  const env = { CODEX_COMPANION_STATE_ROOT: path.join(fs.mkdtempSync(path.join(os.tmpdir(), "clv-foreign-")), "state"), CODEX_VIEWER_PORT: "8377" };
+  assert.equal(firstForeignNoticeToday(env, "2026-01-01"), true);
+  assert.equal(firstForeignNoticeToday(env, "2026-01-01"), false, "CloudCLI runs the hook on every message");
+  assert.equal(firstForeignNoticeToday({ ...env, CODEX_VIEWER_PORT: "8378" }, "2026-01-01"), true, "a new port is a new problem");
+  assert.equal(firstForeignNoticeToday({ ...env, CODEX_VIEWER_PORT: "8378" }, "2026-01-02"), true, "and it is repeated the next day");
+});

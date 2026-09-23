@@ -1,6 +1,6 @@
 ---
 description: Run a Codex code review against local git state
-argument-hint: '[--background] [--base <ref>] [--scope auto|working-tree|branch]'
+argument-hint: '[--background] [--base <ref>] [--scope auto|working-tree|branch] [--model <model>] [--fast] [--cwd <folder>]'
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash(node:*), Bash(git:*)
 ---

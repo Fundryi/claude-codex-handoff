@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.15.5";
+const APP_VERSION = "2.15.6";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 const PID_FILE = path.join(os.tmpdir(), "codex-live-viewer-" + PORT + ".pid");
 function parseFlags(argv) {
@@ -1054,19 +1054,25 @@ function ping(cb) {
       let data;
       try { data = JSON.parse(body); } catch {}
       const ok = res.statusCode === 200 && data && data.application === APP_ID;
-      cb(ok, ok ? data : null);
+      cb(ok, ok ? data : null, ok ? null : "foreign");
     });
   });
-  // busy: something holds the port but did not answer in time (a viewer still
-  // loading, or a hung one). It must not count as "down", or a replace would
-  // launch into a port that is still taken.
+  // The third argument says why the port is not a usable viewer even though it is
+  // taken: "busy" (it did not answer in time: a viewer still loading, or a hung one)
+  // or "foreign" (another program answers). Neither counts as "down", or a start
+  // would launch into a port that is still taken.
   let busy = false;
   req.setTimeout(1000, () => { busy = true; req.destroy(); });
-  req.on("error", () => cb(false, null, busy));
+  req.on("error", err => cb(false, null, busy ? "busy" : err.code === "ECONNREFUSED" ? null : "foreign"));
 }
 
-function reportBusy() {
-  console.log("[i] Something on " + BASE + " is not answering (a viewer still starting, or busy). Try again in a few seconds, or force it with kill.");
+function reportBlocked(why) {
+  if (why === "foreign") {
+    console.log("[X] Port " + PORT + " is used by another program, not the viewer.");
+    console.log("    Pick a free port: set CODEX_VIEWER_PORT=" + (PORT + 1) + " (or any free port) where Claude and Codex run, then start the viewer again.");
+  } else {
+    console.log("[i] The viewer on " + BASE + " is not answering (still starting, or hung). Try again in a few seconds, or force it with kill.");
+  }
   process.exitCode = 1;
 }
 
@@ -1092,8 +1098,8 @@ function doKill() {
     }
     const done = () => {
       try { fs.unlinkSync(PID_FILE); } catch {}
-      waitDown(() => ping((up, _i, busy) => {
-        if (up || busy) { console.error("[X] Port " + PORT + " still answers after killing " + pid + "."); process.exitCode = 1; }
+      waitDown(() => ping((up, _i, blocked) => {
+        if (up || blocked) { console.error("[X] Port " + PORT + " still answers after killing " + pid + "."); process.exitCode = 1; }
         else console.log("[OK] Viewer killed (pid " + pid + ").");
       }));
     };
@@ -1127,8 +1133,8 @@ function openBrowser() {
 // A running viewer from an older version is replaced, so a plugin update takes effect
 // without a new session. force replaces any running viewer (restart).
 function doStart(force) {
-  ping((up, info, busy) => {
-    if (busy) return reportBusy();
+  ping((up, info, blocked) => {
+    if (blocked) return reportBlocked(blocked);
     if (!up) return launch();
     const older = isOlderVersion(info.version, APP_VERSION);
     if (!force && !older) { console.log("[OK] already running -> " + BASE); openBrowser(); return; }
@@ -1140,8 +1146,8 @@ function doStart(force) {
 // The old viewer answers /shutdown before its port closes; launching too early would
 // see it still up, or fail to bind.
 function waitDown(cb, tries = 0) {
-  ping((up, _info, busy) => {
-    if ((!up && !busy) || tries >= 25) return cb();
+  ping((up, _info, blocked) => {
+    if ((!up && !blocked) || tries >= 25) return cb();
     setTimeout(() => waitDown(cb, tries + 1), 200);
   });
 }
@@ -1153,13 +1159,13 @@ function launch() {
   const t = setInterval(() => ping(up2 => {
     if (done) return;
     if (up2) { done = true; clearInterval(t); console.log("[OK] Codex Live Viewer running -> " + BASE); openBrowser(); }
-    else if (++tries > 25) { done = true; clearInterval(t); console.error("[X] Failed to start within 5s. Try: node codex-live-viewer.js serve"); process.exit(1); }
+    else if (++tries > 25) { done = true; clearInterval(t); console.error("[X] The viewer did not come up on port " + PORT + " within 5s. To see why, run: node \"" + __filename + "\" serve"); process.exit(1); }
   }), 200);
 }
 
 function doStop(cb) {
-  ping((up, _info, busy) => {
-    if (busy) return reportBusy();
+  ping((up, _info, blocked) => {
+    if (blocked) return reportBlocked(blocked);
     if (!up) { console.log("[i] Viewer was not running."); if (cb) cb(false); return; }
     let finished = false;
     const req = http.request(BASE + "/shutdown", { method: "POST" }, () => {
@@ -1187,7 +1193,7 @@ else if (cmd === "start") doStart(false);
 else if (cmd === "kill") doKill();
 else if (cmd === "stop") doStop(stopped => stopped && waitDown(() => ping(up => { if (up) { console.error("[X] Viewer still answers on " + BASE); process.exitCode = 1; } })));
 else if (cmd === "restart") doStart(true);
-else if (cmd === "status") ping((up, info, busy) => busy ? reportBusy() : console.log(up ? "[OK] running " + (info.version || "?") + " -> " + BASE : "[i] not running"));
+else if (cmd === "status") ping((up, info, blocked) => blocked ? reportBlocked(blocked) : console.log(up ? "[OK] running " + (info.version || "?") + " -> " + BASE : "[i] not running"));
 else {
   console.log("Usage: codex-live-viewer <start|stop|restart|status|kill|serve>");
   console.log("  start    run in background and open the browser; replaces an older running version");

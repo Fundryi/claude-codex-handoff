@@ -52,7 +52,7 @@ The dashboard classifies every job from ground truth (real PID + heartbeat), not
 
 Recovery is always flag-only: the dashboard marks, you click. It never resumes or kills anything on its own. Job workers are detached and the SessionEnd hook leaves them alone, so restarting Claude Code, or sending a new message under a host like CloudCLI that ends the session per turn, doesn't kill your handoffs. The next prompt brings back a short result for each finished job: its Summary, any question Codex asks, and the job id for the full text.
 
-On CloudCLI, where Claude always runs in one folder, `/codex:rescue --cwd <folder>` targets another project and its result still comes back to Claude's folder. Two limits: a resume started from the viewer is not reported through Claude's prompt hook (only a session in the job's own folder sees it), and `/codex:status` with no job id shows only the current folder's jobs (pass the id to see a `--cwd` job).
+On CloudCLI, where Claude always runs in one folder, `/codex:handoff --cwd <folder>` targets another project and its result still comes back to Claude's folder. Two limits: a resume started from the viewer is not reported through Claude's prompt hook (only a session in the job's own folder sees it), and `/codex:status` with no job id shows only the current folder's jobs (pass the id to see a `--cwd` job).
 
 ## What you get
 
@@ -60,14 +60,14 @@ On CloudCLI, where Claude always runs in one folder, `/codex:rescue --cwd <folde
 
 | Command | Does |
 |---|---|
-| `/codex:rescue` | Hand a task to Codex as a background job |
+| `/codex:handoff` | Hand a task to Codex as a background job (`/codex:rescue` is the same command under its original name) |
 | `/codex:review` / `/codex:adversarial-review` | Codex reviews your working tree, or challenges your design |
 | `/codex:status` / `/codex:result` / `/codex:cancel` | Track, fetch, or stop jobs |
 | `/codex:transfer` | Move the current Claude session into a Codex thread |
 | `/codex:viewer [restart\|stop\|kill\|status]` | Open the dashboard (starts it, and replaces one left running by an older version); `restart`, `stop`, force-quit (`kill`) or `status` it |
 | `/codex:setup` | Check Codex CLI readiness |
 
-**Effort and fast mode** are set per job (form fields in the dashboard, `--effort`/`--fast` on the CLI, or just say "high effort" / "use fast mode" in a rescue request):
+**Effort and fast mode** are set per job (the Resume form in the dashboard, `--effort`/`--fast` on the CLI, or just say "high effort" / "use fast mode" in a handoff request):
 
 | Effort | Use for |
 |---|---|
@@ -121,6 +121,8 @@ node codex-live-viewer.js kill     # force-quit, also a hung viewer
 ```
 
 `start` replaces a viewer left running by an older version, so after an update it brings up the new one.
+
+**Port and address.** The viewer listens on `127.0.0.1:8377`. The port is fixed on purpose: the plugin finds the viewer by it to report finished jobs. If another program already uses 8377, the viewer does not start and says so; set `CODEX_VIEWER_PORT` to a free port where Claude and Codex run. Under WSL, `localhost:8377` on Windows reaches a viewer running inside WSL, and it shows the Codex runs from the WSL side. In a Docker container, set `CODEX_VIEWER_HOST=0.0.0.0` and publish the port to the host only, for example `-p 127.0.0.1:8377:8377`.
 
 Or grab a tray app from [Releases](../../releases): `Codex-Live-Viewer-Windows-x64.zip` (double-click the exe) or `Codex-Live-Viewer-Linux-x64.zip` (needs GTK 3 + Ayatana AppIndicator). The tray supervises the server and shows completion toasts. No macOS tray; use the Node CLI or the plugin's autostart.
 

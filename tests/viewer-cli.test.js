@@ -160,3 +160,23 @@ test("kill force-quits a hung viewer, and never a process a stale record points 
     try { fs.unlinkSync(pidFile(port)); } catch {}
   }
 });
+
+test("another program on the port gets a plain message with the fix, and is never touched", async () => {
+  const other = http.createServer((_req, res) => { res.statusCode = 404; res.end("not the viewer"); });
+  await new Promise((resolve) => other.listen(0, "127.0.0.1", resolve));
+  const port = other.address().port;
+  let hits = 0;
+  other.on("request", () => { hits += 1; });
+  try {
+    for (const action of ["", "restart", "stop", "status"]) {
+      const run = await cli(port, "start", action);
+      assert.match(run.out, /used by another program/, action + ": " + run.out);
+      assert.ok(run.out.includes("CODEX_VIEWER_PORT=" + (port + 1)), run.out);
+      assert.equal(run.code, 1, action);
+    }
+    assert.equal(hits, 4, "only health checks, never a shutdown or a second server");
+  } finally {
+    other.close();
+    other.closeAllConnections();
+  }
+});

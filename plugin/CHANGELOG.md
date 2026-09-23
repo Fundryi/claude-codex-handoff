@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.15.6
+
+- **`/codex:handoff` is the main command.** It hands a task to Codex. `/codex:rescue` keeps working as the same command under its original name, and a test keeps the two identical.
+- **A port used by another program is named plainly.** `/codex:viewer` used to say only "Failed to start within 5s". It now says that another program uses the port and names the fix: set `CODEX_VIEWER_PORT` to a free port. Session start says the same, once per port and day, because CloudCLI runs it on every message. The viewer never touches the other program.
+- **Command hints match the options.** `/codex:review` and `/codex:adversarial-review` list `--model`, `--fast` and `--cwd`. `/codex:status`, `/codex:result` and `/codex:cancel` list `--cwd` and say they also find a job started from here with `--cwd`. `/codex:handoff` lists `--fast`. A test checks that every flag a hint offers exists.
+- **The README explains the port and address**, including WSL and Docker.
+
 ## 2.15.5
 
 - **`/codex:viewer kill` force-quits the viewer.** It works when the viewer hangs and no longer answers, which `stop` cannot handle. The viewer now records its process id when it starts. `kill` checks that this process is still a viewer before it ends it, so a stale record never kills another program. On Windows it also ends a tunnel the viewer started. `stop` and `status` now point to `kill` when the viewer does not answer.

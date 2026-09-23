@@ -64,7 +64,7 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 
 ## Navigation behavior
 
-- The viewer does not start new Codex runs. Runs start from Claude (`/codex:rescue`) or a Codex CLI; the viewer resumes, answers and cancels them.
+- The viewer does not start new Codex runs. Runs start from Claude (`/codex:handoff`) or a Codex CLI; the viewer resumes, answers and cancels them.
 - One list of rows: a Codex session and the handoff jobs on its thread share one row. Rows show 3 lines: badges, title, project · model · effort · tokens. Full path, thread, sandbox, reason and job detail are in the row tooltip.
 - Tabs Now, Handoffs, History sit in one fixed row. Each tab has filter chips with counts (Now: All, Running, Waiting, Needs attention, Needs answer; Handoffs: All, Running, Needs attention, Needs answer, Finished, Stopped; History: Finished, Stopped, Archived, Dismissed, Everything). Order and position never change when counts update.
 - Choosing a tab or chip pauses auto-open (also closes the Now overview if it was open). A background update must not override an explicit choice.
