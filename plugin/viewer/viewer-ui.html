@@ -172,7 +172,7 @@
     .chip-button[data-chip="ATTENTION"]::before { background: #ee964b; }
     .chip-button[data-chip="ANSWER"]::before { background: transparent; border: 1px solid #ee964b; }
     .chip-button[data-chip="FINISHED"]::before { background: var(--green); }
-    .chip-button[data-chip="STOPPED"]::before { background: #ff8f88; }
+    .chip-button[data-chip="STOPPED"]::before { background: #7b8794; }
     .chip-button[data-chip="ARCHIVED"]::before { background: #9fb0c3; }
     .chip-button:hover { background: var(--hover); color: var(--fg); }
     .chip-button.on {
@@ -321,7 +321,7 @@
     .status.IDLE { background: #473a19; color: #f0cb6e; }
     .status.STALE { background: #4a2c12; color: #f0a254; }
     .status.DONE { background: #173923; color: #72dc8c; }
-    .status.STOPPED { background: #43181d; color: #ff8f88; }
+    .status.STOPPED { background: #262d38; color: #9fb0c3; }
     .status.NEEDS_ANSWER { background: transparent; border: 1px solid #ee964b; color: #ee964b; }
     .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
     .status.FAST { background: #3d2a14; color: #ffb86b; }
@@ -791,6 +791,7 @@
     var renderLimits = {};
     var historyResults = [];
     var historySearchTimer = null;
+    var jobsLoaded = false;
 
     var side = document.getElementById('side');
     var splitter = document.getElementById('splitter');
@@ -849,13 +850,12 @@
       ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' },
       NEEDS_ANSWER: { label: 'Needs answer', help: 'The handoff finished and Codex asked a question.' }
     };
-    // Tab and chip ids come from TABS; the tab count is the count of the chip named here.
+    // Tab and chip ids come from TABS.
     var VIEW_LABELS = {
       NOW: 'Now', HANDOFFS: 'Handoffs', HISTORY: 'History',
       ALL: 'All', RUNNING: 'Running', WAITING: 'Waiting', ATTENTION: 'Needs attention', ANSWER: 'Needs answer',
       FINISHED: 'Finished', STOPPED: 'Stopped', ARCHIVED: 'Archived', DISMISSED: 'Dismissed', EVERYTHING: 'Everything'
     };
-    var TAB_COUNT = { NOW: 'ALL', HANDOFFS: 'ALL', HISTORY: 'EVERYTHING' };
 
     function loadPrefs() {
       try {
@@ -1156,6 +1156,8 @@
       if (state === 'working' || state === 'running' || state === 'queued') return 'RUNNING';
       if (state === 'possibly-stuck' || state === 'dead' || state === 'failed') return 'ATTENTION';
       if (session && session.archived) return 'ARCHIVED';
+      // A live session beats a finished or cancelled job: the thread was resumed after the handoff.
+      if (session && session.status === 'LIVE') return 'RUNNING';
       if (state === 'completed') return String(job.needsDecision || '').trim() ? 'ANSWER' : 'FINISHED';
       if (state === 'cancelled') return 'STOPPED';
       var map = { LIVE: 'RUNNING', IDLE: 'WAITING', STALE: 'ATTENTION', STOPPED: 'STOPPED', DONE: 'FINISHED' };
@@ -1302,6 +1304,12 @@
       }
       return items;
     }
+    // A tab's count is what clicking it shows: its first chip (counts from viewCounts).
+    function tabCounts(counts) {
+      var result = {};
+      Object.keys(TABS).forEach(function (tab) { result[tab] = counts[tab][TABS[tab][0]]; });
+      return result;
+    }
     // The top-level row that draws this id: the row itself, or the lead of a child agent.
     function findRow(rows, id) {
       return (rows || []).find(function (row) {
@@ -1406,12 +1414,13 @@
     function renderFilters() {
       jobsActions.hidden = prefs.tab !== 'HANDOFFS';
       var counts = viewCounts(currentRows(), prefs.dismissed);
+      var perTab = tabCounts(counts);
       var signature = JSON.stringify([prefs.tab, prefs.chip, counts]);
       if (signature === lastFilterSignature) return;
       lastFilterSignature = signature;
       tabsBar.textContent = '';
       Object.keys(TABS).forEach(function (tab) {
-        var button = viewButton('tab-button', VIEW_LABELS[tab], '(' + counts[tab][TAB_COUNT[tab]] + ')', prefs.tab === tab);
+        var button = viewButton('tab-button', VIEW_LABELS[tab], '(' + perTab[tab] + ')', prefs.tab === tab);
         button.dataset.tab = tab;
         button.addEventListener('click', function () { chooseView(tab, prefs.tab === tab ? prefs.chip : TABS[tab][0]); });
         tabsBar.appendChild(button);
@@ -1475,7 +1484,7 @@
       function rowKey(row) {
         var session = row.session || {};
         var job = row.job || {};
-        return [row.id, row.status, row.title, row.project, row.updatedMs, row.olderJobs, session.model, session.tokensUsed,
+        return [row.id, row.status, row.title, row.project, Math.floor(row.updatedMs / 10000), row.olderJobs, session.model, session.tokensUsed,
           session.agentNickname, job.id, job.live, job.threadId, job.model, job.effort, job.needsDecision, row.children.map(rowKey)];
       }
       var signature = JSON.stringify([
@@ -1958,8 +1967,10 @@
         if (!response.ok) return;
         var previousRow = findRow(currentRows(), selected);
         jobs = data.jobs || [];
-        // A handoff finishing changes its row's status just like a session update does.
-        followSelectedStatus(previousRow ? previousRow.status : null);
+        // A handoff finishing changes its row's status just like a session update does. Not on the
+        // first load: jobs arriving would look like status changes and move a restored tab/chip.
+        if (jobsLoaded) followSelectedStatus(previousRow ? previousRow.status : null);
+        jobsLoaded = true;
         renderFilters();
         renderList();
         renderHeader();

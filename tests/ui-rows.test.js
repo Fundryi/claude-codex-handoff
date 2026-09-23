@@ -91,7 +91,12 @@ test("rowStatus: job liveness wins over session quiet time", () => {
     [{ status: "LIVE" }, { live: "dead" }, "ATTENTION"],
     [idle, { live: "possibly-stuck" }, "ATTENTION"],
     [idle, { live: "failed" }, "ATTENTION"],
-    [{ status: "LIVE" }, { live: "completed" }, "FINISHED"],
+    // A thread resumed interactively after its handoff ended: the live session wins over the old job.
+    [{ status: "LIVE" }, { live: "completed" }, "RUNNING"],
+    [{ status: "LIVE" }, { live: "completed", needsDecision: "Which one?" }, "RUNNING"],
+    [{ status: "LIVE" }, { live: "cancelled" }, "RUNNING"],
+    [{ status: "LIVE", archived: true }, { live: "completed" }, "ARCHIVED"],
+    [{ status: "IDLE" }, { live: "completed" }, "FINISHED"],
     [idle, { live: "completed", needsDecision: "Keep the API?" }, "ANSWER"],
     [idle, { live: "completed", needsDecision: "   " }, "FINISHED"],
     [idle, { live: "cancelled" }, "STOPPED"],
@@ -131,6 +136,9 @@ test("child agents nest under the lead; counts skip children, dismissed and arch
     HANDOFFS: { ALL: 1, RUNNING: 0, ATTENTION: 0, ANSWER: 0, FINISHED: 1, STOPPED: 0 },
     HISTORY: { FINISHED: 1, STOPPED: 0, ARCHIVED: 1, DISMISSED: 1, EVERYTHING: 4 }
   });
+  // A tab's count is what clicking the tab shows: its first chip (History opens on Finished).
+  const { tabCounts } = ctx();
+  assert.deepEqual(plain(tabCounts(counts)), { NOW: 1, HANDOFFS: 1, HISTORY: 1 });
   const gone = rows[1];
   assert.equal(rowInView(gone, "NOW", "RUNNING", ["gone"]), false);
   assert.equal(rowInView(gone, "HISTORY", "DISMISSED", ["gone"]), true);

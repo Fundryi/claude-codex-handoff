@@ -109,6 +109,22 @@ test("a selected child agent follows the view of its lead row", () => {
   assert.deepEqual(view(context), ["HISTORY", "FINISHED"], "the lead row is what the list draws");
 });
 
+test("Follow newest keeps a thread resumed after its handoff finished in the running view", () => {
+  // codex resume <thread> after the handoff completed: live session, newest job completed.
+  const resumed = { id: "resumed", threadId: "t-res", status: "LIVE" };
+  const context = navigation({ jobs: [{ id: "j", threadId: "t-res", live: "completed" }] });
+  context.sessions.push(resumed);
+  context.followRunningSession(resumed);
+  assert.deepEqual(view(context), ["NOW", "ALL"], "visible in Now/All: no jump to History/Finished");
+  assert.equal(context.selected, "resumed");
+
+  context.prefs.tab = "HISTORY";
+  context.prefs.chip = "FINISHED";
+  context.selected = "selected";
+  context.followRunningSession(resumed);
+  assert.deepEqual(view(context), ["NOW", "RUNNING"]);
+});
+
 test("Follow newest deliberately returns to the running view", () => {
   const running = { id: "running", threadId: "t-run", status: "LIVE" };
   const context = navigation();

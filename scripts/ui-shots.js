@@ -95,10 +95,8 @@ async (page) => {
     }, dismissedTitle);
     if (targetId) {
       await page.evaluate(({ key, id }) => {
-        let prefs = {};
-        try { prefs = JSON.parse(localStorage.getItem(key) || '{}'); } catch {}
-        prefs.dismissed = Array.from(new Set([...(prefs.dismissed || []), id]));
-        localStorage.setItem(key, JSON.stringify(prefs));
+        // Start from empty prefs so every run begins in the same view (Now/All, default width).
+        localStorage.setItem(key, JSON.stringify({ dismissed: [id] }));
       }, { key: 'codex-live-viewer-ui-v1', id: targetId });
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(1000);

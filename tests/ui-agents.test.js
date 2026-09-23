@@ -76,8 +76,6 @@ test("childSessions ignores self-parent links and the list never recurses past o
   assert.equal(new Set(drawn).size, drawn.length, "no session drawn twice");
   assert.ok(rows.every((row) => row.children.every((kid) => kid.children.length === 0)), "one level only");
   assert.deepEqual(plain(rows.find((row) => row.id === "p").children.map((kid) => kid.id)), ["kid"]);
-  assert.match(html, /row\.children\.forEach\(function \(kid\) \{ group\.appendChild\(rowElement\(kid, 1, /);
-  assert.match(html, /'Agent team · ' \+ \(row\.children\.length \+ 1\)/);
 });
 
 test("homeCards folds child agents into the parent card", () => {

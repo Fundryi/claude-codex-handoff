@@ -24,6 +24,7 @@ Status color has one meaning everywhere: list rows, filter chips, and the select
 | Waiting | Yellow `#e5b849` | Quiet for at least 20 seconds |
 | Possibly stuck | Orange `#ee964b` | The job process died or its heartbeat stopped. Sessions without a job never get this |
 | Finished | Green `#4ac26b` | Completion event received |
+| Stopped | Gray: chip dot `#7b8794`, badge `#9fb0c3` on `#262d38` (the Archived badge) | Cancelled job or aborted turn. Not an alarm |
 | All | Gray `#7b8794` | Neutral collection, not a task state |
 
 Do not animate an entire row or badge. Only the small Running spinner moves.
