@@ -38,8 +38,21 @@ test("messageActor: who sent each message, by originator and prefix", () => {
   assert.equal(messageActor(user("<environment_context>", { internal: true }), CLI), "system");
   assert.equal(messageActor({ kind: "agent", internal: true, text: "PONYTAIL MODE ACTIVE" }, HANDOFF), "system");
   assert.equal(messageActor({ kind: "agent", text: "<permissions instructions>\nx" }, CLI), "system");
+  // The UI's own list matches the server's: an unflagged injected block is still System,
+  // a prompt that opens with any other tag is speech.
+  assert.equal(messageActor(user("<environment_context>\n<cwd>/x</cwd>"), CLI), "system");
+  assert.equal(messageActor(user("# AGENTS.md instructions for /repo\n\n<INSTRUCTIONS>"), CLI), "system");
+  assert.equal(messageActor(user("<role>\nYou are a reviewer.\n</role>"), HANDOFF), "claude");
+  assert.equal(messageActor(user("<send_user_message_question_reply>B</send_user_message_question_reply>"), CLI), "you");
+  // A child agent's plain prompts come from its lead agent; the answer prefixes still win.
+  const CHILD = { originator: "Claude Code", parentThreadId: "t-lead" };
+  assert.equal(messageActor(user("Check the tests"), CHILD), "codex-lead");
+  assert.equal(messageActor(user("Check the tests"), { parentThreadId: "t-lead" }), "codex-lead");
+  assert.equal(messageActor(user("Answer from the user: B"), CHILD), "relay");
+  assert.equal(messageActor(user("Answer from Claude (automatic 1 of 2): B"), CHILD), "claude");
   // Codex speech, Codex work, and turn markers.
   assert.equal(messageActor({ kind: "agent", text: "Done." }, HANDOFF), "codex");
+  assert.equal(messageActor({ kind: "agent", text: "Done." }, CHILD), "codex");
   for (const kind of ["cmd", "out", "patch", "tool", "think", "thinkgroup"]) assert.equal(messageActor({ kind, text: "x" }, HANDOFF), "work", kind);
   for (const kind of ["done", "err", "sys"]) assert.equal(messageActor({ kind, text: "x" }, HANDOFF), "status", kind);
 });
@@ -91,14 +104,26 @@ test("groupFeed folds runs of System blocks into one row and keeps everything el
   assert.deepEqual(plain(assignEventKeys(groupFeed(events.slice(), HANDOFF))), plain(assignEventKeys(grouped)));
 });
 
-test("startedBy reads the originator; unknown shows nothing", () => {
+test("startedBy names the lead agent, then the originator by its readable name; unknown shows nothing", () => {
   const { startedBy } = lib();
-  assert.deepEqual(plain(startedBy("Claude Code")), { actor: "claude", label: "Claude (handoff)" });
-  assert.deepEqual(plain(startedBy("codex_cli_rs")), { actor: "you", label: "you (Codex CLI)" });
-  assert.deepEqual(plain(startedBy("codex_exec")), { actor: "you", label: "you (Codex CLI)" });
-  assert.deepEqual(plain(startedBy("Codex Desktop")), { actor: "you", label: "you (Codex Desktop)" });
-  assert.equal(startedBy(""), null);
-  assert.equal(startedBy(undefined), null);
+  const by = (session) => plain(startedBy(session));
+  assert.deepEqual(by({ originator: "Claude Code" }), { actor: "claude", label: "Claude (handoff)" });
+  assert.deepEqual(by({ originator: "codex_cli_rs" }), { actor: "you", label: "you (Codex CLI)" });
+  assert.deepEqual(by({ originator: "codex_vscode" }), { actor: "you", label: "you (VS Code)" });
+  assert.deepEqual(by({ originator: "Codex Desktop" }), { actor: "you", label: "you (Codex Desktop)" });
+  assert.deepEqual(by({ originator: "some_new_client" }), { actor: "you", label: "you (some_new_client)" });
+  // A child agent was started by its lead, whatever originator its rollout names.
+  assert.deepEqual(by({ originator: "Claude Code", parentThreadId: "t-lead" }), { actor: "codex-lead", label: "Codex (lead agent)" });
+  assert.equal(startedBy({ originator: "" }), null);
+  assert.equal(startedBy(null), null);
+});
+
+test("isResumePrompt matches only the exact texts a Resume sends", () => {
+  const { isResumePrompt } = lib();
+  assert.equal(isResumePrompt("Continue the previous task where it left off and finish it."), true);
+  assert.equal(isResumePrompt("  Continue from the current thread state. Pick the next highest-value step and follow through until the task is resolved.\n"), true);
+  assert.equal(isResumePrompt("Continue the previous task where it left off and finish it. Also fix the docs."), false);
+  assert.equal(isResumePrompt(""), false);
 });
 
 test("workingLine says what Codex is doing from its latest step", () => {
@@ -114,12 +139,31 @@ test("workingLine says what Codex is doing from its latest step", () => {
   assert.equal(workingLine([]), "starting");
 });
 
-test("removeResultSection drops one heading's section and keeps the rest", () => {
-  const { removeResultSection } = lib();
-  const text = "## Summary\nDid it.\n\n## Needs decision\nA or B?\n\n## Verification\nnpm test";
-  assert.equal(removeResultSection(text, "Needs decision"), "## Summary\nDid it.\n\n## Verification\nnpm test");
-  assert.equal(removeResultSection("**Needs decision:**\nA or B?", "Needs decision"), "");
+test("a reply's question moves whole into the callout and nothing is lost or reshaped", () => {
+  const { removeResultSection, feedQuestion } = lib();
+  // Sub-headed options stay with their question: the section ends only at one of the 4 known headings.
+  const text = "## Summary\nDid it.\n\n## Needs decision\nWhich store?\n\n### Option A: SQLite\nLocal file.\n\n### Option B: JSON\nNo schema.\n\n## Checks run\nnpm test";
+  assert.equal(feedQuestion(text), "Which store?\n\n### Option A: SQLite\nLocal file.\n\n### Option B: JSON\nNo schema.");
+  assert.equal(removeResultSection(text, "Needs decision"), "## Summary\nDid it.\n\n## Checks run\nnpm test");
+  // A long question is never cut short: every character shows in the callout.
+  const long = "Pick one. " + "x".repeat(1200) + " END";
+  assert.equal(feedQuestion("## Needs decision\n" + long), long);
+  assert.equal(removeResultSection("## Needs decision\n" + long, "Needs decision"), "");
+  // Blank lines inside a code fence survive; a known heading inside a fence does not end the section.
+  const fenced = "## Summary\nRan:\n```\na\n\n\n\nb\n```\n\n## Needs decision\nKeep it?\n```\n## Summary\n```\n";
+  assert.equal(removeResultSection(fenced, "Needs decision"), "## Summary\nRan:\n```\na\n\n\n\nb\n```");
+  assert.equal(feedQuestion(fenced), "Keep it?\n```\n## Summary\n```");
+  // No question: "None", no section, or bold heading with nothing under it.
+  assert.equal(feedQuestion("## Needs decision\nNone"), null);
+  assert.equal(feedQuestion("No headings"), null);
   assert.equal(removeResultSection("No headings", "Needs decision"), "No headings");
+  assert.equal(removeResultSection("**Needs decision:**\nA or B?", "Needs decision"), "");
+});
+
+test("the UI and the server flag the same injected blocks", () => {
+  const server = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
+  const list = (src) => src.match(/INJECTED_BLOCK = (\/.*\/);/)[1];
+  assert.equal(list(script), list(server));
 });
 
 test("old saved prefs with internals load without it", () => {

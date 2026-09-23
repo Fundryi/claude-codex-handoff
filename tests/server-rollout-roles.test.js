@@ -79,19 +79,31 @@ test("start --no-open skips the browser tab", () => {
   assert.match(src, /function openBrowser\(\) \{\s*if \(FLAGS\.noOpen\) return;/);
 });
 
-// A Claude handoff prompt often opens with <goal> or <task>. The return-format footer the
-// companion appends marks it as a prompt, not injected context, so it keeps its title and
-// shows as Claude's message instead of a collapsed System block.
-test("a handoff prompt that opens with a tag is not internal; injected blocks still are", () => {
-  const footer = "<return_format>\nEnd your final message with these four headings\n</return_format>";
-  const handoff = ctx().simplify(item("user", "<goal>\nPick a name\n</goal>\n\n" + footer));
-  assert.equal(handoff.kind, "user");
-  assert.equal(handoff.internal, undefined);
-  assert.equal(ctx().simplify(item("user", "Answer from the user: B\n\n" + footer)).internal, undefined);
-  // A block that only mentions the tag inside a line is still injected context.
-  assert.equal(ctx().simplify(item("user", "<environment_context>see <return_format> docs</environment_context>")).internal, true);
-  // Codex injects the repo's AGENTS.md as a user message that starts with a heading, not a tag.
-  assert.equal(ctx().simplify(item("user", "# AGENTS.md instructions for /repo/x\n\n<INSTRUCTIONS>")).internal, true);
+// Prompts often open with a tag: Claude's <goal> or <task>, the adversarial review's <role>,
+// Codex Desktop's <send_user_message_question_reply>. Only the tags Codex itself injects (a list
+// taken from real rollouts) and the AGENTS.md heading are injected context; the rest is speech.
+test("only the tags Codex injects are internal; prompts that open with another tag are speech", () => {
+  const internal = (text) => ctx().simplify(item("user", text)).internal === true;
+  for (const prompt of [
+    "<goal>\nPick a name\n</goal>\n\n<return_format>\nEnd with four headings\n</return_format>",
+    "<goal>\nPick a name\n</goal>",
+    "<task>\nRename the config key\n</task>",
+    "<role>\nYou are an adversarial reviewer.\n</role>",
+    "<send_user_message_question_reply>Use B</send_user_message_question_reply>",
+    "<div> is the wrapper I meant",
+  ]) assert.equal(internal(prompt), false, prompt);
+  for (const block of [
+    "<environment_context>\n  <cwd>/repo</cwd>\n</environment_context>",
+    "<recommended_plugins>\nHere is a list",
+    "<skill>\n<name>tdd</name>",
+    "<task-notification>\nJob done",
+    "<ide_opened_file>/repo/a.js</ide_opened_file>",
+    "<user_instructions>\nBe brief",
+    "  <permissions instructions>\nsandbox",
+    "# AGENTS.md instructions for /repo/x\n\n<INSTRUCTIONS>",
+  ]) assert.equal(internal(block), true, block);
+  // A tag name that only starts like an injected one is not injected: <skills_x> vs <skills>.
+  assert.equal(internal("<skillset>\nmine"), false);
 });
 
 test("session_meta carries the originator", () => {

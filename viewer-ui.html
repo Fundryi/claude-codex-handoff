@@ -28,6 +28,7 @@
       --plugin: #b6cf6e;
       --codex: #45c4b0;
       --system: #8c9bab;
+      --codex-lead: #9ae0d4; /* a lead agent writing to its child: Codex family, lighter, ring avatar */
       --sidebar-width: 340px;
       font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
       font-size: 13px;
@@ -330,7 +331,7 @@
     .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
     .status.FAST { background: #3d2a14; color: #ffb86b; }
     /* A handoff is Claude's: Claude's actor color and glyph, and no pill, so it never reads as a status. */
-    .status.HANDOFF { background: transparent; color: #e89a80; padding: 2px 1px; }
+    .status.HANDOFF { background: transparent; color: var(--claude); padding: 2px 1px; }
     .status.HANDOFF::before { content: '\2733\FE0E'; margin-right: 4px; font-size: 10px; }
     .status.AGENT { background: #2a2440; color: #c9b6ff; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -602,25 +603,26 @@
     .answer-box-actions { display: flex; justify-content: flex-end; }
     .answer-box-actions button { border: 1px solid #36577c; border-radius: 6px; padding: 6px 11px; background: #17375a; color: #c2ddff; font-size: 11px; font-weight: 700; cursor: pointer; }
     .answer-box-actions button:disabled { opacity: .5; cursor: default; }
-    #feed-wrap { min-height: 0; flex: 1; position: relative; overflow: hidden; }
+    /* Jump to latest takes its own row under the feed, so it never covers a card or its time. */
+    #feed-wrap { min-height: 0; flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; }
     #feed {
-      height: 100%;
+      flex: 1;
+      min-height: 0;
       overflow: auto;
       padding: 11px clamp(14px, 3vw, 36px) 50px;
       scroll-behavior: smooth;
     }
     #feed-inner { width: min(100%, 1080px); margin: 0 auto; min-width: 0; }
     #jump-latest {
-      position: absolute;
-      right: 20px;
-      bottom: 16px;
+      flex: none;
+      align-self: center;
+      margin: 6px 0 8px;
       border: 1px solid #416891;
       border-radius: 999px;
       background: #172b42;
       color: #c2ddff;
       padding: 7px 12px;
       cursor: pointer;
-      box-shadow: 0 8px 20px #0008;
       font-size: 11px;
     }
     /* Feed grammar: messages are cards with a sender -> receiver header in the actor's color;
@@ -631,6 +633,9 @@
     .actor-plugin { --actor: var(--plugin); }
     .actor-codex, .actor-work { --actor: var(--codex); }
     .actor-system { --actor: var(--system); }
+    .actor-codex-lead { --actor: var(--codex-lead); }
+    .actor-codex-lead .avatar, .avatar.lead { background: transparent; color: var(--codex-lead); box-shadow: inset 0 0 0 1.5px var(--codex-lead); }
+    .msg-tag.neutral { --actor: var(--system); }
     .avatar {
       width: 20px;
       height: 20px;
@@ -892,7 +897,7 @@
         <span class="legend-item actor-you" title="You: a message you typed, or your answer relayed through Claude or the answer box">You</span>
         <span class="legend-item actor-claude" title="Claude: a handoff prompt, or an answer Claude gave by itself">Claude</span>
         <span class="legend-item actor-plugin" title="Plugin: the return format the codex plugin adds to every handoff">Plugin</span>
-        <span class="legend-item actor-codex" title="Codex: replies, and questions it asks you">Codex</span>
+        <span class="legend-item actor-codex" title="Codex: replies, and questions it asks you. In a child agent's session, the lead agent's messages show as Codex (lead), in a lighter teal with a ring avatar">Codex</span>
         <span class="legend-item actor-work" title="Codex work: thinking, commands, output, patches and tools">Codex work</span>
         <span class="legend-item actor-system" title="System: injected context and hook text, collapsed">System</span>
       </div>
@@ -978,6 +983,10 @@
     // job's updatedAt/status changes), the typed answer, and whether the reader collapsed it.
     var resultDetails = {};
     var answerDrafts = {};
+    // Feed rows the reader opened or closed, as 'session|row key' -> open. Only a row whose state
+    // differs from its default is kept (feed toggle listener), so a live rebuild keeps what the
+    // reader chose while a block that opened by itself closes again once it is no longer the last.
+    var feedOpenChoices = {};
     var resultCardClosed = {};
     var resultCardKey = '';
     var historyResults = [];
@@ -1257,15 +1266,23 @@
     // -- Result-card section parsing, mirroring plugin/scripts/lib/render.mjs
     // extractSection/readNeedsDecision exactly (renamed for the UI's own use),
     // so the two never drift out of sync (see tests/plugin-task-result.test.js).
-    // Line range of a section: its heading line (start) up to the next known heading (end).
-    function resultSectionBounds(lines, heading) {
+    // Line range of a section: its heading line (start) up to the next heading (end). The result
+    // card ends it at any heading, as the plugin does. The feed (wholeSection) ends it only at one of
+    // the four return-format headings outside code fences, so a question keeps its sub-headed options.
+    function resultSectionBounds(lines, heading, wholeSection) {
       var name = markdownEscapeRegExp(heading);
       var startRe = new RegExp('^(?:#{2,3}\\s*' + name + '\\s*:?|\\*\\*' + name + '\\s*:?\\s*\\*\\*\\s*:?)\\s*$', 'i');
       var start = lines.findIndex(function (line) { return startRe.test(line.trim()); });
       if (start === -1) return null;
-      var endRe = /^(#{1,3}\s|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i;
+      var endRe = wholeSection
+        ? /^(#{1,3}\s*(summary|changed files|checks run|needs decision)\s*:?\s*$|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i
+        : /^(#{1,3}\s|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i;
       var end = start + 1;
-      while (end < lines.length && !endRe.test(lines[end].trim())) end++;
+      var inFence = false;
+      for (; end < lines.length; end++) {
+        if (wholeSection && /^\s{0,3}```/.test(lines[end])) inFence = !inFence;
+        if (!inFence && endRe.test(lines[end].trim())) break;
+      }
       return { start: start, end: end };
     }
     function extractResultSection(text, heading) {
@@ -1273,14 +1290,27 @@
       var bounds = resultSectionBounds(lines, heading);
       return bounds ? lines.slice(bounds.start + 1, bounds.end).join('\n').trim() : null;
     }
-    // The text without one section, so a reply can show its question once, in its own callout.
+    // The text without one whole section, so a reply can show its question once, in its own
+    // callout. Only the seam is tidied: blank lines elsewhere (inside code fences) stay as written.
     function removeResultSection(text, heading) {
       var value = String(text == null ? '' : text);
       var lines = value.split(/\r?\n/);
-      var bounds = resultSectionBounds(lines, heading);
+      var bounds = resultSectionBounds(lines, heading, true);
       if (!bounds) return value;
-      return lines.slice(0, bounds.start).concat(lines.slice(bounds.end)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      var before = lines.slice(0, bounds.start).join('\n').replace(/\s+$/, '');
+      var after = lines.slice(bounds.end).join('\n').replace(/^\s*\n/, '').replace(/\s+$/, '');
+      return (before && after ? before + '\n\n' + after : before || after).replace(/^\s*\n/, '');
     }
+    // The question a feed reply asks: the whole Needs decision section, never cut short, or null
+    // when there is none (readResultQuestion decides that, as everywhere else).
+    function feedQuestion(text) {
+      var lines = String(text == null ? '' : text).split(/\r?\n/);
+      var bounds = resultSectionBounds(lines, 'Needs decision', true);
+      if (!bounds) return null;
+      var body = lines.slice(bounds.start + 1, bounds.end).join('\n').trim();
+      return readResultQuestion('## Needs decision\n' + body) ? body : null;
+    }
+
     function readResultQuestion(text) {
       var body = extractResultSection(text, 'Needs decision');
       if (!body || /^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body)) return null;
@@ -1331,11 +1361,12 @@
     // plus the older text patterns) are System, never speech.
     function isInternal(event) {
       if (event.internal) return true;
-      if (event.kind !== 'agent') return false;
-      var text = String(event.text || '').trim();
-      return /^<(permissions|skills|apps|plugins|recommended_plugins|environment_context|developer|multi_agent_mode)/i.test(text) ||
-        text.includes('You are `/root`, the primary agent') ||
-        text.includes('<collaboration_mode>');
+      // The same list as the server's (codex-live-viewer.js simplify); a test keeps them equal.
+      var INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits)(?=[\s>/])|# AGENTS\.md instructions for )/;
+      if (event.kind !== 'agent' && event.kind !== 'user') return false;
+      var body = String(event.text || '');
+      if (INJECTED_BLOCK.test(body)) return true;
+      return event.kind === 'agent' && (body.includes('You are `/root`, the primary agent') || body.includes('<collaboration_mode>'));
     }
     // The actor of a feed item: 'you' | 'claude' | 'relay' (your answer, delivered by Claude or the
     // answer box) | 'codex' | 'work' (Codex's thinking, commands, output, patches, tools) |
@@ -1352,12 +1383,18 @@
       var text = String(event.text || '').replace(/^\s+/, '');
       if (text.indexOf('Answer from the user:') === 0) return 'relay';
       if (text.indexOf('Answer from Claude (automatic') === 0) return 'claude';
+      return sessionStarter(session);
+    }
+    // Who writes the plain prompts of a session: the lead agent in a child agent's session,
+    // Claude in a session Claude Code started, you otherwise (unknown originator included).
+    function sessionStarter(session) {
+      if (session && session.parentThreadId) return 'codex-lead';
       return session && session.originator === 'Claude Code' ? 'claude' : 'you';
     }
     // Who a message goes to: everything incoming goes to Codex; Codex answers whoever started the session.
     function messageRoute(actor, session) {
       if (actor !== 'codex') return { from: actor === 'relay' ? 'you' : actor, to: 'codex' };
-      return { from: 'codex', to: session && session.originator === 'Claude Code' ? 'claude' : 'you' };
+      return { from: 'codex', to: sessionStarter(session) };
     }
     // The answer prefixes as a tag, and the words after them.
     function answerPrefix(text) {
@@ -1405,11 +1442,22 @@
       return result;
     }
     // Header line "Started by": null when the rollout names no originator.
-    function startedBy(originator) {
-      var value = String(originator || '').trim();
+    // Header line "Started by", from the session: a child agent's lead first, then the originator
+    // by its readable name. null when neither is known.
+    function startedBy(session) {
+      if (session && session.parentThreadId) return { actor: 'codex-lead', label: 'Codex (lead agent)' };
+      var value = String((session && session.originator) || '').trim();
       if (!value) return null;
       if (value === 'Claude Code') return { actor: 'claude', label: 'Claude (handoff)' };
-      return { actor: 'you', label: 'you (' + (/^codex_(cli|exec)/i.test(value) ? 'Codex CLI' : value) + ')' };
+      var names = { codex_cli_rs: 'Codex CLI', codex_exec: 'Codex CLI', codex_vscode: 'VS Code', 'Codex Desktop': 'Codex Desktop' };
+      return { actor: 'you', label: 'you (' + (Object.prototype.hasOwnProperty.call(names, value) ? names[value] : value) + ')' };
+    }
+    // The two texts a Resume sends when no prompt is typed: the viewer's (DEFAULT_RESUME_PROMPT in
+    // codex-live-viewer.js) and the companion's (DEFAULT_CONTINUE_PROMPT in plugin/scripts/lib/codex.mjs).
+    function isResumePrompt(text) {
+      var value = String(text == null ? '' : text).trim();
+      return value === 'Continue the previous task where it left off and finish it.' ||
+        value === 'Continue from the current thread state. Pick the next highest-value step and follow through until the task is resolved.';
     }
     // "Codex is working: <this>", from the newest event that is not context or a turn marker.
     function workingLine(events) {
@@ -2308,11 +2356,11 @@
       taskTitle.title = row.title;
       resumeSessionButton.hidden = !resumeTarget(row);
 
-      var origin = startedBy(session.originator);
+      var origin = startedBy(session);
       if (origin) {
         var started = document.createElement('span');
         started.className = 'meta-item started-by actor-' + origin.actor;
-        started.title = 'Session originator: ' + session.originator;
+        started.title = session.parentThreadId ? 'Child agent of thread ' + session.parentThreadId : 'Session originator: ' + session.originator;
         var who = document.createElement('b');
         who.textContent = origin.label;
         started.append(actorAvatar(origin.actor, true), document.createTextNode('Started by: '), who);
@@ -2321,8 +2369,10 @@
       var metadata = document.createElement(session.threadId ? 'button' : 'span');
       if (session.threadId) metadata.type = 'button';
       metadata.className = 'meta-item' + (session.threadId ? ' meta-button' : '');
-      metadata.textContent = sessionMetaLine(session);
-      metadata.title = session.threadId ? 'Copy thread ID: ' + session.threadId : sessionMetaLine(session);
+      // Narrow screens show the project name, not the full path; the tooltip keeps the full line.
+      var narrow = window.matchMedia('(max-width: 760px)').matches;
+      metadata.textContent = sessionMetaLine(narrow ? Object.assign({}, session, { cwd: projectName(session.cwd) }) : session);
+      metadata.title = sessionMetaLine(session) + (session.threadId ? '\nClick to copy the thread ID' : '');
       if (session.threadId) metadata.addEventListener('click', function () { copyText(session.threadId, metadata, 'Thread copied'); });
       taskMeta.appendChild(metadata);
       var values = [{ text: relativeTime(row.updatedMs), title: 'Last activity' }];
@@ -2354,6 +2404,7 @@
       plugin: { name: 'Plugin', glyph: '+' },
       codex: { name: 'Codex', glyph: '>_', mono: true },
       work: { name: 'Codex work', glyph: '>_', mono: true },
+      'codex-lead': { name: 'Codex (lead)', glyph: '>_', mono: true },
       system: { name: 'System', glyph: 'i' }
     };
     var LONG_MESSAGE = 3000;
@@ -2409,20 +2460,30 @@
       var parts = actor === 'codex' ? { body: text, footer: '' } : splitReturnFormat(text);
       var prefix = answerPrefix(parts.body);
       var body = prefix.text;
-      var tag = prefix.tag || (actor === 'claude' ? 'handoff' : '');
-      var question = actor === 'codex' ? readResultQuestion(text) : null;
+      var resume = actor !== 'codex' && !prefix.tag && isResumePrompt(body);
+      var tag = prefix.tag || (resume ? 'resume' : actor === 'claude' ? 'handoff' : '');
+      var question = actor === 'codex' ? feedQuestion(text) : null;
       if (question) body = removeResultSection(body, 'Needs decision');
-      if (tag) head.appendChild(textSpan('msg-tag', tag));
+      if (tag) {
+        var tagEl = textSpan('msg-tag' + (resume ? ' neutral' : ''), tag);
+        if (resume) tagEl.title = 'Sent by a Resume button or Claude’s resume';
+        if (actor === 'relay') tagEl.title = 'Your answer, delivered to Codex through Claude or the viewer’s answer box';
+        head.appendChild(tagEl);
+      }
+      // Who the question is for: you directly, you through Claude in a handoff, or the lead agent.
+      var asked = route.to === 'codex-lead'
+        ? { actor: 'codex-lead', tag: 'asks the lead agent', title: 'Question for the lead agent' }
+        : { actor: 'you', tag: route.to === 'claude' ? 'asks you (via Claude)' : 'asks you', title: route.to === 'claude' ? 'Question for you (via Claude)' : 'Question for you' };
       if (question) {
-        var asks = textSpan('msg-tag actor-you', 'asks you');
+        var asks = textSpan('msg-tag actor-' + asked.actor, asked.tag);
         asks.title = 'Codex asked a question under Needs decision';
         head.appendChild(asks);
       }
-      if (actor === 'relay') head.lastChild.title = 'Your answer, delivered to Codex through Claude or the viewer’s answer box';
       head.appendChild(textSpan('msg-time', eventTime(event.ts)));
       card.appendChild(head);
 
-      var markdown = actor === 'codex' ? body : promptMarkdown(body);
+      // Tag-only lines become headings in Claude's prompts only; a human's "<div>" stays as typed.
+      var markdown = actor === 'claude' ? promptMarkdown(body) : body;
       if (body.length > LONG_MESSAGE) {
         var more = document.createElement('details');
         more.className = 'msg-more';
@@ -2436,13 +2497,14 @@
       }
       if (question) {
         var ask = document.createElement('div');
-        ask.className = 'ask';
+        ask.className = 'ask actor-' + asked.actor;
         var askTitle = document.createElement('div');
-        askTitle.className = 'ask-title actor-you';
-        askTitle.append(actorAvatar('you', true), document.createTextNode('Question for you'));
+        askTitle.className = 'ask-title';
+        askTitle.append(actorAvatar(asked.actor, true), document.createTextNode(asked.title));
         ask.append(askTitle, markdownBody(question));
         card.appendChild(ask);
       }
+
       if (parts.footer) {
         var plugin = document.createElement('details');
         plugin.className = 'part actor-plugin';
@@ -2543,6 +2605,7 @@
       details.className = 'work actor-work';
       details.dataset.key = 'work|' + block.keys[0];
       details.open = !!open;
+      if (open) details.dataset.autoOpen = '1'; // opened by default, not by the reader
       var last = block.items[block.items.length - 1];
       var summary = summaryRow('Codex work', workSummary(block.items), last.ts);
       summary.insertBefore(actorAvatar('work', true), summary.children[1]);
@@ -2675,12 +2738,6 @@
       // Keyboard focus on a row survives the rebuild: same data-key, new element.
       var focusHost = feedInner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
       var focusKey = focusHost ? focusHost.dataset.key : null;
-      // Every technical/thinking-group row remembers whether the reader had it
-      // open (keyed, not by position: a live task rebuilds its whole feed on
-      // every SSE batch, and an open row snapping shut mid-read - along with
-      // any selected text in it - would be lost otherwise).
-      var openStates = {};
-      feedInner.querySelectorAll('details[data-key]').forEach(function (d) { openStates[d.dataset.key] = d.open; });
       feedInner.textContent = '';
       var session = currentSession();
       var rawEvents = store[selected] || [];
@@ -2748,7 +2805,8 @@
         feedInner.appendChild(fragment);
       }
       feedInner.querySelectorAll('details[data-key]').forEach(function (d) {
-        if (Object.prototype.hasOwnProperty.call(openStates, d.dataset.key)) d.open = openStates[d.dataset.key];
+        var choice = feedOpenChoices[selected + '|' + d.dataset.key];
+        if (choice !== undefined) d.open = choice;
         if (d.dataset.key === focusKey) d.querySelector('summary').focus({ preventScroll: true });
       });
       if (!preservePosition) requestAnimationFrame(scrollToLatest);
@@ -3356,6 +3414,14 @@
       renderFeed();
     });
     jumpLatest.addEventListener('click', scrollToLatest);
+    // toggle does not bubble: capture it. Rows restored by renderFeed fire it too, harmlessly.
+    feedInner.addEventListener('toggle', function (event) {
+      var row = event.target;
+      if (!row.dataset || !row.dataset.key || showOverview()) return;
+      var id = selected + '|' + row.dataset.key;
+      if (row.open !== (row.dataset.autoOpen === '1')) feedOpenChoices[id] = row.open;
+      else delete feedOpenChoices[id];
+    }, true);
     feed.addEventListener('scroll', function () {
       jumpLatest.hidden = showOverview() || nearBottom();
     }, { passive: true });
@@ -3556,6 +3622,7 @@
     window.addEventListener('resize', function () {
       applyPrefs();
       if (window.innerWidth > 760) document.body.classList.remove('mobile-side-open');
+      renderHeader(); // the meta line shows the project name at 760 px and below, the full path above
     });
 
     // Grouping (thinking steps) means new events can't just be appended one at a time; a full

@@ -185,13 +185,14 @@ function simplify(line) {
       const text = (p.content || []).map(c => c.text || c.input_text || c.output_text || "").join("");
       if (!text.trim()) return null;
       // Codex 0.153 records the prompt only here (no event_msg user_message any
-      // more). Injected context dumps start with a <tag>; hook output and system
-      // blocks arrive as role developer. Both are internal, not speech. A handoff
-      // prompt may open with <goal> too, but it carries the companion's
-      // <return_format> footer on a line of its own; the AGENTS.md dump opens with a heading.
+      // more). Hook output and system blocks arrive as role developer: internal.
+      // A user-role message is injected context only when it opens with one of the
+      // tags Codex injects (seen in real rollouts), or with the AGENTS.md heading.
+      // Prompts that open with any other tag (<goal>, <task>, <role>) are speech.
+      // Keep in step with INJECTED_BLOCK in viewer-ui.html (tests/ui-feed.test.js checks).
       if (role === "user") {
-        const injected = (text.trimStart().startsWith("<") && !/^<return_format>\s*$/m.test(text)) || /^\s*# AGENTS\.md instructions for /.test(text);
-        return injected ? { kind: "user", ts, text, internal: true } : { kind: "user", ts, text };
+        const INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits)(?=[\s>/])|# AGENTS\.md instructions for )/;
+        return INJECTED_BLOCK.test(text) ? { kind: "user", ts, text, internal: true } : { kind: "user", ts, text };
       }
       if (role === "developer") return { kind: "agent", ts, text, internal: true };
       return { kind: "agent", ts, text };
