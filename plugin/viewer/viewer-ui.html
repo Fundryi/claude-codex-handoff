@@ -1291,6 +1291,15 @@
       }
       return { start: start, end: end };
     }
+    // What Codex wrote above its first return heading (render.mjs extractPreface): sometimes the
+    // real answer, with Summary only a stub. Empty when there is no heading.
+    function resultPreface(text) {
+      var lines = String(text == null ? '' : text).split(/\r?\n/);
+      var first = lines.findIndex(function (line) {
+        return /^(?:#{2,3}\s*(summary|changed files|checks run|needs decision)\s*:?|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?)\s*$/i.test(line.trim());
+      });
+      return first > 0 ? lines.slice(0, first).join('\n').trim() : '';
+    }
     function extractResultSection(text, heading) {
       var lines = String(text == null ? '' : text).split(/\r?\n/);
       var bounds = resultSectionBounds(lines, heading);
@@ -1877,7 +1886,7 @@
         .map(function (entry) { return entry.job; });
     }
     // Result card content from a job's result.rawOutput and result.touchedFiles.
-    // plain: the whole answer when it has none of the known headings.
+    // plain: the whole answer when it has none of the known headings, else the text above them.
     // sections: Summary, Changed files (Codex's list plus recorded edits it does not
     // already name), Checks run - empty ones left out. question: readResultQuestion.
     function resultCardModel(rawOutput, touchedFiles) {
@@ -1904,7 +1913,7 @@
       var sections = [['Summary', summary], ['Changed files', changedText], ['Checks run', checks]]
         .filter(function (pair) { return pair[1]; })
         .map(function (pair) { return { heading: pair[0], body: pair[1] }; });
-      return { plain: none ? text.trim() : '', sections: sections, question: readResultQuestion(text) };
+      return { plain: none ? text.trim() : resultPreface(text), sections: sections, question: readResultQuestion(text) };
     }
     // Where an answer to a finished run resumes: the run's thread, in resumeTarget's folder.
     // Null when the newest run did not complete, has no thread, or any run on the thread still works,
