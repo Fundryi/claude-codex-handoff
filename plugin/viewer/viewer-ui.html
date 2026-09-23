@@ -708,6 +708,12 @@
       #feed-toolbar { padding-left: 8px; padding-right: 8px; overflow-x: auto; }
       #feed, #result-card { padding-left: 12px; padding-right: 12px; }
       .control-grid { grid-template-columns: 1fr; }
+      #chips { flex-wrap: nowrap; overflow-x: auto; }
+      #side-backdrop { display: none; position: fixed; inset: 0; z-index: 19; background: #000a; }
+      body.mobile-side-open #side-backdrop { display: block; }
+      #task-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .meta-item { white-space: normal; overflow: visible; text-overflow: clip; }
+      .result-card-body .answer-box { position: sticky; bottom: -12px; margin: 10px -14px -12px; padding: 10px 14px 12px; background: var(--panel); border-top: 1px solid var(--border); }
     }
   </style>
 </head>
@@ -730,6 +736,8 @@
     <div id="open-elsewhere" hidden>Open: <span id="open-elsewhere-title"></span> (not in this view) &#xB7; <button id="open-elsewhere-show" type="button">Show</button></div>
     <div id="list"></div>
   </aside>
+
+  <div id="side-backdrop" aria-hidden="true"></div>
 
   <div id="splitter" role="separator" aria-label="Resize session list" aria-orientation="vertical" tabindex="0"></div>
 
@@ -1685,6 +1693,21 @@
       if (job) lines.push('Handoff: ' + (jobDetailLine(job, now) || job.status || job.live || ''));
       if (row.olderJobs) lines.push(row.olderJobs + (row.olderJobs === 1 ? ' earlier run' : ' earlier runs') + ' on this thread');
       return lines.filter(Boolean).join('\n');
+    }
+    // Next index for arrow-key roving focus within a row of buttons (tabs, chips). Wraps around.
+    function rovingFocusIndex(currentIndex, itemCount, key) {
+      if (itemCount <= 0) return currentIndex;
+      if (key === 'Home') return 0;
+      if (key === 'End') return itemCount - 1;
+      if (key === 'ArrowRight') return (currentIndex + 1) % itemCount;
+      if (key === 'ArrowLeft') return (currentIndex - 1 + itemCount) % itemCount;
+      return currentIndex;
+    }
+    // Whether an element is a text-entry field '/' must not steal a keystroke from.
+    function isEditableElement(el) {
+      if (!el) return false;
+      if (el.isContentEditable) return true;
+      return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
     }
     function setConnection(state, label) {
       connection.className = state;
@@ -2904,11 +2927,43 @@
       if (event.target === jobModal) jobModal.hidden = true;
     });
     document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && !stopModal.hidden) { stopModal.hidden = true; pendingKillPid = null; }
-      if (event.key === 'Escape' && !jobModal.hidden) jobModal.hidden = true;
-      if (event.key === 'Escape' && !controlModal.hidden) closeControlModal();
-      if (event.key === 'Escape') { closeContextMenu(); closeActionMenu(); }
+      if (event.key === 'Escape') {
+        var closedSomething = false;
+        if (!stopModal.hidden) { stopModal.hidden = true; pendingKillPid = null; closedSomething = true; }
+        if (!jobModal.hidden) { jobModal.hidden = true; closedSomething = true; }
+        if (!controlModal.hidden) { closeControlModal(); closedSomething = true; }
+        if (!contextMenu.hidden) { closeContextMenu(); closedSomething = true; }
+        if (!actionMenu.hidden) { closeActionMenu(); closedSomething = true; }
+        // Nothing else was open: on mobile, Escape closes the drawer instead.
+        if (!closedSomething && document.body.classList.contains('mobile-side-open')) {
+          document.body.classList.remove('mobile-side-open');
+        }
+        return;
+      }
+      if (event.key === '/' && !isEditableElement(document.activeElement) &&
+        stopModal.hidden && jobModal.hidden && controlModal.hidden) {
+        event.preventDefault();
+        search.focus();
+      }
     });
+
+    document.getElementById('side-backdrop').addEventListener('click', function () {
+      document.body.classList.remove('mobile-side-open');
+    });
+
+    function rovingKeydown(bar) {
+      return function (event) {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        var buttons = Array.prototype.slice.call(bar.querySelectorAll('button'));
+        var current = buttons.indexOf(document.activeElement);
+        if (current === -1) return;
+        event.preventDefault();
+        var next = rovingFocusIndex(current, buttons.length, event.key);
+        buttons[next].focus();
+      };
+    }
+    tabsBar.addEventListener('keydown', rovingKeydown(tabsBar));
+    chipsBar.addEventListener('keydown', rovingKeydown(chipsBar));
 
     document.getElementById('start-button').addEventListener('click', function () { openStartModal('task'); });
     resumeSessionButton.addEventListener('click', function () {

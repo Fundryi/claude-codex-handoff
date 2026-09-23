@@ -79,6 +79,21 @@ async (page) => {
     try { await page.keyboard.press('Escape'); } catch {}
   }
 
+  // Task 10 (Mobile and keyboard): no view at 390 px should force the page to scroll sideways.
+  async function checkNoHorizontalScroll(name) {
+    try {
+      const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth
+      }));
+      const ok = scrollWidth <= innerWidth;
+      log('scrollWidth<=innerWidth', name, ok, '(' + scrollWidth + ' <= ' + innerWidth + ')');
+      if (!ok) skipped.push('horizontal scroll at ' + name + ': scrollWidth ' + scrollWidth + ' > innerWidth ' + innerWidth);
+    } catch (err) {
+      skipped.push('scrollWidth check failed for ' + name + ': ' + err.message);
+    }
+  }
+
   // ---- boot ----
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(URL, { waitUntil: 'domcontentloaded' });
@@ -343,9 +358,11 @@ async (page) => {
   if (await clickId('show-side')) {
     await page.waitForTimeout(200);
     await shot('11-mobile-drawer');
+    await checkNoHorizontalScroll('11-mobile-drawer');
     if (await clickText('Fixture 1 -')) {
       await page.waitForTimeout(200);
       await shot('12-mobile-task-view');
+      await checkNoHorizontalScroll('12-mobile-task-view');
     }
   }
 
@@ -363,6 +380,7 @@ async (page) => {
     if (await clickText('Fixture 4 -')) {
       await page.waitForTimeout(400);
       await shot('12-mobile-result-card');
+      await checkNoHorizontalScroll('12-mobile-result-card');
     }
     // Back to Now/All with the drawer closed, so step 15's Now click opens the overview.
     if (await clickId('show-side')) {
@@ -378,7 +396,16 @@ async (page) => {
     if (await clickSel('#tabs [data-tab="NOW"]')) {
       await page.waitForTimeout(200);
       await shot('15-mobile-now-overview');
+      await checkNoHorizontalScroll('15-mobile-now-overview');
     }
+  }
+
+  // ---- 16. Start dialog at mobile width ----
+  if (await clickId('start-button')) {
+    await page.waitForTimeout(200);
+    await shot('16-mobile-start-dialog');
+    await checkNoHorizontalScroll('16-mobile-start-dialog');
+    await pressEscape();
   }
 
   log('done. skipped:', skipped.length ? ('\n  - ' + skipped.join('\n  - ')) : 'none');
