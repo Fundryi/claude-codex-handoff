@@ -8,8 +8,9 @@
 // Usage:
 //   node scripts/ui-fixture.mjs
 // Prints the viewer URL, then keeps running (Ctrl+C stops it and the
-// spawned viewer). Fixture files live under a temp dir; nothing under
-// ~/.codex or ~/.codex-companion is ever touched.
+// spawned viewer; stopping the viewer on port 8399 stops the harness too).
+// Fixture files live under a temp dir that is removed on the way out;
+// nothing under ~/.codex or ~/.codex-companion is ever touched.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -365,15 +366,23 @@ const child = spawn(process.execPath, [path.join(REPO_ROOT, "codex-live-viewer.j
 });
 
 let stopping = false;
+// The temp root goes with the harness. The viewer watches files under it, so on Windows the
+// delete can hit EBUSY until the child is gone: rmSync retries a few times.
+function removeRoot() {
+  try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
+  catch (err) { console.error(`[ui-fixture] could not remove ${root}: ${err.message}`); }
+}
 function stop() {
   if (stopping) return;
   stopping = true;
   try { child.kill(); } catch {}
+  removeRoot();
   process.exit(0);
 }
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
-child.on("exit", (code) => { if (!stopping) process.exit(code ?? 0); });
+// The viewer exiting on its own (e.g. `codex-live-viewer.js stop` against port 8399) ends the harness too.
+child.on("exit", (code) => { if (!stopping) { removeRoot(); process.exit(code ?? 0); } });
 child.on("error", (err) => {
   console.error(`[ui-fixture] failed to start codex-live-viewer.js: ${err.message}`);
   process.exit(1);
