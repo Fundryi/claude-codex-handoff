@@ -87,7 +87,7 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 **In the browser** (`localhost:8377`):
 
 - every Codex session on the machine, streaming live, however it was started, in one list with three tabs (Now, Handoffs, History) and filter chips instead of separate session/job views
-- one Start dialog for tasks and reviews: project, prompt, effort (`low` to `ultra`), model, write access, sandbox, fast mode
+- a feed that shows who says what: your messages, Claude's handoff prompts and automatic answers, the plugin's return format, Codex's replies and questions, and Codex's work (thinking, commands, patches) in its own collapsed log, each actor in one color with a legend
 - a result card on every finished handoff (Summary, Changed files, Checks run, Needs decision) with an answer box that resumes the thread when Codex asked a question; "Show full result" opens the full result dialog and lists every run on the thread, newest first
 - one-click resume and cancel, with in-app confirmation
 - one job store shared with the CLI, so `/codex:status` and the dashboard always agree

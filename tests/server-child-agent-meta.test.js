@@ -13,11 +13,12 @@ function serverContext() {
     src.match(/function promptTitle\(text\) \{[\s\S]*?\n\}/)[0],
     src.match(/function indexEntry\(file\) \{[\s\S]*?\n\}/)[0],
     src.match(/function ingest\(file\) \{[\s\S]*?\n\}/)[0],
+    src.match(/function sessionSummary[\s\S]*?\n\}/)[0],
   ].join("\n");
   const context = {
     fs, path, Buffer, Date, JSON, Map, String, Math,
     sessions: new Map(), searchIndex: new Map(),
-    ARCHIVED_DIR: "Z:\\archived", MAX_EVENTS_KEPT: 500,
+    ARCHIVED_DIR: "Z:\\archived", MAX_EVENTS_KEPT: 500, LIVE_WINDOW_MS: 20000,
     broadcast() {}, broadcastNotification() {},
   };
   vm.runInNewContext(slice, context);
@@ -44,4 +45,23 @@ test("a child agent keeps its own thread id when the parent's session_meta follo
   assert.equal(s.meta.parentThreadId, "parent-1");
   assert.equal(s.meta.agentNickname, "Kierkegaard");
   assert.equal(ctx.indexEntry(file).threadId, "child-1");
+});
+
+// The UI tells Claude's handoff prompts from the human's by the session's originator.
+// Like the thread id, the session's own session_meta wins over a repeated parent one.
+test("the session summary exposes the rollout's own originator", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clv-origin-"));
+  const handoff = path.join(dir, "rollout-handoff.jsonl");
+  const bare = path.join(dir, "rollout-bare.jsonl");
+  fs.writeFileSync(handoff, [
+    meta({ id: "child-2", parent_thread_id: "parent-2", cwd: "/repo", originator: "Claude Code" }),
+    meta({ id: "parent-2", cwd: "/repo", originator: "codex_cli_rs" }),
+    "",
+  ].join("\n"));
+  fs.writeFileSync(bare, meta({ id: "old-1", cwd: "/repo" }) + "\n");
+  const ctx = serverContext();
+  ctx.ingest(handoff);
+  ctx.ingest(bare);
+  assert.equal(ctx.sessionSummary(ctx.sessions.get(handoff)).originator, "Claude Code");
+  assert.equal(ctx.sessionSummary(ctx.sessions.get(bare)).originator, "");
 });

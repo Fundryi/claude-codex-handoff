@@ -160,7 +160,7 @@ function simplify(line) {
   // session metadata
   if (t === "session_meta" || p.cwd && p.id && !p.type) {
     return { kind: "meta", ts, cwd: p.cwd || "", id: p.id || "", model: p.model || (p.turn_context && p.turn_context.model) || "",
-      parentThreadId: p.parent_thread_id || "", agentNickname: p.agent_nickname || "", instructions: undefined };
+      parentThreadId: p.parent_thread_id || "", agentNickname: p.agent_nickname || "", originator: p.originator || "", instructions: undefined };
   }
   // event_msg wrapper (agent messages, token counts, etc.)
   if (t === "event_msg") {
@@ -186,8 +186,13 @@ function simplify(line) {
       if (!text.trim()) return null;
       // Codex 0.153 records the prompt only here (no event_msg user_message any
       // more). Injected context dumps start with a <tag>; hook output and system
-      // blocks arrive as role developer. Both are internal, not speech.
-      if (role === "user") return text.trimStart().startsWith("<") ? { kind: "user", ts, text, internal: true } : { kind: "user", ts, text };
+      // blocks arrive as role developer. Both are internal, not speech. A handoff
+      // prompt may open with <goal> too, but it carries the companion's
+      // <return_format> footer on a line of its own; the AGENTS.md dump opens with a heading.
+      if (role === "user") {
+        const injected = (text.trimStart().startsWith("<") && !/^<return_format>\s*$/m.test(text)) || /^\s*# AGENTS\.md instructions for /.test(text);
+        return injected ? { kind: "user", ts, text, internal: true } : { kind: "user", ts, text };
+      }
       if (role === "developer") return { kind: "agent", ts, text, internal: true };
       return { kind: "agent", ts, text };
     }
@@ -338,6 +343,7 @@ function ingest(file) {
       if (ev.id && !s.meta.threadId) s.meta.threadId = ev.id;
       if (ev.parentThreadId && !s.meta.parentThreadId) s.meta.parentThreadId = ev.parentThreadId;
       if (ev.agentNickname && !s.meta.agentNickname) s.meta.agentNickname = ev.agentNickname;
+      if (ev.originator && !s.meta.originator) s.meta.originator = ev.originator;
       continue;
     }
     if (ev.kind === "user" && !ev.internal && !s.meta.title) s.meta.title = promptTitle(ev.text);
@@ -381,6 +387,7 @@ function sessionSummary(s, threadJobStatus) {
     threadId: s.meta.threadId || "",
     parentThreadId: s.meta.parentThreadId || "",
     agentNickname: s.meta.agentNickname || "",
+    originator: s.meta.originator || "", // "Claude Code" for a handoff; the UI tells Claude's prompts from yours by it
     title: s.meta.title || "",
     cwd: s.meta.cwd || "",
     model: s.meta.model || "",
@@ -528,15 +535,6 @@ function buildCompanionTaskArgs(body) {
   if (body.resumeThreadId) args.push("--resume-thread", String(body.resumeThreadId));
   if (body.fast) args.push("--fast");
   if (body.prompt) args.push(String(body.prompt));
-  return args;
-}
-
-function buildCompanionReviewArgs(body) {
-  const kind = body.kind === "adversarial-review" ? "adversarial-review" : "review";
-  const args = [kind, "--background", "--json", "--cwd", body.cwd];
-  if (body.model) args.push("-m", String(body.model));
-  if (body.fast) args.push("--fast");
-  if (kind === "adversarial-review" && body.focus) args.push(String(body.focus));
   return args;
 }
 
@@ -906,21 +904,6 @@ const server = http.createServer((req, res) => {
     try { body = file && fs.readFileSync(file, "utf8"); } catch {}
     res.writeHead(body ? 200 : 404, { "Content-Type": "application/json" });
     res.end(body || JSON.stringify({ ok: false, error: "job not found" }));
-  } else if (req.url === "/task") {
-    if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
-    readJsonBody(req, body => {
-      if (!body || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "cwd must be an existing directory" });
-      if (!body.prompt && !body.resumeThreadId) return jsonReply(res, 400, { ok: false, error: "prompt or resumeThreadId required" });
-      handleLaunch(res, body, buildCompanionTaskArgs(body));
-    });
-  } else if (req.url === "/review") {
-    if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
-    readJsonBody(req, body => {
-      if (!body || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "cwd must be an existing directory" });
-      handleLaunch(res, body, buildCompanionReviewArgs(body));
-    });
   } else if (req.url === "/resume") {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
     if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }

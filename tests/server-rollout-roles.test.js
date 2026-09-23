@@ -78,3 +78,24 @@ test("start --no-open skips the browser tab", () => {
   assert.equal(c.parseFlags(["start"]).noOpen, false);
   assert.match(src, /function openBrowser\(\) \{\s*if \(FLAGS\.noOpen\) return;/);
 });
+
+// A Claude handoff prompt often opens with <goal> or <task>. The return-format footer the
+// companion appends marks it as a prompt, not injected context, so it keeps its title and
+// shows as Claude's message instead of a collapsed System block.
+test("a handoff prompt that opens with a tag is not internal; injected blocks still are", () => {
+  const footer = "<return_format>\nEnd your final message with these four headings\n</return_format>";
+  const handoff = ctx().simplify(item("user", "<goal>\nPick a name\n</goal>\n\n" + footer));
+  assert.equal(handoff.kind, "user");
+  assert.equal(handoff.internal, undefined);
+  assert.equal(ctx().simplify(item("user", "Answer from the user: B\n\n" + footer)).internal, undefined);
+  // A block that only mentions the tag inside a line is still injected context.
+  assert.equal(ctx().simplify(item("user", "<environment_context>see <return_format> docs</environment_context>")).internal, true);
+  // Codex injects the repo's AGENTS.md as a user message that starts with a heading, not a tag.
+  assert.equal(ctx().simplify(item("user", "# AGENTS.md instructions for /repo/x\n\n<INSTRUCTIONS>")).internal, true);
+});
+
+test("session_meta carries the originator", () => {
+  const ev = ctx().simplify(JSON.stringify({ type: "session_meta", payload: { id: "t", cwd: "/repo", originator: "Claude Code" } }));
+  assert.equal(ev.originator, "Claude Code");
+  assert.equal(ctx().simplify(JSON.stringify({ type: "session_meta", payload: { id: "t", cwd: "/repo" } })).originator, "");
+});

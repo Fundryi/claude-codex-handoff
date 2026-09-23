@@ -41,8 +41,9 @@ function uuid() {
 }
 
 // ---- rollout line builders (schema matches codex-live-viewer.js's simplify()) ----
-function metaLine(ts, { id, cwd, model = "gpt-5", parentThreadId, agentNickname }) {
-  const payload = { id, timestamp: new Date(ts).toISOString(), cwd, model, originator: "codex_cli", cli_version: "0.98.0" };
+// originator: "Claude Code" for a handoff (the companion), a CLI value for sessions you typed in.
+function metaLine(ts, { id, cwd, model = "gpt-5", parentThreadId, agentNickname, originator = "codex_cli_rs" }) {
+  const payload = { id, timestamp: new Date(ts).toISOString(), cwd, model, originator, cli_version: "0.98.0" };
   if (parentThreadId) payload.parent_thread_id = parentThreadId;
   if (agentNickname) payload.agent_nickname = agentNickname;
   return JSON.stringify({ timestamp: new Date(ts).toISOString(), type: "session_meta", payload });
@@ -52,6 +53,16 @@ function userLine(ts, message) {
 }
 function agentLine(ts, message) {
   return JSON.stringify({ timestamp: new Date(ts).toISOString(), type: "event_msg", payload: { type: "agent_message", message } });
+}
+// Codex 0.153 records prompts and injected context as response_item messages (roles user/developer).
+function itemLine(ts, role, text) {
+  return JSON.stringify({ timestamp: new Date(ts).toISOString(), type: "response_item", payload: { type: "message", role, content: [{ type: "input_text", text }] } });
+}
+function outputLine(ts, output) {
+  return JSON.stringify({ timestamp: new Date(ts).toISOString(), type: "response_item", payload: { type: "function_call_output", output } });
+}
+function startedLine(ts) {
+  return JSON.stringify({ timestamp: new Date(ts).toISOString(), type: "event_msg", payload: { type: "task_started" } });
 }
 function cmdLine(ts, command) {
   return JSON.stringify({
@@ -110,19 +121,49 @@ const MARKDOWN_ANSWER = [
   "<script>alert(1)</script>",
 ].join("\n");
 
+// The footer the companion appends to every handoff prompt, and the injected context around it.
+const RETURN_FORMAT = fs.readFileSync(path.join(REPO_ROOT, "plugin", "prompts", "task-return-format.md"), "utf8").trim();
+const HANDOFF = { originator: "Claude Code" };
+function injectedContext(ts) {
+  return [
+    itemLine(ts, "developer", "<permissions instructions>\nFilesystem sandboxing: danger-full-access. Approval policy: never.\n</permissions instructions>"),
+    itemLine(ts + 1, "user", `# AGENTS.md instructions for ${WORKSPACE_CWD}\n\n<INSTRUCTIONS>\nZero npm dependencies. Run npm test before you finish.\n</INSTRUCTIONS>`),
+    itemLine(ts + 2, "user", `<environment_context>\n  <cwd>${WORKSPACE_CWD}</cwd>\n  <shell>powershell</shell>\n</environment_context>`),
+  ];
+}
+
+const FOLLOWUP_ANSWER = [
+  "## Summary",
+  "The harness now also covers the archived-session sweep.",
+  "",
+  "## Changed files",
+  "- scripts/ui-fixture.mjs",
+  "",
+  "## Checks run",
+  "- npm test (196/196)",
+  "",
+  "## Needs decision",
+  "Should archived child agents get their own fixture, or is the lead session enough?",
+].join("\n");
+
 const PLAIN_ANSWER = "Done. Ran the migration, verified the row count matches, nothing else needed.";
 
 // ---------------- 1. Running session ----------------
+// Stays Running while the harness runs: a timer below keeps appending Codex steps.
+let runningFile = null;
 {
   const id = uuid();
   const ts = now - 5000;
-  writeRollout(SESSIONS_DIR, ts, id, [
+  runningFile = writeRollout(SESSIONS_DIR, ts, id, [
     metaLine(ts, { id, cwd: WORKSPACE_CWD }),
     userLine(ts, "Task: Fixture 1 - running session with commands and a patch"),
     thinkLine(ts + 100, "Looking at the fixture harness requirements."),
     cmdLine(ts + 200, "npm test"),
     patchLine(ts + 300, ["scripts/ui-fixture.mjs"]),
     agentLine(ts + 400, MARKDOWN_ANSWER),
+    userLine(ts + 500, "Cover the sweep here, then run the UI shots."),
+    thinkLine(ts + 600, "Adding the archived-session sweep to the fixture list."),
+    cmdLine(ts + 700, "node scripts/ui-fixture.mjs"),
   ], now); // mtime = now => LIVE
 }
 
@@ -161,21 +202,46 @@ function addJob(job) {
 // ---------------- 4. Finished handoff with headings + question ----------------
 {
   const id = uuid();
+  // A whole handoff conversation: injected context, Claude's prompt with the plugin's footer,
+  // Codex's work and question, your answer relayed back, and Codex's follow-up question.
   const ts = now - 30 * 60 * 1000;
   writeRollout(SESSIONS_DIR, ts, id, [
-    metaLine(ts, { id, cwd: WORKSPACE_CWD }),
-    userLine(ts, "Task: Fixture 4 - finished handoff with headings"),
+    metaLine(ts, { id, cwd: WORKSPACE_CWD, ...HANDOFF }),
+    ...injectedContext(ts),
+    startedLine(ts + 10),
+    itemLine(ts + 20, "user", "<goal>\nTask: Fixture 4 - finished handoff with headings\nAdd a fixture harness for the viewer UI.\n</goal>\n<rules>\nNever touch ~/.codex. Zero npm dependencies.\n</rules>\n\n" + RETURN_FORMAT),
+    thinkLine(ts + 30, "Reading the existing viewer tests to see which states need a fixture."),
+    thinkLine(ts + 35, "Each status needs one session file and, for handoffs, a job record."),
+    cmdLine(ts + 40, "node --test tests/*.test.js"),
+    outputLine(ts + 45, "# tests 194\n# pass 194\n# fail 0"),
+    patchLine(ts + 50, ["scripts/ui-fixture.mjs", "scripts/ui-shots.js"]),
     agentLine(ts + 100, MARKDOWN_ANSWER),
+    doneLine(ts + 110),
+    itemLine(ts + 120, "developer", "<codex-jobs>\njob-fixture-04-1  completed - Fixture 4 - finished handoff with headings\n</codex-jobs>"),
+    startedLine(ts + 125),
+    itemLine(ts + 130, "user", "Answer from the user: Cover the archived-session sweep here. Task 11 only adds tests.\n\n" + RETURN_FORMAT),
+    cmdLine(ts + 140, "node --test tests/ui-rows.test.js"),
+    patchLine(ts + 150, ["scripts/ui-fixture.mjs"]),
+    agentLine(ts + 190, FOLLOWUP_ANSWER),
     doneLine(ts + 200),
   ], ts + 200);
   addJob({
-    id: `job-fixture-04`, cwd: WORKSPACE_CWD, kind: "task", title: "Fixture 4 - finished handoff with headings",
+    id: `job-fixture-04-1`, cwd: WORKSPACE_CWD, kind: "task", title: "Fixture 4 - finished handoff with headings",
     status: "completed", pid: null, threadId: id, sessionId: "fixture-session",
     summary: "Fixture harness done, one open question.",
     needsDecision: "Should the harness also cover the archived-session sweep, or is that Task 11's job?",
     result: { rawOutput: MARKDOWN_ANSWER, touchedFiles: ["scripts/ui-fixture.mjs", "scripts/ui-shots.js"] },
     rendered: MARKDOWN_ANSWER,
-    createdAt: new Date(ts).toISOString(), updatedAt: new Date(ts + 200).toISOString(), completedAt: new Date(ts + 200).toISOString(),
+    createdAt: new Date(ts).toISOString(), updatedAt: new Date(ts + 110).toISOString(), completedAt: new Date(ts + 110).toISOString(),
+  });
+  addJob({
+    id: `job-fixture-04`, cwd: WORKSPACE_CWD, kind: "task", title: "Fixture 4 - finished handoff with headings",
+    status: "completed", pid: null, threadId: id, sessionId: "fixture-session",
+    summary: "Archived-session sweep covered, one open question.",
+    needsDecision: "Should archived child agents get their own fixture, or is the lead session enough?",
+    result: { rawOutput: FOLLOWUP_ANSWER, touchedFiles: ["scripts/ui-fixture.mjs"] },
+    rendered: FOLLOWUP_ANSWER,
+    createdAt: new Date(ts + 125).toISOString(), updatedAt: new Date(ts + 200).toISOString(), completedAt: new Date(ts + 200).toISOString(),
   });
 }
 
@@ -184,7 +250,7 @@ function addJob(job) {
   const id = uuid();
   const ts = now - 25 * 60 * 1000;
   writeRollout(SESSIONS_DIR, ts, id, [
-    metaLine(ts, { id, cwd: WORKSPACE_CWD }),
+    metaLine(ts, { id, cwd: WORKSPACE_CWD, ...HANDOFF }),
     userLine(ts, "Task: Fixture 5 - finished handoff, plain answer"),
     agentLine(ts + 100, PLAIN_ANSWER),
     doneLine(ts + 200),
@@ -204,10 +270,13 @@ function addJob(job) {
   const id = uuid();
   const ts = now - 20 * 60 * 1000;
   writeRollout(SESSIONS_DIR, ts, id, [
-    metaLine(ts, { id, cwd: WORKSPACE_CWD }),
-    userLine(ts, "Task: Fixture 6 - handoff resumed twice"),
-    agentLine(ts + 100, "First pass done."),
-    agentLine(ts + 500, "Resumed, second pass done."),
+    // Codex asks, Claude answers by itself, then a plain continue.
+    metaLine(ts, { id, cwd: WORKSPACE_CWD, ...HANDOFF }),
+    userLine(ts, "Task: Fixture 6 - handoff resumed twice\n\n" + RETURN_FORMAT),
+    agentLine(ts + 100, "## Summary\nFirst pass done.\n\n## Needs decision\nName the helper `trimAll` or `squeeze`? I recommend `trimAll`."),
+    userLine(ts + 450, "Answer from Claude (automatic 1 of 2): use `squeeze`, it matches the existing helper names.\n\n" + RETURN_FORMAT),
+    agentLine(ts + 500, "## Summary\nResumed, second pass done. Renamed the helper to `squeeze`.\n\n## Needs decision\nNone"),
+    userLine(ts + 850, "Continue the previous task where it left off and finish it.\n\n" + RETURN_FORMAT),
     agentLine(ts + 900, "Resumed again, final pass done."),
     doneLine(ts + 1000),
   ], ts + 1000);
@@ -240,7 +309,7 @@ addJob({
   const id = uuid();
   const ts = now - 15 * 60 * 1000;
   writeRollout(SESSIONS_DIR, ts, id, [
-    metaLine(ts, { id, cwd: WORKSPACE_CWD }),
+    metaLine(ts, { id, cwd: WORKSPACE_CWD, ...HANDOFF }),
     userLine(ts, "Task: Fixture 8 - dead job, needs attention"),
     agentLine(ts + 100, "Working on it..."),
   ], ts + 100);
@@ -257,7 +326,7 @@ addJob({
   const id = uuid();
   const ts = now - 12 * 60 * 1000;
   writeRollout(SESSIONS_DIR, ts, id, [
-    metaLine(ts, { id, cwd: WORKSPACE_CWD }),
+    metaLine(ts, { id, cwd: WORKSPACE_CWD, ...HANDOFF }),
     userLine(ts, "Task: Fixture 9 - possibly-stuck job"),
     agentLine(ts + 100, "Still going, heartbeat is old."),
   ], ts + 100);
@@ -274,7 +343,7 @@ addJob({
   const id = uuid();
   const ts = now - 18 * 60 * 1000;
   writeRollout(SESSIONS_DIR, ts, id, [
-    metaLine(ts, { id, cwd: WORKSPACE_CWD }),
+    metaLine(ts, { id, cwd: WORKSPACE_CWD, ...HANDOFF }),
     userLine(ts, "Task: Fixture 10 - fast job"),
     agentLine(ts + 100, "Priority tier, finished quickly."),
     doneLine(ts + 200),
@@ -294,7 +363,7 @@ addJob({
   const id = uuid();
   const ts = now - 22 * 60 * 1000;
   writeRollout(SESSIONS_DIR, ts, id, [
-    metaLine(ts, { id, cwd: WORKSPACE_CWD }),
+    metaLine(ts, { id, cwd: WORKSPACE_CWD, ...HANDOFF }),
     userLine(ts, "Task: Fixture 11 - cancelled job"),
     agentLine(ts + 100, "Started, then got cancelled."),
   ], ts + 100);
@@ -387,6 +456,13 @@ child.on("error", (err) => {
   console.error(`[ui-fixture] failed to start codex-live-viewer.js: ${err.message}`);
   process.exit(1);
 });
+
+// Fixture 1 keeps writing, so it stays Running (and shows "Codex is working") for the whole run.
+let step = 0;
+setInterval(() => {
+  step += 1;
+  try { fs.appendFileSync(runningFile, thinkLine(Date.now(), `Checking fixture ${(step % 13) + 1} against the new feed.`) + "\n"); } catch {}
+}, 8000).unref();
 
 console.log(`[ui-fixture] viewer at http://127.0.0.1:${PORT}`);
 console.log(`[ui-fixture] fixture root: ${root}`);

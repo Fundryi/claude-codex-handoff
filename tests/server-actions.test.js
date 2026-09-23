@@ -6,7 +6,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const src = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
-const slice = src.match(/const DEFAULT_RESUME_PROMPT[\s\S]*?function buildCompanionReviewArgs[\s\S]*?\n\}/)[0];
+const slice = src.match(/const DEFAULT_RESUME_PROMPT[\s\S]*?function buildCompanionTaskArgs[\s\S]*?\n\}/)[0];
 
 function ctx() {
   const c = {};
@@ -64,26 +64,4 @@ test("buildCompanionTaskArgs maps fast before the prompt", () => {
     ["task", "--background", "--json", "--cwd", "D:\\x", "--fast", "p"],
   );
   assert.ok(!buildCompanionTaskArgs({ cwd: "D:\\x", prompt: "p" }).includes("--fast"));
-});
-
-test("buildCompanionReviewArgs maps kind and focus", () => {
-  const { buildCompanionReviewArgs } = ctx();
-  assert.deepEqual(
-    Array.from(buildCompanionReviewArgs({ cwd: "D:\\x", kind: "adversarial-review", focus: "check auth" })),
-    ["adversarial-review", "--background", "--json", "--cwd", "D:\\x", "check auth"],
-  );
-  assert.deepEqual(
-    Array.from(buildCompanionReviewArgs({ cwd: "D:\\x", kind: "review", focus: "ignored for native review" })),
-    ["review", "--background", "--json", "--cwd", "D:\\x"],
-  );
-  assert.deepEqual(buildCompanionReviewArgs({ cwd: "D:\\x", kind: "nonsense" })[0], "review");
-});
-
-test("buildCompanionReviewArgs maps fast before the focus", () => {
-  const { buildCompanionReviewArgs } = ctx();
-  assert.deepEqual(
-    Array.from(buildCompanionReviewArgs({ cwd: "D:\\x", kind: "adversarial-review", focus: "p", fast: true })),
-    ["adversarial-review", "--background", "--json", "--cwd", "D:\\x", "--fast", "p"],
-  );
-  assert.ok(!buildCompanionReviewArgs({ cwd: "D:\\x", kind: "review" }).includes("--fast"));
 });

@@ -150,15 +150,17 @@ async (page) => {
   }
 
   // ---- 3b. Auto-open toggle, on and off ----
+  // Picking a tab turned it off. Turning it on leaves the overview and opens the running task
+  // (Fixture 1, which the harness keeps running); back in the overview, turn it off again.
   if (await clickId('auto-open-toggle')) {
     await page.waitForTimeout(150);
-    await shot('03-auto-open-off');
-    await clickId('auto-open-toggle');
-    await page.waitForTimeout(150);
-    // Turning it on leaves the overview and opens the running task (Fixture 1).
     await shot('03-auto-open-on');
-    await clickSel('#tabs [data-tab="NOW"]'); // back to the overview for Show more
+    await clickSel('#tabs [data-tab="NOW"]'); // back to the overview
     await page.waitForTimeout(150);
+    if (await clickId('auto-open-toggle')) {
+      await page.waitForTimeout(150);
+      await shot('03-auto-open-off');
+    }
   }
 
   // ---- 3c. "Show more" under Recently finished -> History/Finished ----
@@ -250,24 +252,57 @@ async (page) => {
     skipped.push('context menu: ' + err.message);
   }
 
-  // ---- 8. One Start dialog: Kind switch (Task/Review/Adversarial) + Custom model ----
-  if (await clickId('start-button')) {
-    await page.waitForTimeout(200);
-    await shot('08-start-dialog-task');
+  // ---- 8. Who's who in the feed: one shot per actor, plus the legend ----
+  // Fixture 4 is a whole handoff conversation; Fixture 6 has Claude's automatic answer;
+  // Fixture 1 is your own session, still running.
+  async function feedTo(selector) {
     try {
-      await page.locator('#start-kind').selectOption('review');
-      await page.waitForTimeout(200);
-      await shot('08-start-dialog-review');
-      await page.locator('#start-kind').selectOption('adversarial-review');
-      await page.waitForTimeout(200);
-      await shot('08-start-dialog-adversarial-review');
-      await page.locator('#start-model').selectOption('custom');
-      await page.waitForTimeout(200);
-      await shot('08-start-dialog-custom-model');
+      await page.evaluate((sel) => {
+        const feed = document.getElementById('feed');
+        const el = document.querySelector(sel);
+        feed.style.scrollBehavior = 'auto';
+        if (el) feed.scrollTop += el.getBoundingClientRect().top - feed.getBoundingClientRect().top - 12;
+      }, selector);
+      await page.waitForTimeout(250);
+      return true;
     } catch (err) {
-      skipped.push('start dialog kind/model switch: ' + err.message);
+      skipped.push('scroll to ' + selector + ': ' + err.message);
+      return false;
     }
-    await pressEscape();
+  }
+  await view('HISTORY', 'EVERYTHING');
+  if (await clickText('Fixture 4 -')) {
+    await page.waitForTimeout(400);
+    await clickSel('.result-card-toggle'); // collapse the result card so the feed has room
+    await feedTo('#feed details.quiet');
+    await shot('17-feed-system-claude-plugin-work-codex');
+    await clickSel('#feed details.quiet');
+    await clickSel('#feed details.part');
+    await clickSel('#feed details.work');
+    await page.waitForTimeout(250);
+    await feedTo('#feed details.quiet');
+    await shot('17-feed-expanded-system-plugin-work');
+    await feedTo('#feed .msg.actor-relay');
+    await shot('17-feed-you-relayed-answer');
+    try {
+      await page.locator('#legend').screenshot({ path: OUT.replace(/\/$/, '') + '/17-legend.png' });
+      log('shot: 17-legend');
+    } catch (err) {
+      skipped.push('legend shot: ' + err.message);
+    }
+    await clickSel('.result-card-toggle'); // open again for the steps below
+  }
+  if (await clickText('Fixture 6 -')) {
+    await page.waitForTimeout(400);
+    await clickSel('.result-card-toggle');
+    await feedTo('#feed .msg.actor-codex');
+    await shot('17-feed-claude-automatic-answer');
+    await clickSel('.result-card-toggle');
+  }
+  await view('NOW', 'ALL');
+  if (await clickText('Fixture 1 -')) {
+    await page.waitForTimeout(400);
+    await shot('17-feed-you-running-codex-working');
   }
 
   // ---- 9. result dialog: open Fixture 5, then ... > Job > Show full result ----
@@ -403,12 +438,19 @@ async (page) => {
     }
   }
 
-  // ---- 16. Start dialog at mobile width ----
-  if (await clickId('start-button')) {
+  // ---- 16. the handoff feed at mobile width ----
+  await pressEscape(); // close the drawer
+  if (await clickId('show-side')) {
     await page.waitForTimeout(200);
-    await shot('16-mobile-start-dialog');
-    await checkNoHorizontalScroll('16-mobile-start-dialog');
-    await pressEscape();
+    await view('HISTORY', 'EVERYTHING');
+    if (await clickText('Fixture 4 -')) {
+      await page.waitForTimeout(400);
+      await clickSel('.result-card-toggle');
+      await feedTo('#feed .msg.actor-claude');
+      await shot('16-mobile-feed-handoff');
+      await checkNoHorizontalScroll('16-mobile-feed-handoff');
+      await clickSel('.result-card-toggle');
+    }
   }
 
   log('done. skipped:', skipped.length ? ('\n  - ' + skipped.join('\n  - ')) : 'none');

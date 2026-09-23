@@ -6,61 +6,10 @@ const vm = require("node:vm");
 
 const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const slice = script.match(/function taskFormBody[\s\S]*?function knownCwds[\s\S]*?\n    \}/)[0];
+const slice = script.match(/function resumeBody[\s\S]*?function answerPrompt[\s\S]*?\n    \}/)[0];
 
 function ctx() { const c = {}; vm.runInNewContext(slice, c); return c; }
 function plain(value) { return JSON.parse(JSON.stringify(value)); }
-
-test("taskFormBody trims and omits empty optionals", () => {
-  const { taskFormBody } = ctx();
-  assert.deepEqual(
-    plain(taskFormBody({ cwd: " D:\\GIT\\x ", prompt: " fix it ", effort: "", model: "", write: false, sandbox: "" })),
-    { cwd: "D:\\GIT\\x", prompt: "fix it" },
-  );
-  assert.deepEqual(
-    plain(taskFormBody({ cwd: "D:\\x", prompt: "p", effort: "xhigh", model: "spark", write: true, sandbox: "workspace-write" })),
-    { cwd: "D:\\x", prompt: "p", effort: "xhigh", model: "spark", write: true, sandbox: "workspace-write" },
-  );
-});
-
-test("taskFormBody includes fast only when enabled", () => {
-  const { taskFormBody } = ctx();
-  assert.deepEqual(plain(taskFormBody({ cwd: "D:\\x", prompt: "p", fast: true })), { cwd: "D:\\x", prompt: "p", fast: true });
-  assert.deepEqual(plain(taskFormBody({ cwd: "D:\\x", prompt: "p", fast: false })), { cwd: "D:\\x", prompt: "p" });
-});
-
-test("reviewFormBody trims and omits empty optionals", () => {
-  const { reviewFormBody } = ctx();
-  assert.deepEqual(
-    plain(reviewFormBody({ cwd: " D:\\x ", kind: "review", model: "", fast: false, focus: "" })),
-    { cwd: "D:\\x", kind: "review" },
-  );
-  assert.deepEqual(
-    plain(reviewFormBody({ cwd: "D:\\x", kind: "adversarial-review", model: "astra", fast: true, focus: " check auth " })),
-    { cwd: "D:\\x", kind: "adversarial-review", model: "astra", fast: true, focus: "check auth" },
-  );
-});
-
-test("reviewFormBody sends focus only for adversarial-review", () => {
-  const { reviewFormBody } = ctx();
-  assert.deepEqual(
-    plain(reviewFormBody({ cwd: "D:\\x", kind: "review", focus: "ignored" })),
-    { cwd: "D:\\x", kind: "review" },
-  );
-  assert.deepEqual(
-    plain(reviewFormBody({ cwd: "D:\\x", kind: "adversarial-review", focus: "" })),
-    { cwd: "D:\\x", kind: "adversarial-review" },
-  );
-});
-
-test("resolveModelValue passes shortcuts through as-is and trims custom", () => {
-  const { resolveModelValue } = ctx();
-  assert.equal(resolveModelValue("", "ignored"), "");
-  assert.equal(resolveModelValue("astra", ""), "astra");
-  assert.equal(resolveModelValue("daybreak-blue", ""), "daybreak-blue");
-  assert.equal(resolveModelValue("custom", "  my-model  "), "my-model");
-  assert.equal(resolveModelValue("custom", "   "), "");
-});
 
 test("resumeBody carries thread, cwd and adjustments", () => {
   const { resumeBody } = ctx();
@@ -78,17 +27,6 @@ test("resumeBody includes fast only when enabled", () => {
     { threadId: "th-1", cwd: "D:\\x", fast: true },
   );
   assert.deepEqual(plain(resumeBody({ threadId: "th-1", cwd: "D:\\x" }, { fast: false })), { threadId: "th-1", cwd: "D:\\x" });
-});
-
-test("knownCwds dedupes sessions and jobs, newest first, skips blanks", () => {
-  const { knownCwds } = ctx();
-  assert.deepEqual(
-    plain(knownCwds(
-      [{ cwd: "D:\\a" }, { cwd: "" }, { cwd: "D:\\b" }],
-      [{ workspaceRoot: "D:\\b" }, { workspaceRoot: "D:\\c" }],
-    )),
-    ["D:\\a", "D:\\b", "D:\\c"],
-  );
 });
 
 test("answerPrompt prefixes the answer and never lets it start the prompt", () => {

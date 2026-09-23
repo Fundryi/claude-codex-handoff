@@ -22,6 +22,12 @@
       --yellow: #e5b849;
       --red: #ff6b63;
       --purple: #c49cff;
+      /* Actor colors: who sent a feed message. One meaning each, never a status color. */
+      --you: #f28fbf;
+      --claude: #d97757;
+      --plugin: #b6cf6e;
+      --codex: #45c4b0;
+      --system: #8c9bab;
       --sidebar-width: 340px;
       font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
       font-size: 13px;
@@ -88,7 +94,7 @@
     #brand-copy { min-width: 0; flex: 1; }
     #brand-title { font-size: 14px; font-weight: 650; letter-spacing: .1px; }
     #brand-subtitle { color: var(--muted); font-size: 11px; margin-top: 1px; }
-    #start-button, #resume-session-button { height: 32px; white-space: nowrap; }
+    #resume-session-button { height: 32px; white-space: nowrap; }
     #connection {
       display: inline-flex;
       align-items: center;
@@ -323,7 +329,9 @@
     .status.NEEDS_ANSWER { background: transparent; border: 1px solid #ee964b; color: #ee964b; }
     .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
     .status.FAST { background: #3d2a14; color: #ffb86b; }
-    .status.HANDOFF { background: #1f2a38; color: #a9c4e4; }
+    /* A handoff is Claude's: Claude's actor color and glyph, and no pill, so it never reads as a status. */
+    .status.HANDOFF { background: transparent; color: #e89a80; padding: 2px 1px; }
+    .status.HANDOFF::before { content: '\2733\FE0E'; margin-right: 4px; font-size: 10px; }
     .status.AGENT { background: #2a2440; color: #c9b6ff; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
@@ -537,9 +545,6 @@
     .control-field textarea { min-height: 90px; resize: vertical; }
     .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .control-checkbox { display: flex; align-items: center; gap: 7px; color: var(--fg); font-size: 12px; }
-    .control-checkbox-wrap { display: grid; gap: 4px; }
-    .control-hint { color: var(--faint); font-size: 10px; }
-    .control-model { display: grid; gap: 6px; }
     #control-modal-error { min-height: 18px; margin-top: 10px; color: #ff9b95; font-size: 12px; white-space: pre-wrap; }
     #control-modal-confirm { background: #17375a; border-color: #36577c; color: #c2ddff; font-weight: 700; }
     #control-modal-confirm.danger { background: #6d2925; border-color: #8a3a34; color: #ffd0cc; }
@@ -566,8 +571,16 @@
       font-size: 11px;
     }
     .toolbar-button:hover, .toolbar-button.on { background: var(--hover); color: var(--fg); }
+    #legend { display: flex; align-items: center; gap: 4px 14px; min-width: 0; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .legend-title { color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+    .legend-item::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--actor); flex: none; }
+    .legend-item.actor-work::before { background: transparent; box-shadow: inset 0 0 0 2px var(--codex); }
+    .legend-item.actor-system::before { background: transparent; box-shadow: none; border: 1px dashed var(--system); width: 7px; height: 7px; }
+    .started-by { display: inline-flex; align-items: center; gap: 6px; }
+    .started-by b { color: var(--actor); font-weight: 650; }
     #result-card { flex: none; padding: 10px clamp(14px, 3vw, 36px); border-bottom: 1px solid var(--border); background: #0e141c; }
-    .result-card-box { width: min(100%, 1080px); margin: 0 auto; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); min-width: 0; }
+    .result-card-box { width: min(100%, 1080px); margin: 0 auto; border: 1px solid var(--border); border-left: 3px solid var(--codex); border-radius: 7px; background: var(--panel); min-width: 0; }
     .result-card-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 4px; }
     .result-card-toggle { display: flex; align-items: center; gap: 7px; border: 0; border-radius: 6px; padding: 4px 6px; background: transparent; color: var(--fg); cursor: pointer; font-size: 12px; font-weight: 600; transition: background-color 160ms; }
     .result-card-toggle:hover { background: var(--hover); }
@@ -577,7 +590,8 @@
     .result-card-body { max-height: 38vh; overflow: auto; padding: 2px 14px 12px; border-top: 1px solid var(--border); }
     .result-section { margin-top: 10px; min-width: 0; }
     .result-section-title { margin: 0 0 4px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
-    .result-section.question .result-section-title { color: var(--yellow); }
+    .result-section.question { margin-top: 12px; padding: 8px 12px 10px; border: 1px solid color-mix(in srgb, var(--you) 45%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--you) 7%, var(--panel)); }
+    .result-section.question .result-section-title { color: var(--you); }
     .result-section-body { overflow-wrap: anywhere; word-break: break-word; line-height: 1.55; font-size: 13px; }
     .result-section-body > :first-child { margin-top: 0; }
     .result-section-body > :last-child { margin-bottom: 0; }
@@ -609,21 +623,142 @@
       box-shadow: 0 8px 20px #0008;
       font-size: 11px;
     }
-    .event { min-width: 0; margin-bottom: 7px; }
-    .event-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
-    .event-kind { font-weight: 700; font-size: 10px; letter-spacing: .45px; }
-    .event-time { color: var(--faint); font-size: 10px; }
-    .event-body {
-      border-left: 2px solid var(--border);
-      padding: 4px 10px;
+    /* Feed grammar: messages are cards with a sender -> receiver header in the actor's color;
+       Codex work is a collapsed activity log on a teal rail; System and Plugin text is quiet. */
+    .actor-you { --actor: var(--you); }
+    .actor-relay { --actor: var(--you); }
+    .actor-claude { --actor: var(--claude); }
+    .actor-plugin { --actor: var(--plugin); }
+    .actor-codex, .actor-work { --actor: var(--codex); }
+    .actor-system { --actor: var(--system); }
+    .avatar {
+      width: 20px;
+      height: 20px;
+      flex: none;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--actor);
+      color: #0b0f14;
+      font: 700 11px/1 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    }
+    .avatar.mono { font: 700 9px/1 "Cascadia Code", Consolas, monospace; letter-spacing: -.5px; }
+    .avatar.small { width: 16px; height: 16px; font-size: 9px; }
+    .avatar.small.mono { font-size: 8px; }
+    .actor-relay > .msg-head .avatar, .avatar.ring { background: transparent; color: var(--actor); box-shadow: inset 0 0 0 1.5px var(--actor); }
+    .actor-relay > .msg-head .avatar { box-shadow: none; border: 1.5px dashed var(--actor); }
+    .who { color: var(--actor); font-weight: 650; }
+    .route-arrow { color: var(--faint); font-size: 12px; }
+    .msg {
+      min-width: 0;
+      margin: 12px 0 8px;
+      padding: 9px 14px 11px;
+      border: 1px solid color-mix(in srgb, var(--actor) 22%, var(--border));
+      border-left: 3px solid var(--actor);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--actor) 7%, var(--panel));
+    }
+    .msg.actor-codex { background: var(--panel); }
+    .msg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; margin-bottom: 6px; font-size: 12px; }
+    .msg-tag {
+      border: 1px solid color-mix(in srgb, var(--actor) 45%, transparent);
+      border-radius: 999px;
+      padding: 0 7px;
+      color: var(--actor);
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 16px;
+      white-space: nowrap;
+    }
+    .msg-time { margin-left: auto; color: var(--faint); font-size: 10px; white-space: nowrap; }
+    details.msg-more > summary { cursor: pointer; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    details.msg-more > summary:hover { color: var(--fg); }
+    details.msg-more[open] > summary { margin-bottom: 6px; }
+    .ask {
+      margin-top: 10px;
+      padding: 8px 12px 9px;
+      border: 1px solid color-mix(in srgb, var(--you) 45%, transparent);
+      border-radius: 7px;
+      background: color-mix(in srgb, var(--you) 8%, var(--panel));
+    }
+    .ask-title { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--you); font-size: 10px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+    details.part {
+      margin-top: 10px;
+      border-top: 1px dashed color-mix(in srgb, var(--actor) 35%, var(--border));
+      padding-top: 7px;
+    }
+    details.part > summary, details.quiet > summary, details.technical > summary, details.work > summary {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      cursor: pointer;
+      list-style: none;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+    .caret { flex: none; width: 8px; color: var(--faint); font-size: 9px; transition: transform .14s ease; }
+    details[open] > summary > .caret { transform: rotate(90deg); }
+    .sum-label { flex: none; color: var(--actor, var(--muted)); font-size: 11px; font-weight: 650; }
+    .sum-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 11px; }
+    .sum-time { flex: none; margin-left: auto; padding-left: 8px; color: var(--faint); font-size: 10px; }
+    details.part > summary { color: var(--muted); font-size: 11px; }
+    details.part pre, details.quiet pre {
+      margin: 7px 0 0;
+      max-height: 360px;
+      overflow: auto;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #0b1016;
+      color: #aebccb;
+      font: 11px/1.5 "Cascadia Code", Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    details.quiet {
+      margin: 6px 0;
+      padding: 5px 10px;
+      border: 1px dashed #2a3340;
+      border-radius: 7px;
+      background: transparent;
+    }
+    details.quiet[open] { background: #0e141c; }
+    .quiet-step { margin-top: 8px; }
+    .quiet-step-head { display: flex; gap: 8px; color: var(--muted); font-size: 10px; }
+    .quiet-step-head b { color: var(--fg); font-weight: 600; }
+    details.work {
+      margin: 2px 0 2px 9px;
+      padding: 2px 0 2px 14px;
+      border-left: 2px solid color-mix(in srgb, var(--codex) 40%, transparent);
+    }
+    details.work > summary { padding: 4px 0; }
+    .work-list { display: grid; gap: 4px; padding: 3px 0 6px; }
+    .marker { display: flex; align-items: center; gap: 10px; margin: 10px 0; color: var(--faint); font-size: 10px; letter-spacing: .3px; }
+    .marker::before, .marker::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .marker.done { color: var(--green); }
+    .marker.err { color: var(--red); }
+    .working { display: flex; align-items: center; gap: 8px; margin: 12px 0 0 9px; color: #80bdff; font-size: 11px; min-width: 0; }
+    .working-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+    .working::before {
+      content: '';
+      flex: none;
+      width: 9px;
+      height: 9px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    .event-body, .msg-body {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: break-word;
       line-height: 1.55;
       font-size: 13px;
     }
-    .event-body > :first-child { margin-top: 0; }
-    .event-body > :last-child { margin-bottom: 0; }
+    .event-body > :first-child, .msg-body > :first-child { margin-top: 0; }
+    .event-body > :last-child, .msg-body > :last-child { margin-bottom: 0; }
     .md-h1, .md-h2, .md-h3 { margin: 10px 0 4px; font-weight: 650; color: var(--fg); }
     .md-h1 { font-size: 15px; }
     .md-h2 { font-size: 14px; }
@@ -635,34 +770,23 @@
     .md-code { margin: 8px 0; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; background: #0e141c; }
     .md-code-lang { padding: 4px 10px; color: var(--muted); font: 10px/1.4 "Cascadia Code", Consolas, monospace; border-bottom: 1px solid var(--border); }
     .md-code pre { margin: 0; padding: 10px; color: #b8c5d1; font: 11px/1.55 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .event-body code, .md-quote code { font: 11px "Cascadia Code", Consolas, monospace; background: #0e141c; padding: 1px 4px; border-radius: 4px; }
+    .event-body code, .msg-body code, .md-quote code { font: 11px "Cascadia Code", Consolas, monospace; background: #0e141c; padding: 1px 4px; border-radius: 4px; }
+    .msg-body .md-code { background: #0b1016; }
     .thinkgroup-step { padding: 8px 10px; border-top: 1px solid var(--border); }
     .thinkgroup-step:first-of-type { border-top: none; }
     .thinkgroup-step-time { color: var(--faint); font-size: 10px; margin-bottom: 3px; }
-    .event.user .event-kind { color: var(--blue); }
-    .event.user .event-body { border-left-color: #376da8; background: #101b28; }
-    .event.agent .event-kind { color: var(--green); }
-    .event.agent .event-body { border-left-color: #2f7341; }
-    .event.done .event-kind { color: var(--green); }
-    .event.err .event-kind { color: var(--red); }
-    .event.sys .event-kind { color: var(--muted); }
-    .event.internal .event-kind { color: var(--purple); }
+    .thinkgroup-step .event-body { color: #c3cdd8; font-size: 12px; }
     details.technical {
-      border: 1px solid var(--border);
-      border-radius: 7px;
+      border: 1px solid #222b37;
+      border-radius: 6px;
       background: #0e141c;
       overflow: hidden;
     }
-    details.technical summary {
-      padding: 7px 10px;
-      color: var(--muted);
-      cursor: pointer;
-      font-family: "Cascadia Code", Consolas, monospace;
-      font-size: 11px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    details.technical[open] { border-color: var(--border); }
+    details.technical > summary { padding: 5px 9px; }
+    details.technical > summary:hover, details.quiet > summary:hover .sum-text, details.work > summary:hover .sum-text { color: var(--fg); }
+    .step-kind { flex: none; min-width: 62px; color: color-mix(in srgb, var(--codex) 80%, var(--muted)); font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+    .step-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #b8c5d1; font: 11px "Cascadia Code", Consolas, monospace; }
     details.technical pre {
       margin: 0;
       border-top: 1px solid var(--border);
@@ -714,6 +838,9 @@
       body.mobile-side-open #side-backdrop { display: block; }
       #task-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
       .meta-item { white-space: normal; overflow: visible; text-overflow: clip; }
+      .legend-title { display: none; }
+      #legend { gap: 12px; }
+      .result-section.question { padding: 0; border: 0; background: none; }
       .result-card-body .answer-box { position: sticky; bottom: -12px; margin: 10px -14px -12px; padding: 10px 14px 12px; background: var(--panel); border-top: 1px solid var(--border); }
     }
   </style>
@@ -726,7 +853,6 @@
         <div id="brand-title">Codex Live Viewer</div>
         <div id="brand-subtitle"><span id="connection"><span id="connection-dot"></span><span id="connection-text">Connecting</span></span></div>
       </div>
-      <button id="start-button" class="toolbar-button" type="button">Start</button>
       <button id="hide-side" class="icon-button" type="button" title="Collapse session list" aria-label="Collapse session list">&#x2039;</button>
     </div>
     <div id="side-controls">
@@ -761,8 +887,15 @@
     </header>
 
     <div id="feed-toolbar">
-      <button id="internals-button" class="toolbar-button" type="button" title="Show internal Codex events (injected prompts, permissions) and auto-expand patches">Show internals</button>
-      <span class="spacer"></span>
+      <div id="legend" role="note" aria-label="Who's who in the feed">
+        <span class="legend-title">Who's who</span>
+        <span class="legend-item actor-you" title="You: a message you typed, or your answer relayed through Claude or the answer box">You</span>
+        <span class="legend-item actor-claude" title="Claude: a handoff prompt, or an answer Claude gave by itself">Claude</span>
+        <span class="legend-item actor-plugin" title="Plugin: the return format the codex plugin adds to every handoff">Plugin</span>
+        <span class="legend-item actor-codex" title="Codex: replies, and questions it asks you">Codex</span>
+        <span class="legend-item actor-work" title="Codex work: thinking, commands, output, patches and tools">Codex work</span>
+        <span class="legend-item actor-system" title="System: injected context and hook text, collapsed">System</span>
+      </div>
     </div>
 
     <section id="result-card" aria-label="Handoff result" hidden></section>
@@ -821,7 +954,6 @@
       sideWidth: 340,
       sideCollapsed: false,
       query: '',
-      internals: false,
       home: false,
       autoFollow: true,
       selected: null,
@@ -897,7 +1029,6 @@
     var controlAction = null;
     var pendingKillPid = null;
     var autoOpenToggle = document.getElementById('auto-open-toggle');
-    var internalsButton = document.getElementById('internals-button');
     var connection = document.getElementById('connection');
     var connectionText = document.getElementById('connection-text');
 
@@ -918,12 +1049,14 @@
     };
 
     function loadPrefs() {
+      var loaded;
       try {
-        var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-        return Object.assign({}, defaults, saved);
+        loaded = Object.assign({}, defaults, JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'));
       } catch (_) {
-        return Object.assign({}, defaults);
+        loaded = Object.assign({}, defaults);
       }
+      delete loaded.internals; // dropped pref: the feed always shows everything, injected blocks collapsed
+      return loaded;
     }
 
     function savePrefs() {
@@ -1124,19 +1257,29 @@
     // -- Result-card section parsing, mirroring plugin/scripts/lib/render.mjs
     // extractSection/readNeedsDecision exactly (renamed for the UI's own use),
     // so the two never drift out of sync (see tests/plugin-task-result.test.js).
-    function extractResultSection(text, heading) {
-      var lines = String(text == null ? '' : text).split(/\r?\n/);
+    // Line range of a section: its heading line (start) up to the next known heading (end).
+    function resultSectionBounds(lines, heading) {
       var name = markdownEscapeRegExp(heading);
       var startRe = new RegExp('^(?:#{2,3}\\s*' + name + '\\s*:?|\\*\\*' + name + '\\s*:?\\s*\\*\\*\\s*:?)\\s*$', 'i');
       var start = lines.findIndex(function (line) { return startRe.test(line.trim()); });
       if (start === -1) return null;
       var endRe = /^(#{1,3}\s|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i;
-      var body = [];
-      for (var i = start + 1; i < lines.length; i++) {
-        if (endRe.test(lines[i].trim())) break;
-        body.push(lines[i]);
-      }
-      return body.join('\n').trim();
+      var end = start + 1;
+      while (end < lines.length && !endRe.test(lines[end].trim())) end++;
+      return { start: start, end: end };
+    }
+    function extractResultSection(text, heading) {
+      var lines = String(text == null ? '' : text).split(/\r?\n/);
+      var bounds = resultSectionBounds(lines, heading);
+      return bounds ? lines.slice(bounds.start + 1, bounds.end).join('\n').trim() : null;
+    }
+    // The text without one section, so a reply can show its question once, in its own callout.
+    function removeResultSection(text, heading) {
+      var value = String(text == null ? '' : text);
+      var lines = value.split(/\r?\n/);
+      var bounds = resultSectionBounds(lines, heading);
+      if (!bounds) return value;
+      return lines.slice(0, bounds.start).concat(lines.slice(bounds.end)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
     }
     function readResultQuestion(text) {
       var body = extractResultSection(text, 'Needs decision');
@@ -1149,7 +1292,7 @@
     // group is keyed off its first step's timestamp (stable across regrouping
     // even though the group object itself is rebuilt every render).
     function technicalEventKey(event) {
-      if (event.kind === 'thinkgroup') return 'thinkgroup|' + (event.steps[0] && event.steps[0].ts);
+      if (event.steps) return event.kind + '|' + (event.steps[0] && event.steps[0].ts); // thinkgroup, sysgroup
       return event.kind + '|' + event.ts;
     }
 
@@ -1182,6 +1325,119 @@
         i = j;
       }
       return result;
+    }
+
+    // -- Who sent what. Injected context dumps and hook text (the server's internal flag,
+    // plus the older text patterns) are System, never speech.
+    function isInternal(event) {
+      if (event.internal) return true;
+      if (event.kind !== 'agent') return false;
+      var text = String(event.text || '').trim();
+      return /^<(permissions|skills|apps|plugins|recommended_plugins|environment_context|developer|multi_agent_mode)/i.test(text) ||
+        text.includes('You are `/root`, the primary agent') ||
+        text.includes('<collaboration_mode>');
+    }
+    // The actor of a feed item: 'you' | 'claude' | 'relay' (your answer, delivered by Claude or the
+    // answer box) | 'codex' | 'work' (Codex's thinking, commands, output, patches, tools) |
+    // 'system' | 'status' (turn markers). A plain prompt is Claude's handoff only when the session's
+    // originator is Claude Code; the two answer prefixes win over that. Nothing else is guessed.
+    function messageActor(event, session) {
+      if (!event) return 'system';
+      var kind = event.kind;
+      if (['cmd', 'out', 'patch', 'tool', 'think', 'thinkgroup'].indexOf(kind) !== -1) return 'work';
+      if (kind === 'done' || kind === 'err' || kind === 'sys') return 'status';
+      if (kind === 'sysgroup' || isInternal(event)) return 'system';
+      if (kind === 'agent') return 'codex';
+      if (kind !== 'user') return 'system';
+      var text = String(event.text || '').replace(/^\s+/, '');
+      if (text.indexOf('Answer from the user:') === 0) return 'relay';
+      if (text.indexOf('Answer from Claude (automatic') === 0) return 'claude';
+      return session && session.originator === 'Claude Code' ? 'claude' : 'you';
+    }
+    // Who a message goes to: everything incoming goes to Codex; Codex answers whoever started the session.
+    function messageRoute(actor, session) {
+      if (actor !== 'codex') return { from: actor === 'relay' ? 'you' : actor, to: 'codex' };
+      return { from: 'codex', to: session && session.originator === 'Claude Code' ? 'claude' : 'you' };
+    }
+    // The answer prefixes as a tag, and the words after them.
+    function answerPrefix(text) {
+      var value = String(text == null ? '' : text);
+      var auto = value.match(/^\s*Answer from Claude \(automatic([^)]*)\):?\s*/);
+      if (auto) return { tag: ('automatic answer ' + auto[1].trim()).trim(), text: value.slice(auto[0].length) };
+      var relay = value.match(/^\s*Answer from the user:\s*/);
+      if (relay) return { tag: 'relayed answer', text: value.slice(relay[0].length) };
+      return { tag: '', text: value };
+    }
+    // The plugin appends its return format to every handoff prompt (plugin/prompts/task-return-format.md),
+    // starting at a line of its own that reads <return_format>. Split it off as the Plugin's part.
+    function splitReturnFormat(text) {
+      var value = String(text == null ? '' : text);
+      var match = /(^|\r?\n)[ \t]*<return_format>[ \t]*(?=\r?\n|$)/.exec(value);
+      if (!match) return { body: value, footer: '' };
+      var start = match.index + match[1].length;
+      return { body: value.slice(0, start).replace(/\s+$/, ''), footer: value.slice(start).replace(/\s+$/, '') };
+    }
+    // Handoff prompts come as <goal>, <rules>, <done_when> blocks. A line that is only an opening
+    // tag becomes a small heading and a closing tag line goes, so the prompt reads as sections.
+    // Code fences are left alone.
+    function promptMarkdown(text) {
+      var inFence = false;
+      return String(text == null ? '' : text).split(/\r?\n/).map(function (line) {
+        if (/^\s{0,3}```/.test(line)) inFence = !inFence;
+        if (inFence) return line;
+        var open = line.match(/^\s*<([a-z][\w-]*)>\s*$/i);
+        if (open) {
+          var name = open[1].replace(/[_-]+/g, ' ');
+          return '\n### ' + name.charAt(0).toUpperCase() + name.slice(1);
+        }
+        return /^\s*<\/[a-z][\w-]*>\s*$/i.test(line) ? '' : line;
+      }).join('\n');
+    }
+    // Thinking groups, then each run of System blocks folded into one quiet row.
+    function groupFeed(events, session) {
+      var result = [];
+      groupThinking(events || []).forEach(function (event) {
+        if (messageActor(event, session) !== 'system') { result.push(event); return; }
+        var last = result[result.length - 1];
+        if (last && last.kind === 'sysgroup') { last.steps.push(event); last.ts = event.ts; return; }
+        result.push({ kind: 'sysgroup', ts: event.ts, steps: [event], text: event.text });
+      });
+      return result;
+    }
+    // Header line "Started by": null when the rollout names no originator.
+    function startedBy(originator) {
+      var value = String(originator || '').trim();
+      if (!value) return null;
+      if (value === 'Claude Code') return { actor: 'claude', label: 'Claude (handoff)' };
+      return { actor: 'you', label: 'you (' + (/^codex_(cli|exec)/i.test(value) ? 'Codex CLI' : value) + ')' };
+    }
+    // "Codex is working: <this>", from the newest event that is not context or a turn marker.
+    function workingLine(events) {
+      var list = events || [];
+      for (var i = list.length - 1; i >= 0; i--) {
+        var event = list[i];
+        if (event.kind === 'sys' || event.kind === 'done' || event.kind === 'err' || isInternal(event)) continue;
+        if (event.kind === 'cmd') return 'running ' + firstLine(event.text, 90);
+        if (event.kind === 'patch') return 'editing ' + firstLine(event.text, 90);
+        if (event.kind === 'think') return 'thinking';
+        if (event.kind === 'tool') return 'using ' + String(event.text || '').trim().split(/\s/)[0];
+        if (event.kind === 'out') return 'reading command output';
+        if (event.kind === 'agent') return 'writing a reply';
+        return 'reading the message';
+      }
+      return 'starting';
+    }
+    // "2 commands · 1 patch" for a collapsed Codex work block.
+    function workSummary(items) {
+      var names = { cmd: ['command', 'commands'], out: ['output', 'outputs'], patch: ['patch', 'patches'], tool: ['tool call', 'tool calls'], thinkgroup: ['thinking step', 'thinking steps'] };
+      var counts = {};
+      (items || []).forEach(function (item) {
+        var kind = item.kind === 'think' ? 'thinkgroup' : item.kind;
+        counts[kind] = (counts[kind] || 0) + (item.steps ? item.steps.length : 1);
+      });
+      return Object.keys(names).filter(function (kind) { return counts[kind]; }).map(function (kind) {
+        return counts[kind] + ' ' + names[kind][counts[kind] === 1 ? 0 : 1];
+      }).join(' · ');
     }
 
     function projectName(cwd) {
@@ -1312,27 +1568,6 @@
       });
       return { answer: answer, attention: attention, running: running, finished: finished.slice(0, 5) };
     }
-    function taskFormBody(f) {
-      const b = { cwd: String(f.cwd || '').trim(), prompt: String(f.prompt || '').trim() };
-      if (f.effort) b.effort = f.effort;
-      if (f.model && String(f.model).trim()) b.model = String(f.model).trim();
-      if (f.write) b.write = true;
-      if (f.fast) b.fast = true;
-      if (f.sandbox) b.sandbox = f.sandbox;
-      return b;
-    }
-    function reviewFormBody(f) {
-      const b = { cwd: String(f.cwd || '').trim(), kind: f.kind };
-      if (f.model && String(f.model).trim()) b.model = String(f.model).trim();
-      if (f.fast) b.fast = true;
-      if (f.kind === 'adversarial-review' && f.focus && String(f.focus).trim()) b.focus = String(f.focus).trim();
-      return b;
-    }
-    // Model select: a shortcut value (astra, sol, ...) is sent as-is; 'custom' sends the
-    // trimmed free-text box; anything else (Default, '') sends '' so the body omits model.
-    function resolveModelValue(selectValue, customValue) {
-      return selectValue === 'custom' ? String(customValue || '').trim() : selectValue;
-    }
     function resumeBody(session, opts) {
       const b = { threadId: session.threadId, cwd: session.cwd };
       if (opts.prompt) b.prompt = opts.prompt;
@@ -1348,12 +1583,6 @@
     function answerPrompt(text) {
       var trimmed = String(text == null ? '' : text).trim();
       return trimmed ? 'Answer from the user: ' + trimmed : '';
-    }
-    function knownCwds(sessions, jobs) {
-      const seen = [];
-      for (const s of sessions || []) if (s.cwd && !seen.includes(s.cwd)) seen.push(s.cwd);
-      for (const j of jobs || []) if (j.workspaceRoot && !seen.includes(j.workspaceRoot)) seen.push(j.workspaceRoot);
-      return seen;
     }
     function waitReason(session) {
       if (!session || session.archived) return '';
@@ -1748,8 +1977,6 @@
       autoOpenToggle.classList.toggle('on', !!prefs.autoFollow);
       autoOpenToggle.setAttribute('aria-pressed', prefs.autoFollow ? 'true' : 'false');
       autoOpenToggle.textContent = 'Auto-open new runs: ' + (prefs.autoFollow ? 'On' : 'Off');
-      internalsButton.classList.toggle('on', !!prefs.internals);
-      internalsButton.textContent = prefs.internals ? 'Show internals: on' : 'Show internals';
     }
 
     function currentRows() { return buildRows(sessions, jobs); }
@@ -1980,7 +2207,7 @@
       var badgeClass = rowBadge(row.status);
       top.appendChild(statusChip(badgeClass, STATUS[badgeClass].label, rowReason(row) || STATUS[badgeClass].help));
       if (job) {
-        top.appendChild(statusChip('HANDOFF', 'Handoff', 'Codex handoff job' + (row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : '')));
+        top.appendChild(statusChip('HANDOFF', 'Handoff', 'Handoff from Claude to Codex' + (row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : '')));
       }
       if (row.fast) top.appendChild(fastChip());
       if (row.needsAnswer) top.appendChild(statusChip('NEEDS_ANSWER', '?', 'Codex asked: ' + firstLine(job.needsDecision, 200)));
@@ -2075,12 +2302,22 @@
       taskStatus.textContent = STATUS[badgeClass].label;
       taskStatus.title = reason || STATUS[badgeClass].help;
       taskHandoff.hidden = !row.job;
-      taskHandoff.title = row.job ? 'Codex handoff job' + (row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : '') : '';
+      taskHandoff.title = row.job ? 'Handoff from Claude to Codex' + (row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : '') : '';
       taskFast.hidden = !row.fast;
       taskTitle.textContent = row.title;
       taskTitle.title = row.title;
       resumeSessionButton.hidden = !resumeTarget(row);
 
+      var origin = startedBy(session.originator);
+      if (origin) {
+        var started = document.createElement('span');
+        started.className = 'meta-item started-by actor-' + origin.actor;
+        started.title = 'Session originator: ' + session.originator;
+        var who = document.createElement('b');
+        who.textContent = origin.label;
+        started.append(actorAvatar(origin.actor, true), document.createTextNode('Started by: '), who);
+        taskMeta.appendChild(started);
+      }
       var metadata = document.createElement(session.threadId ? 'button' : 'span');
       if (session.threadId) metadata.type = 'button';
       metadata.className = 'meta-item' + (session.threadId ? ' meta-button' : '');
@@ -2107,26 +2344,156 @@
       }
     }
 
-    function isInternal(event) {
-      if (event.internal) return true;
-      if (event.kind !== 'agent') return false;
+    // -- Feed rendering. Grammar: a message is a card with "sender -> receiver" in the actor's
+    // color; Codex work is a collapsed activity log on a teal rail under its turn; System and
+    // Plugin text is quiet and collapsed; turn markers are thin centered rules.
+    var ACTORS = {
+      you: { name: 'You', glyph: 'Y' },
+      relay: { name: 'You', glyph: 'Y' },
+      claude: { name: 'Claude', glyph: '✳︎' },
+      plugin: { name: 'Plugin', glyph: '+' },
+      codex: { name: 'Codex', glyph: '>_', mono: true },
+      work: { name: 'Codex work', glyph: '>_', mono: true },
+      system: { name: 'System', glyph: 'i' }
+    };
+    var LONG_MESSAGE = 3000;
+
+    function actorAvatar(actor, small) {
+      var info = ACTORS[actor] || ACTORS.system;
+      var avatar = document.createElement('span');
+      avatar.className = 'avatar' + (info.mono ? ' mono' : '') + (small ? ' small' : '');
+      avatar.setAttribute('aria-hidden', 'true');
+      avatar.textContent = info.glyph;
+      return avatar;
+    }
+
+    function actorName(actor) {
+      var name = document.createElement('span');
+      name.className = 'who actor-' + actor;
+      name.textContent = ACTORS[actor].name;
+      return name;
+    }
+
+    function textSpan(className, text) {
+      var span = document.createElement('span');
+      span.className = className;
+      span.textContent = text;
+      return span;
+    }
+
+    // One collapsed summary row: caret, label, one-line preview, time.
+    function summaryRow(label, text, ts) {
+      var summary = document.createElement('summary');
+      summary.append(textSpan('caret', '▸'), textSpan('sum-label', label), textSpan('sum-text', text));
+      if (ts) summary.appendChild(textSpan('sum-time', eventTime(ts)));
+      return summary;
+    }
+
+    function markdownBody(text) {
+      var body = document.createElement('div');
+      body.className = 'msg-body';
+      body.appendChild(renderMarkdown(text, document));
+      return body;
+    }
+
+    // A conversation message: You, Claude, You relayed, or Codex.
+    function createMessage(event, actor, key, session) {
+      var route = messageRoute(actor, session);
+      var card = document.createElement('article');
+      card.className = 'msg actor-' + actor;
+      var head = document.createElement('div');
+      head.className = 'msg-head';
+      head.append(actorAvatar(actor), actorName(route.from), textSpan('route-arrow', '→'), actorName(route.to));
+
+      var text = String(event.text || '');
+      var parts = actor === 'codex' ? { body: text, footer: '' } : splitReturnFormat(text);
+      var prefix = answerPrefix(parts.body);
+      var body = prefix.text;
+      var tag = prefix.tag || (actor === 'claude' ? 'handoff' : '');
+      var question = actor === 'codex' ? readResultQuestion(text) : null;
+      if (question) body = removeResultSection(body, 'Needs decision');
+      if (tag) head.appendChild(textSpan('msg-tag', tag));
+      if (question) {
+        var asks = textSpan('msg-tag actor-you', 'asks you');
+        asks.title = 'Codex asked a question under Needs decision';
+        head.appendChild(asks);
+      }
+      if (actor === 'relay') head.lastChild.title = 'Your answer, delivered to Codex through Claude or the viewer’s answer box';
+      head.appendChild(textSpan('msg-time', eventTime(event.ts)));
+      card.appendChild(head);
+
+      var markdown = actor === 'codex' ? body : promptMarkdown(body);
+      if (body.length > LONG_MESSAGE) {
+        var more = document.createElement('details');
+        more.className = 'msg-more';
+        more.dataset.key = key + '|full';
+        var moreSummary = document.createElement('summary');
+        moreSummary.textContent = firstLine(body, 200) + '  ·  show full message (' + body.split('\n').length + ' lines)';
+        more.append(moreSummary, markdownBody(markdown));
+        card.appendChild(more);
+      } else if (body.trim()) {
+        card.appendChild(markdownBody(markdown));
+      }
+      if (question) {
+        var ask = document.createElement('div');
+        ask.className = 'ask';
+        var askTitle = document.createElement('div');
+        askTitle.className = 'ask-title actor-you';
+        askTitle.append(actorAvatar('you', true), document.createTextNode('Question for you'));
+        ask.append(askTitle, markdownBody(question));
+        card.appendChild(ask);
+      }
+      if (parts.footer) {
+        var plugin = document.createElement('details');
+        plugin.className = 'part actor-plugin';
+        plugin.dataset.key = key + '|plugin';
+        var summary = summaryRow('Plugin', 'added the return format: Summary, Changed files, Checks run, Needs decision', 0);
+        summary.insertBefore(actorAvatar('plugin', true), summary.children[1]);
+        var pre = document.createElement('pre');
+        pre.textContent = parts.footer;
+        plugin.append(summary, pre);
+        card.appendChild(plugin);
+      }
+      return card;
+    }
+
+    // What one injected block is, for its line in a System group.
+    function systemBlockName(event) {
       var text = String(event.text || '').trim();
-      return /^<(permissions|skills|apps|plugins|recommended_plugins|environment_context|developer|multi_agent_mode)/i.test(text) ||
-        text.includes('You are `/root`, the primary agent') ||
-        text.includes('<collaboration_mode>');
+      var tag = text.match(/^<([\w-]+)/);
+      if (tag) return tag[1].replace(/[_-]+/g, ' ');
+      if (/^# AGENTS\.md instructions/.test(text)) return 'AGENTS.md';
+      return event.kind === 'agent' ? 'developer text' : 'context';
     }
 
-    function eventVisible(event) {
-      return prefs.internals || !isInternal(event);
-    }
-
-    function technicalEvent(event) {
-      return ['cmd', 'out', 'patch', 'tool', 'think', 'thinkgroup'].includes(event.kind);
-    }
-
-    function eventLabel(event) {
-      if (isInternal(event)) return 'INTERNAL';
-      return ({ user: 'USER', agent: 'CODEX', cmd: 'COMMAND', out: 'OUTPUT', patch: 'PATCH', tool: 'TOOL', think: 'THINKING', thinkgroup: 'THINKING', done: 'COMPLETE', err: 'ERROR', sys: 'STATUS' })[event.kind] || 'EVENT';
+    // A run of injected context and hook text: one quiet collapsed row.
+    function createSystemGroup(group, key) {
+      var details = document.createElement('details');
+      details.className = 'quiet actor-system';
+      details.dataset.key = key;
+      var names = [];
+      group.steps.forEach(function (step) {
+        var name = systemBlockName(step);
+        if (names.indexOf(name) === -1) names.push(name);
+      });
+      var count = group.steps.length;
+      var summary = summaryRow('System', (count === 1 ? '1 injected block' : count + ' injected blocks') + ' · ' + names.join(', '), group.steps[0].ts);
+      summary.insertBefore(actorAvatar('system', true), summary.children[1]);
+      details.appendChild(summary);
+      group.steps.forEach(function (step) {
+        var item = document.createElement('div');
+        item.className = 'quiet-step';
+        var head = document.createElement('div');
+        head.className = 'quiet-step-head';
+        var name = document.createElement('b');
+        name.textContent = systemBlockName(step);
+        head.append(name, textSpan('', String(step.text || '').length.toLocaleString() + ' chars'), textSpan('', eventTime(step.ts)));
+        var pre = document.createElement('pre');
+        pre.textContent = step.text || '';
+        item.append(head, pre);
+        details.appendChild(item);
+      });
+      return details;
     }
 
     // A thinking group collapses to one row; expanding shows each step, Markdown rendered.
@@ -2135,9 +2502,9 @@
       var details = document.createElement('details');
       details.className = 'event technical thinkgroup';
       details.dataset.key = key || technicalEventKey(event);
-      var summary = document.createElement('summary');
-      var stepWord = event.steps.length === 1 ? ' step' : ' steps';
-      summary.textContent = 'Thinking · ' + eventTime(event.ts) + ' · ' + event.steps.length + stepWord + ' · ' + firstLine(event.text, 120);
+      var summary = summaryRow('', '', event.ts);
+      summary.replaceChild(textSpan('step-kind', 'Thinking'), summary.children[1]);
+      summary.replaceChild(textSpan('sum-text', event.steps.length + (event.steps.length === 1 ? ' step' : ' steps') + ' · ' + firstLine(event.text, 140)), summary.children[2]);
       details.appendChild(summary);
       event.steps.forEach(function (step) {
         var stepEl = document.createElement('div');
@@ -2154,41 +2521,46 @@
       return details;
     }
 
-    // `key` comes from assignEventKeys (technicalEventKey is not collision-safe on its own,
-    // since parallel tool calls in one turn can share a kind and a timestamp).
+    // One Codex work step (command, output, patch, tool call): a collapsed row, full text inside.
     function createEvent(event, key) {
       if (event.kind === 'thinkgroup') return createThinkGroupEvent(event, key);
-      var isLongMessage = ['user', 'agent'].includes(event.kind) && String(event.text || '').length > 3000;
-      if (technicalEvent(event) || isLongMessage) {
-        var details = document.createElement('details');
-        details.className = 'event technical ' + event.kind;
-        details.dataset.key = key || technicalEventKey(event);
-        if (prefs.internals) details.open = event.kind === 'patch';
-        var summary = document.createElement('summary');
-        summary.textContent = eventLabel(event) + '  ' + eventTime(event.ts) + '  ' + firstLine(event.text, 150) + (isLongMessage ? '  (expand)' : '');
-        var pre = document.createElement('pre');
-        pre.textContent = event.detail || event.text || '';
-        details.append(summary, pre);
-        return details;
-      }
+      var details = document.createElement('details');
+      details.className = 'event technical ' + event.kind;
+      details.dataset.key = key || technicalEventKey(event);
+      var label = ({ cmd: 'Command', out: 'Output', patch: 'Patch', tool: 'Tool' })[event.kind] || 'Step';
+      var summary = summaryRow('', '', event.ts);
+      summary.replaceChild(textSpan('step-kind', label), summary.children[1]);
+      summary.replaceChild(textSpan('step-text', firstLine(event.text, 200)), summary.children[2]);
+      var pre = document.createElement('pre');
+      pre.textContent = event.detail || event.text || '';
+      details.append(summary, pre);
+      return details;
+    }
 
-      var article = document.createElement('article');
-      article.className = 'event ' + event.kind + (isInternal(event) ? ' internal' : '');
-      var head = document.createElement('div');
-      head.className = 'event-head';
-      var kind = document.createElement('span');
-      kind.className = 'event-kind';
-      kind.textContent = eventLabel(event);
-      var time = document.createElement('span');
-      time.className = 'event-time';
-      time.textContent = eventTime(event.ts);
-      head.append(kind, time);
-      var body = document.createElement('div');
-      body.className = 'event-body';
-      if (event.kind === 'user' || event.kind === 'agent') body.appendChild(renderMarkdown(event.text || '', document));
-      else body.textContent = event.text || '';
-      article.append(head, body);
-      return article;
+    // Consecutive Codex work: one collapsed activity block on the teal rail.
+    function createWorkBlock(block, open) {
+      var details = document.createElement('details');
+      details.className = 'work actor-work';
+      details.dataset.key = 'work|' + block.keys[0];
+      details.open = !!open;
+      var last = block.items[block.items.length - 1];
+      var summary = summaryRow('Codex work', workSummary(block.items), last.ts);
+      summary.insertBefore(actorAvatar('work', true), summary.children[1]);
+      var list = document.createElement('div');
+      list.className = 'work-list';
+      block.items.forEach(function (item, index) { list.appendChild(createEvent(item, block.keys[index])); });
+      details.append(summary, list);
+      return details;
+    }
+
+    // Turn markers: task started / complete / aborted.
+    function createMarker(event) {
+      var marker = document.createElement('div');
+      marker.className = 'marker ' + event.kind;
+      var label = ({ done: '✓ Turn complete', err: 'Turn aborted', sys: 'Turn started' })[event.kind] || firstLine(event.text, 60);
+      if (event.kind === 'sys' && !/task started/i.test(event.text || '')) label = firstLine(event.text, 60);
+      marker.textContent = label + (event.ts ? ' · ' + eventTime(event.ts) : '');
+      return marker;
     }
 
     function homeCardElement(card, big) {
@@ -2310,11 +2682,13 @@
       var openStates = {};
       feedInner.querySelectorAll('details[data-key]').forEach(function (d) { openStates[d.dataset.key] = d.open; });
       feedInner.textContent = '';
-      var allEvents = groupThinking((store[selected] || []).filter(eventVisible));
+      var session = currentSession();
+      var rawEvents = store[selected] || [];
+      var allEvents = groupFeed(rawEvents, session);
       // Keyed off the full, unpaged list so a row's key doesn't shift as
       // "Show earlier activity" changes which slice of it is on screen.
       var allKeys = assignEventKeys(allEvents);
-      var renderKey = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
+      var renderKey = String(selected || '');
       var defaultLimit = 160;
       var limit = renderLimits[renderKey] || defaultLimit;
       var hiddenCount = Math.max(0, allEvents.length - limit);
@@ -2324,11 +2698,9 @@
         var empty = document.createElement('div');
         empty.className = 'feed-empty';
         var strong = document.createElement('strong');
-        strong.textContent = 'No activity to show';
+        strong.textContent = 'No activity yet';
         var detail = document.createElement('span');
-        detail.textContent = prefs.internals
-          ? 'Running tasks are selected automatically unless Auto-open is paused.'
-          : 'Toggle Show internals to include internal Codex events.';
+        detail.textContent = 'Codex has not written anything to this session yet.';
         empty.append(strong, detail);
         feedInner.appendChild(empty);
       } else {
@@ -2347,7 +2719,32 @@
           });
           fragment.appendChild(earlier);
         }
-        events.forEach(function (event, idx) { fragment.appendChild(createEvent(event, keys[idx])); });
+        // Consecutive Codex work folds into one activity block; everything else stands alone.
+        var blocks = [];
+        events.forEach(function (event, idx) {
+          var actor = messageActor(event, session);
+          var last = blocks[blocks.length - 1];
+          if (actor === 'work' && last && last.work) { last.items.push(event); last.keys.push(keys[idx]); return; }
+          blocks.push(actor === 'work' ? { work: true, items: [event], keys: [keys[idx]] } : { event: event, key: keys[idx], actor: actor });
+        });
+        var row = selectedRow();
+        var lastRaw = rawEvents[rawEvents.length - 1];
+        // A session stays Running for 20 s after its last write; a finished turn is not "working".
+        var running = !!row && row.status === 'RUNNING' && !(lastRaw && lastRaw.kind === 'done');
+        blocks.forEach(function (block, index) {
+          // The block Codex is working on right now starts open; older ones start collapsed.
+          if (block.work) fragment.appendChild(createWorkBlock(block, running && index === blocks.length - 1));
+          else if (block.actor === 'system') fragment.appendChild(createSystemGroup(block.event, block.key));
+          else if (block.actor === 'status') fragment.appendChild(createMarker(block.event));
+          else fragment.appendChild(createMessage(block.event, block.actor, block.key, session));
+        });
+        if (running) {
+          var working = document.createElement('div');
+          working.className = 'working';
+          working.setAttribute('role', 'status');
+          working.append(document.createTextNode('Codex is working'), textSpan('working-text', '· ' + workingLine(rawEvents)));
+          fragment.appendChild(working);
+        }
         feedInner.appendChild(fragment);
       }
       feedInner.querySelectorAll('details[data-key]').forEach(function (d) {
@@ -2479,7 +2876,7 @@
       resultCard.textContent = '';
       resultCard.hidden = false;
       var box = document.createElement('div');
-      box.className = 'result-card-box';
+      box.className = 'result-card-box actor-codex';
       var head = document.createElement('div');
       head.className = 'result-card-head';
       var toggle = document.createElement('button');
@@ -2488,8 +2885,8 @@
       var caret = document.createElement('span');
       caret.className = 'result-card-caret';
       var label = document.createElement('span');
-      label.textContent = 'Result';
-      toggle.append(caret, label);
+      label.textContent = 'Result from Codex';
+      toggle.append(caret, actorAvatar('codex', true), label);
       head.appendChild(toggle);
       if (runs > 1) {
         var runCount = document.createElement('span');
@@ -2553,7 +2950,7 @@
         body.appendChild(empty);
       }
       if (!model.question) return;
-      var question = resultSection('Needs decision', model.question, 'question');
+      var question = resultSection('Needs decision: a question for you', model.question, 'question');
       body.appendChild(question);
       if (!target) {
         // Answered outside the viewer (rowStatus made it Finished): the question stays, no box.
@@ -2664,27 +3061,6 @@
       return select;
     }
 
-    function workspaceControls(initialCwd) {
-      var select = controlSelect([['', 'Choose a known workspace']]);
-      knownCwds(sessions, jobs).forEach(function (cwd) {
-        var option = document.createElement('option');
-        option.value = cwd;
-        option.textContent = cwd;
-        select.appendChild(option);
-      });
-      if (initialCwd && Array.from(select.options).some(function (option) { return option.value === initialCwd; })) {
-        select.value = initialCwd;
-      }
-      var input = document.createElement('input');
-      input.type = 'text';
-      input.placeholder = 'Or enter a workspace path';
-      if (initialCwd && !select.value) input.value = initialCwd;
-      var field = controlField('Workspace', select);
-      field.appendChild(input);
-      controlModalBody.appendChild(field);
-      return function () { return input.value.trim() || select.value; };
-    }
-
     function effortSelect() {
       return controlSelect([
         ['', 'Default (xhigh)'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'],
@@ -2717,7 +3093,7 @@
       return { label: label, input: input };
     }
 
-    // cancelText defaults to 'Cancel' (Start, Resume); Cancel job passes 'Back' so a dialog
+    // cancelText defaults to 'Cancel' (Resume); Cancel job passes 'Back' so a dialog
     // whose confirm button reads "Cancel job" never shows two buttons both saying Cancel.
     // Every open sets it explicitly so one dialog's label never leaks into the next.
     function showControlModal(title, confirmText, cancelText) {
@@ -2735,95 +3111,6 @@
     function closeControlModal() {
       controlModal.hidden = true;
       controlAction = null;
-    }
-
-    function modelControls() {
-      var select = controlSelect([
-        ['', 'Default'], ['astra', 'astra'], ['sol', 'sol'], ['terra', 'terra'],
-        ['luna', 'luna'], ['daybreak-blue', 'daybreak-blue'], ['custom', 'Custom']
-      ]);
-      select.id = 'start-model';
-      var custom = textInput('Custom model name');
-      custom.id = 'start-model-custom';
-      custom.hidden = true;
-      select.addEventListener('change', function () { custom.hidden = select.value !== 'custom'; });
-      var wrap = document.createElement('div');
-      wrap.className = 'control-model';
-      wrap.append(select, custom);
-      controlModalBody.appendChild(controlField('Model', wrap));
-      return function () { return resolveModelValue(select.value, custom.value); };
-    }
-
-    // One dialog for every kind of Codex run. Request bodies for the same inputs stay
-    // byte-for-byte what taskFormBody/reviewFormBody produced when Task/Review/Adversarial
-    // were three separate entry points.
-    function openStartModal(initialKind) {
-      showControlModal('Start Codex run', 'Start task');
-      var session = currentSession();
-      var cwd = workspaceControls(session ? session.cwd : '');
-
-      var kind = controlSelect([['task', 'Task'], ['review', 'Review'], ['adversarial-review', 'Adversarial review']]);
-      kind.id = 'start-kind';
-      kind.value = ['task', 'review', 'adversarial-review'].indexOf(initialKind) !== -1 ? initialKind : 'task';
-      controlModalBody.appendChild(controlField('Kind', kind));
-
-      var prompt = document.createElement('textarea');
-      prompt.placeholder = 'What should Codex do?';
-      var promptField = controlField('Prompt', prompt);
-      controlModalBody.appendChild(promptField);
-
-      var focus = document.createElement('textarea');
-      focus.placeholder = 'Adversarial focus';
-      var focusField = controlField('Focus', focus);
-      controlModalBody.appendChild(focusField);
-
-      var effort = effortSelect();
-      var effortField = controlField('Effort', effort);
-      var model = modelControls();
-      var sandbox = sandboxSelect();
-      var sandboxField = controlField('Sandbox', sandbox);
-      var write = controlCheckbox('Mark as write task');
-      var writeWrap = document.createElement('div');
-      writeWrap.className = 'control-checkbox-wrap';
-      var writeHint = document.createElement('div');
-      writeHint.className = 'control-hint';
-      writeHint.textContent = 'Label only. The Sandbox setting controls file access.';
-      writeWrap.append(write.label, writeHint);
-      var fast = controlCheckbox('Fast (priority processing \u2014 uses more quota)');
-      var grid = document.createElement('div');
-      grid.className = 'control-grid';
-      grid.append(effortField, sandboxField, writeWrap, fast.label);
-      controlModalBody.appendChild(grid);
-
-      function updateKind() {
-        var isTask = kind.value === 'task';
-        var isAdversarial = kind.value === 'adversarial-review';
-        promptField.hidden = !isTask;
-        effortField.hidden = !isTask;
-        sandboxField.hidden = !isTask;
-        writeWrap.hidden = !isTask;
-        focusField.hidden = !isAdversarial;
-        if (focusField.hidden) focus.value = '';
-        controlModalConfirm.textContent = isTask ? 'Start task' : 'Start review';
-      }
-      kind.addEventListener('change', updateKind);
-      updateKind();
-
-      controlAction = function () {
-        if (kind.value === 'task') {
-          return {
-            endpoint: '/task',
-            body: taskFormBody({ cwd: cwd(), prompt: prompt.value, effort: effort.value, model: model(), write: write.input.checked, fast: fast.input.checked, sandbox: sandbox.value }),
-            onSuccess: function () { chooseView('HANDOFFS', 'ALL'); }
-          };
-        }
-        return {
-          endpoint: '/review',
-          body: reviewFormBody({ cwd: cwd(), kind: kind.value, model: model(), fast: fast.input.checked, focus: focus.value }),
-          onSuccess: function () { chooseView('HANDOFFS', 'ALL'); }
-        };
-      };
-      kind.focus();
     }
 
     function openResumeModal(session, title, promptText) {
@@ -3021,7 +3308,6 @@
     tabsBar.addEventListener('keydown', rovingKeydown(tabsBar));
     chipsBar.addEventListener('keydown', rovingKeydown(chipsBar));
 
-    document.getElementById('start-button').addEventListener('click', function () { openStartModal('task'); });
     resumeSessionButton.addEventListener('click', function () {
       var row = selectedRow();
       var target = row && resumeTarget(row);
@@ -3060,12 +3346,6 @@
         lastListSignature = '';
         renderList();
       }, 250);
-    });
-    internalsButton.addEventListener('click', function () {
-      prefs.internals = !prefs.internals;
-      savePrefs();
-      applyPrefs();
-      renderFeed();
     });
     autoOpenToggle.addEventListener('click', function () {
       setAutoOpen(!prefs.autoFollow, newestRunning());
