@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.14.0
+
+- **One list instead of two.** Sessions and handoff jobs used to live in separate views with 8 overlapping filters. They are now one list with three tabs: Now, Handoffs, History. Each tab has small filter chips with counts, and every old filter still has a home there.
+- **One word per status.** Running, Waiting, Needs attention, Needs answer, Stopped, Finished, Archived. The same word and color show in list rows, tabs, the task header and dialogs, so a run never looks alive in one place and dead in another.
+- **A session that ends in an error now shows as Stopped, not Waiting forever.** A quiet session whose last event is an error, such as an aborted turn, used to sit in Waiting with no way to tell it apart from a session that is simply idle.
+- **The Now tab replaces Home.** It shows Needs answer, Needs attention, Running and Recently finished, and opens whenever no task is selected or you click Now again.
+- **One Start dialog.** New task, Review and Adversarial review used to be three separate buttons and forms. Start now opens one dialog with a Kind switch, and the model field is a dropdown of the current shortcuts plus a custom option.
+- **A result card with an answer box.** A finished handoff now shows Summary, Changed files, Checks run and Needs decision right in the feed. If Codex asked a question, an answer box resumes the same thread after the normal in-app confirm.
+- **Feed output renders as Markdown.** Codex and user messages, and the result card, show headings, bold, italic, code, and lists instead of raw text. Links show as plain text plus the URL; nothing untrusted is ever inserted as HTML.
+- **Consecutive thinking steps collapse into one row.** "Thinking - N steps - <first summary>" expands to show each step.
+- **The feed follows the bottom and pauses when you scroll up**, showing Jump to latest. The separate Auto-scroll toggle is gone since this is now the only behavior.
+- **The sidebar drawer gets a backdrop on mobile**, chips scroll sideways instead of wrapping off screen, and Escape now also closes the row menu. `/` focuses search when no field is focused.
+- **The right-click row menu and the ... menu are now one shared builder**, grouped into Job, Session, Terminal commands and Diagnostics, so both stay in step.
+
 ## 2.13.0
 
 - **Results come back on their own.** The prompt hook used to print a pointer to `/codex:result`. It now prints a short result for up to 3 finished jobs: the Summary, any question Codex asks, and the job id for the full text. This works under hosts like CloudCLI too, where the Claude process ends on every message.

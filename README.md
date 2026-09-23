@@ -40,14 +40,15 @@ Handoffs to Codex run headless: no terminal, no window. When one silently died o
 
 ## Never lose a job again
 
-The dashboard's JOBS tab classifies every job from ground truth (real PID + heartbeat), not from guessing at quiet log files:
+The dashboard classifies every job from ground truth (real PID + heartbeat), not from guessing at quiet log files:
 
-| Badge | Means | You do |
+| Status | Means | You do |
 |---|---|---|
-| `RUNNING` | Heartbeat fresh, or the process is alive on a long command | Nothing. Long tasks are never misflagged. |
-| `QUIET` | Process alive but its heartbeat stopped for 5+ minutes | Peek at it. The worker beats on a timer even while Codex thinks silently, so a stopped heartbeat means the worker itself is likely wedged. |
-| `DEAD` | Process gone before finishing | Click **Resume**, optionally with more effort or another model. |
-| `FAILED` | Died with a known cause | Read the reason (broken sandbox, expired `codex login`, rate limit) and its fix hint. |
+| Running | Heartbeat fresh, or the process is alive on a long command | Nothing. Long tasks are never misflagged. |
+| Needs attention | Process gone before finishing, its heartbeat stopped, or it failed with a known cause | Click **Resume**, optionally with more effort or another model, or read the fix hint (broken sandbox, expired `codex login`, rate limit). |
+| Needs answer | The finished job asked a question | Answer it in the result card; "Answer and resume" continues the same thread after a confirm. |
+| Stopped | Cancelled job or aborted turn | Nothing. Not an alarm. |
+| Finished | Completion event received | Read the result card: Summary, Changed files, Checks run. |
 
 Recovery is always flag-only: the dashboard marks, you click. It never resumes or kills anything on its own. Job workers are detached and the SessionEnd hook leaves them alone, so restarting Claude Code, or sending a new message under a host like CloudCLI that ends the session per turn, doesn't kill your handoffs. The next prompt brings back a short result for each finished job: its Summary, any question Codex asks, and the job id for the full text.
 
@@ -85,10 +86,11 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 
 **In the browser** (`localhost:8377`):
 
-- every Codex session on the machine, streaming live, however it was started
-- start new tasks and reviews: project, prompt, effort (`low` to `ultra`), model, write access, sandbox, fast mode
+- every Codex session on the machine, streaming live, however it was started, in one list with three tabs (Now, Handoffs, History) and filter chips instead of separate session/job views
+- one Start dialog for tasks and reviews: project, prompt, effort (`low` to `ultra`), model, write access, sandbox, fast mode
+- a result card on every finished handoff (Summary, Changed files, Checks run, Needs decision) with an answer box that resumes the thread when Codex asked a question
 - one-click resume and cancel, with in-app confirmation
-- one job store shared with the CLI, so `/codex:status` and the JOBS tab always agree
+- one job store shared with the CLI, so `/codex:status` and the dashboard always agree
 - search across all recorded sessions, effort/sandbox/token display, archived sessions, unread markers, saved layout
 
 ## Using it well
