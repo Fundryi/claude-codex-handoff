@@ -1657,7 +1657,8 @@
     function selectedRow() {
       var session = currentSession();
       if (!session) return null;
-      return rowById(currentRows(), session.id) || buildRows([session], jobs)[0];
+      // By id, never [0]: a newer job on another thread can sort first in the one-session build.
+      return rowById(currentRows(), session.id) || rowById(buildRows([session], jobs), session.id);
     }
 
     function closeActionMenu() {
@@ -1683,6 +1684,8 @@
         resumeSessionButton.hidden = true;
         return;
       }
+      // An open ... menu follows the task: rebuild it when its items change (job finished, dismissed...).
+      if (!actionMenu.hidden && actionMenu.dataset.signature !== menuSignature(row)) fillMenu(actionMenu, row, actionMenuPick);
       var session = row.session;
       var now = Date.now();
       var badgeClass = rowBadge(row.status);
@@ -1995,11 +1998,12 @@
       jobModalMeta.appendChild(modalRow('Thread', job.threadId || '', true));
       if (job.fast) jobModalMeta.appendChild(modalRow('Tier', 'fast (priority)'));
       jobModalResult.textContent = 'Loading job result\u2026';
-      var resumable = !!job.threadId && (job.live === 'dead' || job.live === 'failed');
-      jobModalResume.hidden = !resumable;
-      jobModalResume.onclick = resumable ? function () {
+      // Same rule and folder as every other Resume.
+      var target = resumeTarget({ job: job, session: null, project: '' });
+      jobModalResume.hidden = !target;
+      jobModalResume.onclick = target ? function () {
         jobModal.hidden = true;
-        openResumeModal({ threadId: job.threadId, cwd: job.workspaceRoot }, job.title);
+        openResumeModal(target, job.title);
       } : null;
       var wasHidden = jobModal.hidden;
       jobModal.hidden = false;
@@ -2457,8 +2461,7 @@
     actionsButton.addEventListener('click', function () {
       if (!actionMenu.hidden) { closeActionMenu(); return; }
       var row = selectedRow();
-      // Copy items keep the menu open so their "copied" label shows, as today.
-      if (!row || !fillMenu(actionMenu, row, function (id) { if (id.indexOf('copy-') !== 0) closeActionMenu(); })) return;
+      if (!row || !fillMenu(actionMenu, row, actionMenuPick)) return;
       actionMenu.hidden = false;
       actionsButton.setAttribute('aria-expanded', 'true');
     });
@@ -2509,15 +2512,24 @@
       if (id === 'cancel-job') { openCancelModal(row.job); return; }
       if (id === 'show-result') { openJob(row.job); return; }
       if (id === 'show-processes' || id === 'stop') {
-        if (row.session.id !== selected) selectSession(row.session.id, true);
+        // From an overview card the task is not open yet: open it so the panel has a header.
+        if (row.session.id !== selected || showOverview()) selectSession(row.session.id, true);
         showProcesses(id === 'stop');
       }
+    }
+
+    // Copy items keep the ... menu open so their "copied" label shows, as today.
+    function actionMenuPick(id) { if (id.indexOf('copy-') !== 0) closeActionMenu(); }
+    // What the menu shows for this row; renderHeader rebuilds an open ... menu when it changes.
+    function menuSignature(row) {
+      return JSON.stringify(menuItems(row, { dismissed: isDismissed(row.id) }).map(function (item) { return [item.id, item.label]; }));
     }
 
     // Grouped menu items as DOM (labels via textContent). onPick(id) runs before the action.
     // Returns the number of items.
     function fillMenu(container, row, onPick) {
       var items = menuItems(row, { dismissed: isDismissed(row.id) });
+      container.dataset.signature = menuSignature(row);
       container.textContent = '';
       var group = null;
       items.forEach(function (entry) {

@@ -329,10 +329,10 @@ test("header Resume: shown for a dead or failed job and a STALE session without 
   const { buildRows, resumeTarget } = ctx();
   const one = (session, jobs) => buildRows(session ? [session] : [], jobs || [])[0];
   // Fixture 8 shape: the session went STALE because its handoff process died.
-  const dead = one({ id: "s", threadId: "t", status: "STALE", cwd: "D:\s" }, [{ id: "j", threadId: "t", live: "dead", workspaceRoot: "D:\w" }]);
-  assert.deepEqual(plain(resumeTarget(dead)), { threadId: "t", cwd: "D:\w" });
-  assert.deepEqual(plain(resumeTarget(one(null, [{ id: "j", threadId: "t", status: "failed", cwd: "D:\c" }]))), { threadId: "t", cwd: "D:\c" }, "job status counts when live is missing");
-  assert.deepEqual(plain(resumeTarget(one({ id: "s", threadId: "t", status: "STALE", cwd: "D:\s" }))), { threadId: "t", cwd: "D:\s" });
+  const dead = one({ id: "s", threadId: "t", status: "STALE", cwd: "D:\\s" }, [{ id: "j", threadId: "t", live: "dead", workspaceRoot: "D:\\w" }]);
+  assert.deepEqual(plain(resumeTarget(dead)), { threadId: "t", cwd: "D:\\w" });
+  assert.deepEqual(plain(resumeTarget(one(null, [{ id: "j", threadId: "t", status: "failed", cwd: "D:\\c" }]))), { threadId: "t", cwd: "D:\\c" }, "job status counts when live is missing");
+  assert.deepEqual(plain(resumeTarget(one({ id: "s", threadId: "t", status: "STALE", cwd: "D:\\s" }))), { threadId: "t", cwd: "D:\\s" });
   const hidden = {
     "possibly-stuck job (may still run)": one({ id: "s", threadId: "t", status: "STALE" }, [{ id: "j", threadId: "t", live: "possibly-stuck" }]),
     "working job": one({ id: "s", threadId: "t", status: "LIVE" }, [{ id: "j", threadId: "t", live: "working" }]),
@@ -370,6 +370,14 @@ test("rowById finds child agents too; threadRuns lists a thread's runs newest fi
   assert.equal(rowById(rows, "lead").id, "lead");
   assert.equal(rowById(rows, "kid").id, "kid");
   assert.equal(rowById(rows, "nope"), null);
+  // A grandchild agent the list does not draw gets a one-session build. A newer working job on
+  // another thread sorts first there, so the header must pick the session's row by id, not [0].
+  const grandchild = { id: "gc", threadId: "tg", parentThreadId: "tk", status: "LIVE", lastGrow: T0 };
+  const solo = buildRows([grandchild], [{ id: "other", threadId: "t-other", live: "working", updatedAt: iso(60000) }]);
+  assert.equal(solo[0].id, "job:other", "the trap: [0] is the other thread's job row");
+  const own = rowById(solo, "gc");
+  assert.equal(own.id, "gc");
+  assert.equal(own.job, null);
   const jobs = [
     { id: "a", threadId: "t6", createdAt: iso(100) },
     { id: "c", threadId: "t6", updatedAt: iso(300) },
