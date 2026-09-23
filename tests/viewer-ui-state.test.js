@@ -22,6 +22,8 @@ function navigation(overrides = {}) {
     applyPrefs() {},
     renderFilters() {},
     renderList() {},
+    renderHeader() {},
+    renderFeed() {},
     refreshJobs() { context.refreshed = (context.refreshed || 0) + 1; },
     selectSession(id) { context.selected = id; },
     ...overrides,
@@ -32,12 +34,14 @@ function navigation(overrides = {}) {
 }
 const view = (context) => [context.prefs.tab, context.prefs.chip];
 
-test("picking a tab or chip pauses automatic following", () => {
+test("picking a tab or chip pauses automatic following and closes the Now overview", () => {
   const context = navigation();
+  context.prefs.home = true;
 
   context.chooseView("HISTORY", "FINISHED");
   assert.deepEqual(view(context), ["HISTORY", "FINISHED"]);
   assert.equal(context.prefs.autoFollow, false);
+  assert.equal(context.prefs.home, false);
   assert.equal(context.refreshed, undefined);
 
   context.chooseView("HANDOFFS", "ALL");

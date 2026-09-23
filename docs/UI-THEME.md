@@ -45,11 +45,12 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 
 - One list of rows: a Codex session and the handoff jobs on its thread share one row. Rows show 3 lines: badges, title, project · model · effort · tokens. Full path, thread, sandbox, reason and job detail are in the row tooltip.
 - Tabs Now, Handoffs, History sit in one fixed row. Each tab has filter chips with counts (Now: All, Running, Waiting, Needs attention, Needs answer; Handoffs: All, Running, Needs attention, Needs answer, Finished, Stopped; History: Finished, Stopped, Archived, Dismissed, Everything). Order and position never change when counts update.
-- Choosing a tab or chip pauses Follow newest. A background update must not override an explicit choice.
-- Follow newest is resumed only through its button. When resumed, it selects the newest Running task and shows Now/Running unless the current view already shows it.
+- Choosing a tab or chip pauses auto-open (also closes the Now overview if it was open). A background update must not override an explicit choice.
+- Auto-open is resumed only through its toggle, in the Now overview header ("Auto-open new runs: On/Off"). When resumed, it selects the newest Running task and shows Now/Running unless the current view already shows it.
 - If the selected task itself changes status, the view moves to that status's chip (same tab first) so the selected row remains visible. History/Everything and Handoffs/All stay put.
 - When the open task is not in the current view, a thin bar above the list says "Open: <title> (not in this view) · Show"; Show switches to a view that contains it.
-- Sidebar width, collapsed state, tab, chip, search, feed view, selected task, auto-follow, and auto-scroll persist in the browser. Old saved filters map to a tab and chip on first load.
+- The Now overview (Needs answer, Needs attention, Running, Recently finished) shows when no task is open, and when the Now tab is clicked while already active. It replaces the old Home view; there is no separate Home button.
+- Sidebar width, collapsed state, tab, chip, search, feed view, selected task, auto-open, and auto-scroll persist in the browser. Old saved filters (and the old Home flag) map to a tab and chip on first load; the Now-overview flag itself is never persisted.
 
 ## Feed behavior
 

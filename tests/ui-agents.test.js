@@ -78,7 +78,10 @@ test("childSessions ignores self-parent links and the list never recurses past o
   assert.deepEqual(plain(rows.find((row) => row.id === "p").children.map((kid) => kid.id)), ["kid"]);
 });
 
-test("homeCards folds child agents into the parent card", () => {
+// homeCards (Task 5) takes rows, not sessions/jobs; buildRows already folds children into
+// the lead row's `children`, so this proves homeCards carries that count through to `agents`.
+test("homeCards folds child agents into the parent card's agent count", () => {
+  const { buildRows } = slice(/function firstLine[\s\S]*?(?=\n    function setConnection)/);
   const { homeCards } = slice(/function jobDetailLine[\s\S]*?function homeCards[\s\S]*?\n    \}/);
   const sessions = [
     { id: "p", threadId: "t-parent", status: "LIVE", title: "Parent run", cwd: "D:\\repo", lastGrow: NOW - 1000 },
@@ -86,10 +89,11 @@ test("homeCards folds child agents into the parent card", () => {
     { id: "c2", threadId: "t-c2", parentThreadId: "t-parent", agentNickname: "Wegener", status: "IDLE", cwd: "D:\\repo", lastGrow: NOW - 400 },
     { id: "orphan", threadId: "t-o", parentThreadId: "t-missing", agentNickname: "Lost", status: "LIVE", cwd: "D:\\repo", lastGrow: NOW - 300 },
   ];
-  const { active } = homeCards(sessions, [], NOW);
-  assert.deepEqual(plain(active.map((c) => c.id)), ["orphan", "p"]);
-  assert.equal(active[1].agents, 2);
-  assert.equal(active[0].title, "Agent Lost");
+  const rows = buildRows(sessions, []);
+  const { running } = homeCards(rows, [], NOW);
+  assert.deepEqual(plain(running.map((c) => c.id)), ["orphan", "p"]);
+  assert.equal(running[1].agents, 2);
+  assert.equal(running[0].title, "Agent Lost");
 });
 
 test("jobDetailLine lists the agents a job used", () => {

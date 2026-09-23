@@ -243,6 +243,7 @@
     .home-card:hover, .home-finished:hover { background: var(--hover); }
     .home-card.attention { border-color: #f0a254; }
     .home-finished { display: block; width: 100%; margin-bottom: 6px; }
+    .home-more { margin-top: 4px; }
     .history-caption {
       padding: 10px 12px 4px;
       color: var(--faint);
@@ -384,7 +385,7 @@
     }
     #wait-reason.STALE { color: #f0a254; }
     #header-actions { display: flex; align-items: center; gap: 6px; flex: none; }
-    #follow-button, #home-button {
+    #auto-open-toggle {
       height: 32px;
       border: 1px solid var(--border);
       border-radius: 7px;
@@ -394,8 +395,7 @@
       cursor: pointer;
       font-size: 11px;
     }
-    #follow-button:hover, #follow-button.on,
-    #home-button:hover, #home-button.on { color: var(--fg); background: var(--hover); }
+    #auto-open-toggle:hover, #auto-open-toggle.on { color: var(--fg); background: var(--hover); }
     #action-menu {
       position: absolute;
       right: 14px;
@@ -651,7 +651,6 @@
       #hide-side { display: inline-grid; }
       #task-header { padding-left: 10px; padding-right: 10px; }
       #task-meta { gap: 4px 9px; }
-      #follow-button { display: none; }
       #feed-toolbar { padding-left: 8px; padding-right: 8px; overflow-x: auto; }
       #feed { padding-left: 12px; padding-right: 12px; }
       .control-grid { grid-template-columns: 1fr; }
@@ -694,8 +693,7 @@
         </div>
         <div id="header-actions">
           <button id="resume-session-button" class="toolbar-button" type="button" hidden>Resume</button>
-          <button id="home-button" type="button" title="Live overview of everything currently running">Home</button>
-          <button id="follow-button" type="button" title="Automatically select the newest running task">Follow newest</button>
+          <button id="auto-open-toggle" type="button" role="switch" aria-pressed="false" title="Automatically open the newest running task" hidden>Auto-open new runs: Off</button>
           <button id="actions-button" class="icon-button" type="button" title="Task actions" aria-label="Task actions" aria-expanded="false">&#x22EF;</button>
         </div>
       </div>
@@ -834,8 +832,7 @@
     var resumeSessionButton = document.getElementById('resume-session-button');
     var controlAction = null;
     var pendingKillPid = null;
-    var followButton = document.getElementById('follow-button');
-    var homeButton = document.getElementById('home-button');
+    var autoOpenToggle = document.getElementById('auto-open-toggle');
     var autoscrollButton = document.getElementById('autoscroll-button');
     var internalsButton = document.getElementById('internals-button');
     var connection = document.getElementById('connection');
@@ -867,7 +864,12 @@
     }
 
     function savePrefs() {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch (_) {}
+      try {
+        // prefs.home is a runtime-only flag (the Now-overview toggle), never persisted.
+        var toSave = Object.assign({}, prefs);
+        delete toSave.home;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+      } catch (_) {}
     }
 
     function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -998,67 +1000,35 @@
       chip.title = 'Priority processing (fast tier)';
       return chip;
     }
-    function homeCards(sessions, jobs, now) {
-      var attention = [];
-      var active = [];
-      var finished = [];
-      var byThread = {};
-      (jobs || []).forEach(function (job) {
-        var card = {
-          type: 'job', id: job.id, sessionId: null, threadId: job.threadId || null,
-          title: job.title || job.kindLabel || 'Untitled Codex job',
-          project: job.workspaceRoot || '', fast: !!job.fast,
-          model: job.model || '', effort: job.effort || '',
-          status: job.status || '', live: job.live || '',
-          tokens: 0, detail: jobDetailLine(job, now),
-          lastMs: Date.parse(job.heartbeatAt || job.updatedAt || '') || 0
-        };
-        var needsEyes = job.live === 'possibly-stuck' || job.live === 'dead';
-        var isLive = job.live === 'working' || needsEyes;
-        if (card.threadId && (isLive || !byThread[card.threadId])) byThread[card.threadId] = card;
-        if (needsEyes) attention.push(card);
-        else if (isLive) active.push(card);
-        else finished.push(card);
+    // One row -> one overview card. Rows already carry everything a card needs (Task 3/4's
+    // unified row model), so the overview agrees with the list instead of recomputing.
+    function homeCard(row, now) {
+      var session = row.session || {};
+      var job = row.job || {};
+      return {
+        id: row.id, sessionId: session.id || null, title: row.title, project: row.project,
+        fast: row.fast, agents: row.children.length, status: row.status, lastMs: row.updatedMs,
+        model: session.model || job.model || '', effort: job.effort || session.effort || '',
+        tokens: session.tokensUsed || 0, detail: jobDetailLine(job, now) || session.lastEvent || '',
+        needsAnswer: row.needsAnswer, question: row.needsAnswer ? firstLine(job.needsDecision, 200) : ''
+        // (firstLine collapses whitespace/newlines, same convention as the row's '?' chip tooltip)
+      };
+    }
+    // Now overview sections: Needs answer, Needs attention, Running, Recently finished (5, newest
+    // first - rows already arrive newest first from buildRows). Dismissed and archived rows are
+    // never shown, same as the list.
+    function homeCards(rows, dismissedIds, now) {
+      var dismissed = dismissedIds || [];
+      var answer = [], attention = [], running = [], finished = [];
+      (rows || []).forEach(function (row) {
+        if (dismissed.indexOf(row.id) !== -1 || row.status === 'ARCHIVED') return;
+        var card = homeCard(row, now);
+        if (row.status === 'ANSWER') answer.push(card);
+        else if (row.status === 'ATTENTION') attention.push(card);
+        else if (row.status === 'RUNNING') running.push(card);
+        else if (row.status === 'FINISHED') finished.push(card);
       });
-      // Child agents fold into their parent's card as an agent count.
-      var knownThreads = {};
-      (sessions || []).forEach(function (s) { if (s.threadId) knownThreads[s.threadId] = true; });
-      var agentCounts = {};
-      var children = (sessions || []).filter(function (s) {
-        if (!s.parentThreadId || !knownThreads[s.parentThreadId]) return false;
-        agentCounts[s.parentThreadId] = (agentCounts[s.parentThreadId] || 0) + 1;
-        return true;
-      });
-      (sessions || []).forEach(function (session) {
-        if (children.indexOf(session) !== -1) return;
-        var merged = session.threadId ? byThread[session.threadId] : null;
-        if (merged) {
-          merged.sessionId = session.id;
-          if (session.tokensUsed) merged.tokens = session.tokensUsed;
-          if (!merged.model && session.model) merged.model = session.model;
-          merged.agents = agentCounts[session.threadId] || 0;
-          return;
-        }
-        if (session.archived) return;
-        var card = {
-          type: 'session', id: session.id, sessionId: session.id, threadId: session.threadId || null,
-          agents: agentCounts[session.threadId] || 0,
-          title: session.title || (session.agentNickname ? 'Agent ' + session.agentNickname : 'Untitled Codex task'),
-          project: session.cwd || '', fast: false,
-          model: session.model || '', effort: '',
-          status: session.status || '', live: '',
-          tokens: session.tokensUsed || 0, detail: session.lastEvent || '',
-          lastMs: session.lastGrow || 0
-        };
-        if (session.status === 'STALE') attention.push(card);
-        else if (session.status === 'LIVE' || session.status === 'IDLE') active.push(card);
-        else finished.push(card);
-      });
-      function newestFirst(a, b) { return b.lastMs - a.lastMs; }
-      attention.sort(newestFirst);
-      active.sort(newestFirst);
-      finished.sort(newestFirst);
-      return { attention: attention, active: active, finished: finished.slice(0, 5) };
+      return { answer: answer, attention: attention, running: running, finished: finished.slice(0, 5) };
     }
     function contextMenuItems(item) {
       var items = [];
@@ -1387,9 +1357,9 @@
       document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
       document.body.classList.toggle('side-collapsed', !!prefs.sideCollapsed);
       search.value = prefs.query || '';
-      homeButton.classList.toggle('on', !!prefs.home);
-      followButton.classList.toggle('on', !!prefs.autoFollow);
-      followButton.textContent = prefs.autoFollow ? 'Following newest' : 'Follow newest';
+      autoOpenToggle.classList.toggle('on', !!prefs.autoFollow);
+      autoOpenToggle.setAttribute('aria-pressed', prefs.autoFollow ? 'true' : 'false');
+      autoOpenToggle.textContent = 'Auto-open new runs: ' + (prefs.autoFollow ? 'On' : 'Off');
       autoscrollButton.classList.toggle('on', !!prefs.autoScroll);
       autoscrollButton.textContent = prefs.autoScroll ? 'Auto-scroll on' : 'Auto-scroll off';
       internalsButton.classList.toggle('on', !!prefs.internals);
@@ -1397,6 +1367,9 @@
     }
 
     function currentRows() { return buildRows(sessions, jobs); }
+    // The Now overview shows whenever no task is open, or the user explicitly asked for it
+    // (prefs.home, set by re-clicking the active Now tab; cleared by picking any task or view).
+    function showOverview() { return prefs.home || !currentSession(); }
 
     function viewButton(className, label, count, on) {
       var button = document.createElement('button');
@@ -1422,7 +1395,19 @@
       Object.keys(TABS).forEach(function (tab) {
         var button = viewButton('tab-button', VIEW_LABELS[tab], '(' + perTab[tab] + ')', prefs.tab === tab);
         button.dataset.tab = tab;
-        button.addEventListener('click', function () { chooseView(tab, prefs.tab === tab ? prefs.chip : TABS[tab][0]); });
+        button.addEventListener('click', function () {
+          // Clicking the already-active Now tab opens the overview instead of re-picking a chip.
+          if (tab === 'NOW' && prefs.tab === 'NOW' && !prefs.home) {
+            prefs.home = true;
+            lastHomeSignature = '';
+            savePrefs();
+            applyPrefs();
+            renderHeader();
+            renderFeed();
+            return;
+          }
+          chooseView(tab, prefs.tab === tab ? prefs.chip : TABS[tab][0]);
+        });
         tabsBar.appendChild(button);
       });
       chipsBar.textContent = '';
@@ -1439,10 +1424,13 @@
       prefs.tab = tab;
       prefs.chip = chip;
       prefs.autoFollow = false;
+      prefs.home = false;
       savePrefs();
       applyPrefs();
       renderFilters();
       renderList();
+      renderHeader();
+      renderFeed();
       if (tab === 'HANDOFFS') refreshJobs();
     }
 
@@ -1657,15 +1645,13 @@
 
     function renderHeader() {
       var session = currentSession();
+      var overview = showOverview();
       taskMeta.textContent = '';
-      if (prefs.home) {
+      autoOpenToggle.hidden = !overview;
+      if (overview) {
         taskStatus.hidden = true;
         taskFast.hidden = true;
-        taskTitle.textContent = 'Home — everything active';
-        var homeHint = document.createElement('span');
-        homeHint.className = 'meta-item';
-        homeHint.textContent = 'Live overview of running sessions and jobs. Click a card to open it.';
-        taskMeta.appendChild(homeHint);
+        taskTitle.textContent = 'Now';
         stopButton.hidden = true;
         resumeSessionButton.hidden = true;
         document.getElementById('dismiss-button').hidden = true;
@@ -1674,23 +1660,8 @@
         });
         return;
       }
-      if (!session) {
-        taskStatus.hidden = true;
-        taskFast.hidden = true;
-        taskTitle.textContent = 'Select a task';
-        var hint = document.createElement('span');
-        hint.className = 'meta-item';
-        hint.textContent = sessions.length ? 'Choose a task from the session list.' : 'New Codex tasks appear here automatically.';
-        taskMeta.appendChild(hint);
-        stopButton.hidden = true;
-        resumeSessionButton.hidden = true;
-        document.getElementById('dismiss-button').hidden = true;
-        ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive', 'copy-unarchive'].forEach(function (id) {
-          document.getElementById(id).hidden = true;
-        });
-        return;
-      }
-
+      // session is always truthy here: showOverview() is true (and already returned above)
+      // whenever currentSession() is falsy, so the overview covers the "no task open" case.
       taskStatus.hidden = false;
       var headerStatus = session.archived ? 'ARCHIVED' : session.status;
       taskStatus.className = 'status ' + headerStatus;
@@ -1797,12 +1768,8 @@
       el.className = big ? 'home-card' : 'home-finished';
       var top = document.createElement('div');
       top.className = 'session-top';
-      var badge = document.createElement('span');
-      badge.className = 'status ' + (card.type === 'job' ? jobBadgeClass(card) : card.status);
-      badge.textContent = card.type === 'job'
-        ? jobStatusLabel(card)
-        : (STATUS[card.status] ? STATUS[card.status].label : card.status);
-      top.appendChild(badge);
+      var badgeClass = rowBadge(card.status);
+      top.appendChild(statusChip(badgeClass, STATUS[badgeClass].label, STATUS[badgeClass].help));
       if (card.fast) top.appendChild(fastChip());
       if (card.agents) top.appendChild(agentChip(null, card.agents));
       var time = document.createElement('span');
@@ -1815,22 +1782,26 @@
       title.title = card.title;
       var project = document.createElement('div');
       project.className = 'session-project';
-      project.textContent = card.project;
+      project.textContent = projectName(card.project);
       project.title = card.project;
       var meta = document.createElement('div');
       meta.className = 'session-last';
       var parts = [card.model, card.effort, card.tokens ? 'tokens: ' + card.tokens.toLocaleString() : '', card.detail];
       meta.textContent = parts.filter(Boolean).join(' · ');
       el.append(top, title, project, meta);
+      if (card.question) {
+        var question = document.createElement('div');
+        question.className = 'session-last';
+        question.textContent = 'Asked: ' + card.question;
+        el.appendChild(question);
+      }
       el.addEventListener('click', function () { openHomeCard(card); });
       el.addEventListener('contextmenu', function (event) {
-        if (card.type === 'job') {
-          var job = jobs.find(function (entry) { return entry.id === card.id; });
-          if (job) openContextMenu(event, { type: 'job', job: job });
-          return;
-        }
-        var session = sessions.find(function (s) { return s.id === card.sessionId; });
-        if (session) openContextMenu(event, { type: 'session', session: session, dismissed: isDismissed(session.id) });
+        var row = findRow(currentRows(), card.id);
+        if (!row) return;
+        openContextMenu(event, row.session
+          ? { type: 'session', session: row.session, dismissed: isDismissed(row.id) }
+          : { type: 'job', job: row.job });
       });
       return el;
     }
@@ -1841,18 +1812,18 @@
         selectSession(card.sessionId, true);
         return;
       }
-      var job = jobs.find(function (entry) { return entry.id === card.id; });
-      if (job) openJob(job);
+      var row = findRow(currentRows(), card.id);
+      if (row && row.job) openJob(row.job);
     }
 
     function renderHome() {
-      var data = homeCards(sessions, jobs, Date.now());
+      var data = homeCards(currentRows(), prefs.dismissed, Date.now());
       // stable card fields plus a 10s bucket so relative times still refresh
       var signature = JSON.stringify([
         Math.floor(Date.now() / 10000),
-        data.attention.concat(data.active, data.finished).map(function (card) {
-          return [card.id, card.sessionId, card.status, card.live, card.title, card.project,
-            card.fast, card.model, card.effort, card.tokens, card.lastMs];
+        data.answer.concat(data.attention, data.running, data.finished).map(function (card) {
+          return [card.id, card.sessionId, card.status, card.title, card.project,
+            card.fast, card.model, card.effort, card.tokens, card.lastMs, card.question];
         })
       ]);
       if (signature === lastHomeSignature) return;
@@ -1860,41 +1831,50 @@
       feedInner.textContent = '';
       var wrap = document.createElement('div');
       wrap.id = 'home-view';
-      if (data.attention.length) {
-        var attnHeading = document.createElement('div');
-        attnHeading.className = 'home-heading';
-        attnHeading.textContent = 'Needs attention (' + data.attention.length + ')';
-        wrap.appendChild(attnHeading);
-        var attnGrid = document.createElement('div');
-        attnGrid.className = 'home-grid';
-        data.attention.forEach(function (card) {
+      function section(label, cards, attention) {
+        if (!cards.length) return;
+        var heading = document.createElement('div');
+        heading.className = 'home-heading';
+        heading.textContent = label + ' (' + cards.length + ')';
+        wrap.appendChild(heading);
+        var grid = document.createElement('div');
+        grid.className = 'home-grid';
+        cards.forEach(function (card) {
           var el = homeCardElement(card, true);
-          el.classList.add('attention');
-          attnGrid.appendChild(el);
+          if (attention) el.classList.add('attention');
+          grid.appendChild(el);
         });
-        wrap.appendChild(attnGrid);
+        wrap.appendChild(grid);
       }
-      var heading = document.createElement('div');
-      heading.className = 'home-heading';
-      heading.textContent = data.active.length ? 'Active now (' + data.active.length + ')' : 'Nothing running right now';
-      wrap.appendChild(heading);
-      var grid = document.createElement('div');
-      grid.className = 'home-grid';
-      data.active.forEach(function (card) { grid.appendChild(homeCardElement(card, true)); });
-      wrap.appendChild(grid);
+      section('Needs answer', data.answer, false);
+      section('Needs attention', data.attention, true);
+      section('Running', data.running, false);
+      if (!data.answer.length && !data.attention.length && !data.running.length) {
+        var empty = document.createElement('div');
+        empty.className = 'home-heading';
+        empty.textContent = 'Nothing running right now';
+        wrap.appendChild(empty);
+      }
       if (data.finished.length) {
         var doneHeading = document.createElement('div');
         doneHeading.className = 'home-heading';
         doneHeading.textContent = 'Recently finished';
         wrap.appendChild(doneHeading);
         data.finished.forEach(function (card) { wrap.appendChild(homeCardElement(card, false)); });
+        var more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'toolbar-button home-more';
+        more.textContent = 'Show more';
+        more.addEventListener('click', function () { chooseView('HISTORY', 'FINISHED'); });
+        wrap.appendChild(more);
       }
       feedInner.appendChild(wrap);
       jumpLatest.hidden = true;
     }
 
     function renderFeed(preservePosition) {
-      if (prefs.home) { renderHome(); return; }
+      // showOverview() covers "no task open" too, so selected is always truthy past this point.
+      if (showOverview()) { renderHome(); return; }
       feedInner.textContent = '';
       var allEvents = (store[selected] || []).filter(eventVisible);
       var renderKey = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
@@ -1902,15 +1882,15 @@
       var limit = renderLimits[renderKey] || defaultLimit;
       var hiddenCount = Math.max(0, allEvents.length - limit);
       var events = hiddenCount ? allEvents.slice(hiddenCount) : allEvents;
-      if (!selected || !allEvents.length) {
+      if (!allEvents.length) {
         var empty = document.createElement('div');
         empty.className = 'feed-empty';
         var strong = document.createElement('strong');
-        strong.textContent = selected ? 'No activity to show' : 'Choose a task to inspect';
+        strong.textContent = 'No activity to show';
         var detail = document.createElement('span');
-        detail.textContent = selected && !prefs.internals
-          ? 'Toggle Internals to include internal Codex events.'
-          : 'Running tasks are selected automatically unless Follow newest is paused.';
+        detail.textContent = prefs.internals
+          ? 'Running tasks are selected automatically unless Auto-open is paused.'
+          : 'Toggle Internals to include internal Codex events.';
         empty.append(strong, detail);
         feedInner.appendChild(empty);
       } else {
@@ -1974,7 +1954,7 @@
         renderFilters();
         renderList();
         renderHeader();
-        if (prefs.home) renderFeed();
+        if (showOverview()) renderFeed();
       } catch (_) {}
     }
 
@@ -2386,21 +2366,9 @@
       applyPrefs();
       if (prefs.autoScroll) scrollToLatest();
     });
-    homeButton.addEventListener('click', function () {
-      prefs.home = !prefs.home;
-      lastHomeSignature = '';
-      savePrefs();
-      applyPrefs();
-      renderHeader();
-      renderFeed();
-      if (prefs.home) refreshJobs();
-    });
-    followButton.addEventListener('click', function () {
-      prefs.autoFollow = true;
-      prefs.home = false;
-      lastHomeSignature = '';
-      var running = newestRunning();
-      followRunningSession(running);
+    autoOpenToggle.addEventListener('click', function () {
+      prefs.autoFollow = !prefs.autoFollow;
+      if (prefs.autoFollow) followRunningSession(newestRunning());
       savePrefs();
       applyPrefs();
       renderFilters();
@@ -2410,7 +2378,7 @@
     });
     jumpLatest.addEventListener('click', scrollToLatest);
     feed.addEventListener('scroll', function () {
-      jumpLatest.hidden = prefs.home || nearBottom();
+      jumpLatest.hidden = showOverview() || nearBottom();
     }, { passive: true });
 
     document.getElementById('hide-side').addEventListener('click', function () {
@@ -2617,7 +2585,7 @@
         renderFilters();
         renderList();
         renderHeader();
-        if (prefs.home) renderFeed();
+        if (showOverview()) renderFeed();
       }
       if (data.type === 'snapshot') {
         store[data.session] = data.events;
@@ -2627,7 +2595,7 @@
         var existing = store[data.session] = store[data.session] || [];
         existing.push.apply(existing, data.events);
         if (existing.length > 500) existing.splice(0, existing.length - 500);
-        if (data.session === selected && !prefs.home) {
+        if (data.session === selected && !showOverview()) {
           var shouldFollow = prefs.autoScroll && nearBottom();
           data.events.filter(eventVisible).forEach(function (event) {
             var key = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
@@ -2662,7 +2630,7 @@
     renderHeader();
     renderFeed();
     refreshJobs();
-    window.setInterval(function () { renderList(); renderHeader(); if (prefs.home) renderFeed(); }, 10000);
+    window.setInterval(function () { renderList(); renderHeader(); if (showOverview()) renderFeed(); }, 10000);
     // Rows merge job state into every tab, so job liveness is polled everywhere.
     window.setInterval(refreshJobs, 5000);
   </script>

@@ -128,10 +128,27 @@ async (page) => {
   await view('NOW', 'ALL');
 
   // ---- 3. Now overview ----
-  if (await clickId('home-button')) {
+  // Re-clicking the already-active Now tab opens the overview (Task 5); no more #home-button.
+  if (await clickSel('#tabs [data-tab="NOW"]')) {
     await page.waitForTimeout(200);
     await shot('03-now-overview');
   }
+
+  // ---- 3b. Auto-open toggle, on and off ----
+  if (await clickId('auto-open-toggle')) {
+    await page.waitForTimeout(150);
+    await shot('03-auto-open-off');
+    await clickId('auto-open-toggle');
+    await page.waitForTimeout(150);
+    await shot('03-auto-open-on');
+  }
+
+  // ---- 3c. "Show more" under Recently finished -> History/Finished ----
+  if (await clickText('Show more')) {
+    await page.waitForTimeout(200);
+    await shot('03-show-more-history-finished');
+  }
+  await view('NOW', 'ALL'); // undo the Show more navigation for the steps below
 
   // ---- 4. a Running task ----
   // "Fixture 1 -" (with the trailing dash) - "Fixture 1" alone also matches
@@ -198,7 +215,8 @@ async (page) => {
   // Since Task 4 Fixture 5 is a merged session + job row, so this click opens its session
   // (ruling R9). Task 6 should switch this step to "Show full result" in the ... menu.
   // Shot 14 covers the dialog through a job-only row meanwhile.
-  if (await clickId('home-button')) {
+  await view('NOW', 'ALL'); // land on Now/All first so re-clicking the tab opens the overview
+  if (await clickSel('#tabs [data-tab="NOW"]')) {
     await page.waitForTimeout(200);
     if (await clickText('Fixture 5 -')) {
       await page.waitForTimeout(200);
@@ -256,6 +274,15 @@ async (page) => {
     if (await clickText('Fixture 1 -')) {
       await page.waitForTimeout(200);
       await shot('12-mobile-task-view');
+    }
+  }
+
+  // ---- 15. Now overview at mobile width, Auto-open toggle stays visible ----
+  if (await clickId('show-side')) {
+    await page.waitForTimeout(200);
+    if (await clickSel('#tabs [data-tab="NOW"]')) {
+      await page.waitForTimeout(200);
+      await shot('15-mobile-now-overview');
     }
   }
 
