@@ -522,8 +522,8 @@
       line-height: 1.55;
       overflow-wrap: anywhere;
     }
-    #job-modal-result :first-child { margin-top: 0; }
-    #job-modal-result :last-child { margin-bottom: 0; }
+    #job-modal-result > :first-child { margin-top: 0; }
+    #job-modal-result > :last-child { margin-bottom: 0; }
     #control-modal-box { width: min(92vw, 640px); }
     #control-modal-body { display: grid; gap: 11px; }
     .control-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
@@ -598,8 +598,8 @@
       line-height: 1.55;
       font-size: 13px;
     }
-    .event-body :first-child { margin-top: 0; }
-    .event-body :last-child { margin-bottom: 0; }
+    .event-body > :first-child { margin-top: 0; }
+    .event-body > :last-child { margin-bottom: 0; }
     .md-h1, .md-h2, .md-h3 { margin: 10px 0 4px; font-weight: 650; color: var(--fg); }
     .md-h1 { font-size: 15px; }
     .md-h2 { font-size: 14px; }
@@ -612,7 +612,7 @@
     .md-code-lang { padding: 4px 10px; color: var(--muted); font: 10px/1.4 "Cascadia Code", Consolas, monospace; border-bottom: 1px solid var(--border); }
     .md-code pre { margin: 0; padding: 10px; color: #b8c5d1; font: 11px/1.55 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
     .event-body code, .md-quote code { font: 11px "Cascadia Code", Consolas, monospace; background: #0e141c; padding: 1px 4px; border-radius: 4px; }
-    .thinkgroup-step { padding: 6px 10px 6px 0; border-top: 1px solid var(--border); }
+    .thinkgroup-step { padding: 8px 10px; border-top: 1px solid var(--border); }
     .thinkgroup-step:first-of-type { border-top: none; }
     .thinkgroup-step-time { color: var(--faint); font-size: 10px; margin-bottom: 3px; }
     .event.user .event-kind { color: var(--blue); }
@@ -930,15 +930,20 @@
       return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
     function parseInline(text) {
-      var withLinks = String(text || '').replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, function (m, label, url) {
+      // The label is bounded ({0,300}) so an unclosed "[" can't make this quadratic.
+      var withLinks = String(text || '').replace(/\[([^\][\n]{0,300})\]\(([^)\s]+)\)/g, function (m, label, url) {
         return label + ' (' + url + ')';
       });
       var tokens = [];
-      var re = /(\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*)/g;
+      // Italic content may not contain whitespace and the "*" can't open mid-word
+      // (no word char or "*" just before it) - otherwise prose like "src/*.js and
+      // lib/*.mjs" gets read as one italic run spanning both asterisks.
+      var re = /(\*\*([^*]+)\*\*|`([^`]+)`|(?:^|[^\w*])\*([^*\s]+)\*)/g;
       var last = 0;
       var match;
       while ((match = re.exec(withLinks))) {
-        if (match.index > last) tokens.push({ type: 'text', text: withLinks.slice(last, match.index) });
+        var start = match.index + (match[4] !== undefined ? match[0].indexOf('*') : 0);
+        if (start > last) tokens.push({ type: 'text', text: withLinks.slice(last, start) });
         if (match[2] !== undefined) tokens.push({ type: 'bold', text: match[2] });
         else if (match[3] !== undefined) tokens.push({ type: 'code', text: match[3] });
         else tokens.push({ type: 'italic', text: match[4] });
@@ -962,12 +967,13 @@
           i++;
           continue;
         }
-        var fence = line.match(/^```(.*)$/);
+        // Up to 3 leading spaces (a fence inside a list item) is still a fence.
+        var fence = line.match(/^\s{0,3}```(.*)$/);
         if (fence) {
           var lang = fence[1].trim();
           var codeLines = [];
           i++;
-          while (i < lines.length && !/^```/.test(lines[i])) { codeLines.push(lines[i]); i++; }
+          while (i < lines.length && !/^\s{0,3}```/.test(lines[i])) { codeLines.push(lines[i]); i++; }
           if (i < lines.length) i++; // skip closing fence
           blocks.push({ type: 'code', lang: lang, text: codeLines.join('\n') });
           continue;
@@ -979,9 +985,10 @@
           continue;
         }
         var bullet = line.match(/^[-*]\s+(.*)$/);
-        var numbered = line.match(/^\d+\.\s+(.*)$/);
+        var numbered = line.match(/^(\d+)\.\s+(.*)$/);
         if (bullet || numbered) {
           var ordered = !!numbered;
+          var start = ordered ? Number(numbered[1]) : null;
           var items = [];
           while (i < lines.length) {
             var itemMatch = ordered ? lines[i].match(/^\d+\.\s+(.*)$/) : lines[i].match(/^[-*]\s+(.*)$/);
@@ -989,11 +996,13 @@
             items.push(parseInline(itemMatch[1]));
             i++;
           }
-          blocks.push({ type: ordered ? 'ol' : 'ul', items: items });
+          var listBlock = { type: ordered ? 'ol' : 'ul', items: items };
+          if (ordered) listBlock.start = start;
+          blocks.push(listBlock);
           continue;
         }
         var paraLines = [];
-        while (i < lines.length && lines[i].trim() && !/^(#{1,3}\s|```|>\s?|[-*]\s|\d+\.\s)/.test(lines[i])) {
+        while (i < lines.length && lines[i].trim() && !/^(#{1,3}\s|\s{0,3}```|>\s?|[-*]\s|\d+\.\s)/.test(lines[i])) {
           paraLines.push(lines[i]);
           i++;
         }
@@ -1050,6 +1059,7 @@
       if (block.type === 'ul' || block.type === 'ol') {
         var list = doc.createElement(block.type === 'ol' ? 'ol' : 'ul');
         list.className = 'md-list';
+        if (block.type === 'ol' && Number(block.start) > 0) list.start = Number(block.start);
         block.items.forEach(function (inline) {
           var li = doc.createElement('li');
           appendInline(li, inline, doc);
@@ -1093,6 +1103,15 @@
       var body = extractResultSection(text, 'Needs decision');
       if (!body || /^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body)) return null;
       return body.slice(0, 1000);
+    }
+
+    // A stable key for a rendered <details> row, so a re-render can find "the
+    // same" row again and restore whether the reader had it open. A thinking
+    // group is keyed off its first step's timestamp (stable across regrouping
+    // even though the group object itself is rebuilt every render).
+    function technicalEventKey(event) {
+      if (event.kind === 'thinkgroup') return 'thinkgroup|' + (event.steps[0] && event.steps[0].ts);
+      return event.kind + '|' + event.ts;
     }
 
     // -- Thinking groups: consecutive THINKING events collapse into one row.
@@ -1956,8 +1975,10 @@
     function createThinkGroupEvent(event) {
       var details = document.createElement('details');
       details.className = 'event technical thinkgroup';
+      details.dataset.key = technicalEventKey(event);
       var summary = document.createElement('summary');
-      summary.textContent = 'Thinking · ' + event.steps.length + ' steps · ' + firstLine(event.text, 120);
+      var stepWord = event.steps.length === 1 ? ' step' : ' steps';
+      summary.textContent = 'Thinking · ' + eventTime(event.ts) + ' · ' + event.steps.length + stepWord + ' · ' + firstLine(event.text, 120);
       details.appendChild(summary);
       event.steps.forEach(function (step) {
         var stepEl = document.createElement('div');
@@ -1980,6 +2001,7 @@
       if (technicalEvent(event) || isLongMessage) {
         var details = document.createElement('details');
         details.className = 'event technical ' + event.kind;
+        details.dataset.key = technicalEventKey(event);
         if (prefs.internals) details.open = event.kind === 'patch';
         var summary = document.createElement('summary');
         summary.textContent = eventLabel(event) + '  ' + eventTime(event.ts) + '  ' + firstLine(event.text, 150) + (isLongMessage ? '  (expand)' : '');
@@ -2115,6 +2137,12 @@
     function renderFeed(preservePosition) {
       // showOverview() covers "no task open" too, so selected is always truthy past this point.
       if (showOverview()) { renderHome(); return; }
+      // Every technical/thinking-group row remembers whether the reader had it
+      // open (keyed, not by position: a live task rebuilds its whole feed on
+      // every SSE batch, and an open row snapping shut mid-read - along with
+      // any selected text in it - would be lost otherwise).
+      var openStates = {};
+      feedInner.querySelectorAll('details[data-key]').forEach(function (d) { openStates[d.dataset.key] = d.open; });
       feedInner.textContent = '';
       var allEvents = groupThinking((store[selected] || []).filter(eventVisible));
       var renderKey = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
@@ -2152,6 +2180,9 @@
         events.forEach(function (event) { fragment.appendChild(createEvent(event)); });
         feedInner.appendChild(fragment);
       }
+      feedInner.querySelectorAll('details[data-key]').forEach(function (d) {
+        if (Object.prototype.hasOwnProperty.call(openStates, d.dataset.key)) d.open = openStates[d.dataset.key];
+      });
       if (!preservePosition) requestAnimationFrame(scrollToLatest);
       jumpLatest.hidden = true;
     }

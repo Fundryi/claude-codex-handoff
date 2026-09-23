@@ -90,6 +90,34 @@ test("parseMarkdown: fenced code keeps the language line as text", () => {
   assert.equal(blocks[0].text, "const x = 1;\nreturn x;");
 });
 
+test("parseMarkdown: an indented fence (inside a list item) is still recognized (fix round 1, #5)", () => {
+  const blocks = lib.parseMarkdown("  ```js\n  const x = 1;\n  ```");
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].type, "code");
+  assert.equal(blocks[0].lang, "js");
+  assert.equal(blocks[0].text, "  const x = 1;");
+});
+
+test("parseInline: asterisks in prose (glob patterns) don't get read as italics (fix round 1, #4)", () => {
+  const tokens = lib.parseInline("glob src/*.js and lib/*.mjs");
+  assert.deepEqual(
+    plain(tokens.map((t) => t.type)),
+    ["text"],
+  );
+  assert.equal(tokens[0].text, "glob src/*.js and lib/*.mjs");
+  // A real italic run still works either side of ordinary prose.
+  const real = lib.parseInline("plain *italic* plain");
+  assert.deepEqual(plain(real.map((t) => t.type)), ["text", "italic", "text"]);
+  assert.equal(real[1].text, "italic");
+});
+
+test("parseInline: the link-label regex is bounded, so an unclosed [ can't blow up (fix round 1, #3)", () => {
+  const pathological = "[".repeat(40000);
+  const started = Date.now();
+  lib.parseInline(pathological);
+  assert.ok(Date.now() - started < 500, "should resolve near-instantly, not quadratically");
+});
+
 test("parseMarkdown: nested-free lists", () => {
   const bullets = lib.parseMarkdown("- one\n- two\n- three");
   assert.equal(bullets.length, 1);
@@ -99,6 +127,31 @@ test("parseMarkdown: nested-free lists", () => {
   const numbered = lib.parseMarkdown("1. first\n2. second");
   assert.equal(numbered[0].type, "ol");
   assert.deepEqual(plain(numbered[0].items.map((inline) => inline.map((t) => t.text).join(""))), ["first", "second"]);
+});
+
+test("parseMarkdown: a numbered list keeps its starting number (fix round 1, #2)", () => {
+  const separate = lib.parseMarkdown("1. keep\n\n2. delete");
+  assert.equal(separate.length, 2);
+  assert.equal(separate[0].start, 1);
+  assert.equal(separate[1].start, 2);
+
+  // An indented, non-list line breaks the ol into two blocks (nested-free);
+  // the second block must still remember it starts at 2, not restart at 1.
+  const brokenByNesting = lib.parseMarkdown("1. **A**\n   - detail\n2. **B**");
+  const ols = brokenByNesting.filter((b) => b.type === "ol");
+  assert.equal(ols.length, 2);
+  assert.equal(ols[0].start, 1);
+  assert.equal(ols[1].start, 2);
+
+  const startsAtThree = lib.parseMarkdown("3. third");
+  assert.equal(startsAtThree[0].start, 3);
+});
+
+test("renderMarkdown sets list.start on <ol> so numbering doesn't restart at 1", () => {
+  const doc = fakeDoc();
+  const fragment = lib.renderMarkdown("3. third", doc);
+  assert.equal(fragment.children[0].tag, "ol");
+  assert.equal(fragment.children[0].start, 3);
 });
 
 test("parseMarkdown: block quote", () => {
@@ -217,4 +270,24 @@ test("groupThinking passes non-thinking events through untouched", () => {
     { kind: "out", ts: 2, text: "file.txt" },
   ];
   assert.deepEqual(plain(lib.groupThinking(events)), events);
+});
+
+// technicalEventKey is the stable identity a re-render uses to find "the same"
+// row again and restore whether the reader had it open (fix round 1, #1).
+test("technicalEventKey: stable per kind+ts, and a thinking group keys off its first step", () => {
+  assert.equal(lib.technicalEventKey({ kind: "cmd", ts: 100 }), "cmd|100");
+  assert.equal(lib.technicalEventKey({ kind: "patch", ts: 200 }), "patch|200");
+
+  const group = { kind: "thinkgroup", ts: 999, steps: [{ ts: 100 }, { ts: 200 }, { ts: 300 }] };
+  assert.equal(lib.technicalEventKey(group), "thinkgroup|100");
+
+  // Re-grouping the same underlying events (a fresh object each render) yields the same key.
+  const events = [
+    { kind: "think", ts: 100, text: "a" },
+    { kind: "think", ts: 200, text: "b" },
+  ];
+  const groupedFirst = lib.groupThinking(events)[0];
+  const groupedAgain = lib.groupThinking(events.slice())[0];
+  assert.notEqual(groupedFirst, groupedAgain, "a fresh object each call");
+  assert.equal(lib.technicalEventKey(groupedFirst), lib.technicalEventKey(groupedAgain));
 });
