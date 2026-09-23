@@ -25,9 +25,9 @@ Status color has one meaning everywhere: list rows, filter chips, and the select
 | Needs attention | Orange `#ee964b` | The job process died or its heartbeat stopped, or it failed. Sessions without a job never get this |
 | Needs answer | Orange outline, `?` chip | The finished job's result asks a question (Needs decision) and no run on the thread is working |
 | Finished | Green `#4ac26b` | Completion event received |
-| Stopped | Gray: chip dot `#7b8794`, badge `#9fb0c3` on `#262d38` (the Archived badge) | Cancelled job or aborted turn. Not an alarm |
-| Archived | Gray `#7b8794` | Same gray as Stopped and All; not a task state |
-| All | Gray `#7b8794` | Neutral collection, not a task state |
+| Stopped | Gray: chip dot `#7b8794`, badge `#9fb0c3` on `#262d38` | Cancelled job or aborted turn. Not an alarm |
+| Archived | Gray: chip dot `#9fb0c3`, badge `#9fb0c3` on `#262d38` (same badge as Stopped, lighter chip dot) | Not a task state |
+| All | Blue `#67a8ff` (same as Running) | Neutral collection, not a task state |
 
 Do not animate an entire row or badge. Only the small Running spinner moves.
 
@@ -38,7 +38,7 @@ Do not animate an entire row or badge. Only the small Running spinner moves.
 - Controls within one row share the same vertical position.
 - Corners use a 6 or 7 px radius; status badges remain pill-shaped.
 - The session list starts at 340 px, can be resized from 240 px to 55% of the viewport, and remembers the chosen width.
-- At 760 px and below, the session list becomes an overlay drawer and the content remains a single full-width column.
+- At 760 px and below, the session list becomes an overlay drawer over a backdrop; tapping the backdrop closes the drawer. The content remains a single full-width column, filter chips scroll sideways instead of wrapping, and the title and meta line wrap instead of being cut.
 - The page must never create horizontal document scrolling. Long paths, commands, patches, and messages wrap inside their own container.
 
 Compact spacing is the only layout. There is no separate Comfortable density.
@@ -69,6 +69,7 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 - Render at most 160 events initially. Earlier events remain available through Show earlier activity, up to a 500-event cap.
 - The feed follows new events automatically while the reader is already near the bottom, and pauses the moment they scroll up. A paused feed shows Jump to latest instead of a toggle.
 - A task whose newest handoff run finished shows a Result card between the feed toolbar and the feed: Summary, Changed files, Checks run and Needs decision (or the plain answer), open by default and collapsible. Live feed updates never rebuild it, so a half-typed answer keeps its text, focus and cursor.
+- "Show full result" (in the Result card, the header `...` menu, or a row's right-click menu) opens the job result dialog. It lists every run on the thread, newest first, so an earlier run stays reachable after a resume.
 - The answer box shows only when the result asks a question and no run on the thread is working. "Answer and resume" opens the resume confirm prefilled with `Answer from the user: <text>`; nothing is sent without that confirm.
 
 ## Motion and accessibility
@@ -76,4 +77,5 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 - Hover, selection, border, and color transitions use 140–180 ms.
 - Buttons, tabs, chips, rows, and the resize separator must remain keyboard accessible.
 - Focus uses a visible blue 2 px outline.
+- `/` focuses search when no field already has focus. Arrow keys, plus Home and End, move focus within the tabs row and within the chips row. Escape closes the top layer first: an open dialog, then the `...`/context menu, then the mobile drawer; only the top-most one closes on a single press.
 - Dangerous process controls stay inside the task-actions menu and require confirmation.

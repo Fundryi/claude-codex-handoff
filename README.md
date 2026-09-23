@@ -88,7 +88,7 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 
 - every Codex session on the machine, streaming live, however it was started, in one list with three tabs (Now, Handoffs, History) and filter chips instead of separate session/job views
 - one Start dialog for tasks and reviews: project, prompt, effort (`low` to `ultra`), model, write access, sandbox, fast mode
-- a result card on every finished handoff (Summary, Changed files, Checks run, Needs decision) with an answer box that resumes the thread when Codex asked a question
+- a result card on every finished handoff (Summary, Changed files, Checks run, Needs decision) with an answer box that resumes the thread when Codex asked a question; "Show full result" opens the full result dialog and lists every run on the thread, newest first
 - one-click resume and cancel, with in-app confirmation
 - one job store shared with the CLI, so `/codex:status` and the dashboard always agree
 - search across all recorded sessions, effort/sandbox/token display, archived sessions, unread markers, saved layout
