@@ -404,7 +404,10 @@ addJob({
     writeRollout(SESSIONS_DIR, cts, childId, [
       metaLine(cts, { id: childId, cwd: WORKSPACE_CWD, parentThreadId: leadId, agentNickname: nick }),
       userLine(cts, `Task: Fixture 13 child ${nick}`),
-      agentLine(cts + 100, `Child ${nick} working.`),
+      // alpha asks its lead a question: the callout is for the lead agent, not for you.
+      agentLine(cts + 100, nick === "alpha"
+        ? "## Summary\nChild alpha checked the fixtures.\n\n## Needs decision\nShould I also cover the archived sessions, or leave them to beta?"
+        : `Child ${nick} working.`),
     ], cts + 100);
   }
 }

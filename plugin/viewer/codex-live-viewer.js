@@ -191,7 +191,7 @@ function simplify(line) {
       // Prompts that open with any other tag (<goal>, <task>, <role>) are speech.
       // Keep in step with INJECTED_BLOCK in viewer-ui.html (tests/ui-feed.test.js checks).
       if (role === "user") {
-        const INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits)(?=[\s>/])|# AGENTS\.md instructions for )/;
+        const INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits|subagent_notification)(?=[\s>/])|# AGENTS\.md instructions\b)/;
         return INJECTED_BLOCK.test(text) ? { kind: "user", ts, text, internal: true } : { kind: "user", ts, text };
       }
       if (role === "developer") return { kind: "agent", ts, text, internal: true };

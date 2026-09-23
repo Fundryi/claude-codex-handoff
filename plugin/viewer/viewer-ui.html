@@ -682,11 +682,13 @@
     .ask {
       margin-top: 10px;
       padding: 8px 12px 9px;
-      border: 1px solid color-mix(in srgb, var(--you) 45%, transparent);
+      /* --asked: who the question is for (pink for you, light teal for the lead agent) */
+      border: 1px solid color-mix(in srgb, var(--asked, var(--you)) 45%, transparent);
       border-radius: 7px;
-      background: color-mix(in srgb, var(--you) 8%, var(--panel));
+      background: color-mix(in srgb, var(--asked, var(--you)) 8%, var(--panel));
     }
-    .ask-title { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--you); font-size: 10px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+    .ask.actor-codex-lead { --asked: var(--codex-lead); }
+    .ask-title { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--asked, var(--you)); font-size: 10px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
     details.part {
       margin-top: 10px;
       border-top: 1px dashed color-mix(in srgb, var(--actor) 35%, var(--border));
@@ -1267,21 +1269,25 @@
     // extractSection/readNeedsDecision exactly (renamed for the UI's own use),
     // so the two never drift out of sync (see tests/plugin-task-result.test.js).
     // Line range of a section: its heading line (start) up to the next heading (end). The result
-    // card ends it at any heading, as the plugin does. The feed (wholeSection) ends it only at one of
-    // the four return-format headings outside code fences, so a question keeps its sub-headed options.
+    // card ends it at any heading, as the plugin does. The feed (wholeSection) ends it at a heading
+    // of the same or a higher level (a bold heading counts as ##) or at one of the four
+    // return-format headings, outside code fences, so a question keeps its sub-headed options.
     function resultSectionBounds(lines, heading, wholeSection) {
       var name = markdownEscapeRegExp(heading);
       var startRe = new RegExp('^(?:#{2,3}\\s*' + name + '\\s*:?|\\*\\*' + name + '\\s*:?\\s*\\*\\*\\s*:?)\\s*$', 'i');
       var start = lines.findIndex(function (line) { return startRe.test(line.trim()); });
       if (start === -1) return null;
-      var endRe = wholeSection
-        ? /^(#{1,3}\s*(summary|changed files|checks run|needs decision)\s*:?\s*$|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i
-        : /^(#{1,3}\s|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i;
+      var known = /^(#{1,3}\s*(summary|changed files|checks run|needs decision)\s*:?\s*$|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i;
+      var level = (lines[start].trim().match(/^#+/) || ['##'])[0].length;
+      var peer = new RegExp('^#{1,' + level + '}\\s');
+      var endRe = /^(#{1,3}\s|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i;
       var end = start + 1;
       var inFence = false;
       for (; end < lines.length; end++) {
-        if (wholeSection && /^\s{0,3}```/.test(lines[end])) inFence = !inFence;
-        if (!inFence && endRe.test(lines[end].trim())) break;
+        var line = lines[end].trim();
+        if (!wholeSection) { if (endRe.test(line)) break; continue; }
+        if (/^\s{0,3}```/.test(lines[end])) inFence = !inFence;
+        if (!inFence && (peer.test(line) || known.test(line))) break;
       }
       return { start: start, end: end };
     }
@@ -1308,12 +1314,16 @@
       var bounds = resultSectionBounds(lines, 'Needs decision', true);
       if (!bounds) return null;
       var body = lines.slice(bounds.start + 1, bounds.end).join('\n').trim();
-      return readResultQuestion('## Needs decision\n' + body) ? body : null;
+      return noQuestion(body) ? null : body;
+    }
+    // A Needs decision body that asks nothing: empty, "None", "n/a", "-", "No questions".
+    function noQuestion(body) {
+      return !body || /^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body);
     }
 
     function readResultQuestion(text) {
       var body = extractResultSection(text, 'Needs decision');
-      if (!body || /^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body)) return null;
+      if (noQuestion(body)) return null;
       return body.slice(0, 1000);
     }
 
@@ -1362,7 +1372,7 @@
     function isInternal(event) {
       if (event.internal) return true;
       // The same list as the server's (codex-live-viewer.js simplify); a test keeps them equal.
-      var INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits)(?=[\s>/])|# AGENTS\.md instructions for )/;
+      var INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits|subagent_notification)(?=[\s>/])|# AGENTS\.md instructions\b)/;
       if (event.kind !== 'agent' && event.kind !== 'user') return false;
       var body = String(event.text || '');
       if (INJECTED_BLOCK.test(body)) return true;
@@ -1441,7 +1451,6 @@
       });
       return result;
     }
-    // Header line "Started by": null when the rollout names no originator.
     // Header line "Started by", from the session: a child agent's lead first, then the originator
     // by its readable name. null when neither is known.
     function startedBy(session) {
@@ -2371,7 +2380,8 @@
       metadata.className = 'meta-item' + (session.threadId ? ' meta-button' : '');
       // Narrow screens show the project name, not the full path; the tooltip keeps the full line.
       var narrow = window.matchMedia('(max-width: 760px)').matches;
-      metadata.textContent = sessionMetaLine(narrow ? Object.assign({}, session, { cwd: projectName(session.cwd) }) : session);
+      // No cwd: keep sessionMetaLine's own fallback (the session id), never "Unknown project".
+      metadata.textContent = sessionMetaLine(narrow && session.cwd ? Object.assign({}, session, { cwd: projectName(session.cwd) }) : session);
       metadata.title = sessionMetaLine(session) + (session.threadId ? '\nClick to copy the thread ID' : '');
       if (session.threadId) metadata.addEventListener('click', function () { copyText(session.threadId, metadata, 'Thread copied'); });
       taskMeta.appendChild(metadata);

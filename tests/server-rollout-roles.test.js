@@ -102,6 +102,10 @@ test("only the tags Codex injects are internal; prompts that open with another t
     "  <permissions instructions>\nsandbox",
     "# AGENTS.md instructions for /repo/x\n\n<INSTRUCTIONS>",
   ]) assert.equal(internal(block), true, block);
+  // Older Codex versions write the AGENTS.md heading without " for <path>".
+  assert.equal(internal("# AGENTS.md instructions\n\n<INSTRUCTIONS>\nBe brief"), true);
+  // Codex writes a child agent's status into the lead's thread as a user message.
+  assert.equal(internal('<subagent_notification>\n{"agent":"alpha","status":"completed"}\n</subagent_notification>'), true);
   // A tag name that only starts like an injected one is not injected: <skills_x> vs <skills>.
   assert.equal(internal("<skillset>\nmine"), false);
 });

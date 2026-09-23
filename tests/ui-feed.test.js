@@ -145,6 +145,17 @@ test("a reply's question moves whole into the callout and nothing is lost or res
   const text = "## Summary\nDid it.\n\n## Needs decision\nWhich store?\n\n### Option A: SQLite\nLocal file.\n\n### Option B: JSON\nNo schema.\n\n## Checks run\nnpm test";
   assert.equal(feedQuestion(text), "Which store?\n\n### Option A: SQLite\nLocal file.\n\n### Option B: JSON\nNo schema.");
   assert.equal(removeResultSection(text, "Needs decision"), "## Summary\nDid it.\n\n## Checks run\nnpm test");
+  // A following heading of the same or a higher level ends the callout and stays in the reply.
+  const verified = "## Needs decision\nWhich store?\n### Option A\nLocal file.\n\n## Verification\nnpm test";
+  assert.equal(feedQuestion(verified), "Which store?\n### Option A\nLocal file.");
+  assert.equal(removeResultSection(verified, "Needs decision"), "## Verification\nnpm test");
+  // A section that opens with a sub-heading still asks.
+  assert.equal(feedQuestion("## Needs decision\n### Option A or B?\nA is faster."), "### Option A or B?\nA is faster.");
+  // A ### Needs decision ends at the next ###; a bold one counts as ## and ends at ## or #.
+  assert.equal(feedQuestion("### Needs decision\nA or B?\n### Notes\nx"), "A or B?");
+  const bold = "**Needs decision:**\nA or B?\n### Option A\nx\n## Verification\ny";
+  assert.equal(feedQuestion(bold), "A or B?\n### Option A\nx");
+  assert.equal(removeResultSection(bold, "Needs decision"), "## Verification\ny");
   // A long question is never cut short: every character shows in the callout.
   const long = "Pick one. " + "x".repeat(1200) + " END";
   assert.equal(feedQuestion("## Needs decision\n" + long), long);
