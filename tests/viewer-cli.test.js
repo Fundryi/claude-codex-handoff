@@ -23,13 +23,15 @@ function cli(port, ...args) {
 }
 
 // A fake viewer that reports `version` and shuts down on POST /shutdown, as the real one does.
-function fakeViewer(version) {
+// slowMs delays /health past the CLI's 1 s wait, like a viewer that is still loading.
+function fakeViewer(version, slowMs = 0) {
   return new Promise((resolve) => {
     const fake = { shutdowns: 0 };
     fake.server = http.createServer((req, res) => {
       if (req.url === "/health") {
         res.setHeader("Content-Type", "application/json");
-        return res.end(JSON.stringify({ application: "codex-live-viewer", version }));
+        const answer = () => res.end(JSON.stringify({ application: "codex-live-viewer", version }));
+        return slowMs ? setTimeout(answer, slowMs) : answer();
       }
       if (req.method === "POST" && req.url === "/shutdown") {
         fake.shutdowns += 1;
@@ -54,6 +56,8 @@ test("start replaces an older viewer; status shows the version; stop confirms it
     assert.equal(started.code, 0, started.out);
     assert.match(started.out, /Replacing viewer 1\.0\.0 with /);
     assert.equal(fake.shutdowns, 1);
+    // Overlapping health checks once printed this line up to four times.
+    assert.equal(started.out.match(/running -> /g).length, 1, started.out);
 
     const status = await cli(port, "start", "status");
     assert.match(status.out, new RegExp("running " + VERSION.replace(/\./g, "\\.") + " -> "));
@@ -85,5 +89,21 @@ test("start leaves a newer viewer alone; restart replaces it anyway", async () =
   } finally {
     await cli(port, "stop");
     fake.server.close();
+  }
+});
+
+test("a viewer too slow to answer is reported busy, never replaced or stopped", async () => {
+  const fake = await fakeViewer("1.0.0", 1500);
+  const port = fake.server.address().port;
+  try {
+    for (const action of ["status", "", "restart", "stop"]) {
+      const run = await cli(port, "start", action);
+      assert.match(run.out, /not answering/, action + ": " + run.out);
+      assert.equal(run.code, 1, action);
+    }
+    assert.equal(fake.shutdowns, 0);
+  } finally {
+    fake.server.close();
+    fake.server.closeAllConnections();
   }
 });

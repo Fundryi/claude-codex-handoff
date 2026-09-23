@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.15.4
+
+- **A slow viewer is not taken for a stopped one.** The viewer commands wait 1 second for an answer. A viewer still loading its history can take longer, and was then reported as "not running". A replace could also start the new viewer while the old one still held the port. Now a slow answer is reported as "not answering, try again", and nothing is started or stopped.
+- **The start message prints once.** Overlapping checks could print "Codex Live Viewer running" up to four times.
+
 ## 2.15.3
 
 - **`/codex:viewer` can restart, stop and check the viewer.** `/codex:viewer restart` replaces whatever viewer runs, `/codex:viewer stop` stops it and checks that the port is free, and `/codex:viewer status` shows whether it runs and its version.
