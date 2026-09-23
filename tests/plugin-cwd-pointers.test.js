@@ -212,3 +212,31 @@ test("the hook's git calls grow with target folders, not with pointers", async (
   assert.ok(fewCount > 0, "the counter sees the hook's git calls");
   assert.equal(runIn(many), fewCount, "20 pointers into 2 folders cost what 2 pointers do");
 });
+
+// A shortened id is resolved to the pointed job's full id before the target
+// workspace is searched. There, the same prefix can also match a job this
+// launcher never started, and cancel must not stop that one.
+test("a shortened id never reaches a job the launcher does not own", async () => {
+  const { dirs, state, companionRun } = await setup();
+  const owned = { id: "task-mf1-owned", status: "completed", title: "Mine", completedAt: new Date().toISOString() };
+  state.writeJobFile(dirs.target, owned.id, owned);
+  state.upsertJob(dirs.target, owned);
+  state.addJobPointer(dirs.launcher, owned.id, dirs.target);
+  const foreignWorker = spawn(process.execPath, ["-e", "setTimeout(() => {}, 20000)"], { stdio: "ignore" });
+  try {
+    const foreign = { id: "task-mf1-foreign", status: "running", title: "Not mine", pid: foreignWorker.pid, startedAt: new Date().toISOString() };
+    const foreignFile = state.writeJobFile(dirs.target, foreign.id, foreign);
+    state.upsertJob(dirs.target, foreign);
+
+    await assert.rejects(companionRun(["cancel", "task-mf1", "--json"]), (error) => /No (active )?job found/.test(error.stderr) && !error.stderr.includes("task-mf1-foreign"));
+    assert.equal(state.readJobFile(foreignFile).cancelRequested, undefined, "the foreign job is untouched");
+    assert.equal(foreignWorker.exitCode, null, "the foreign worker still runs");
+
+    const status = JSON.parse((await companionRun(["status", "task-mf1", "--json"])).stdout);
+    assert.equal(status.job.id, owned.id, "status resolves the prefix to the owned job");
+    const result = JSON.parse((await companionRun(["result", "task-mf1", "--json"])).stdout);
+    assert.equal(result.job.id, owned.id, "result resolves the prefix to the owned job");
+  } finally {
+    foreignWorker.kill();
+  }
+});

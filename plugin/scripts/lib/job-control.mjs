@@ -239,23 +239,24 @@ export function buildStatusSnapshot(cwd, options = {}) {
   };
 }
 
-// The workspace a job id lives in when this workspace only holds a pointer to it
-// (a job started with --cwd). Null when the id matches a job here, or no pointer.
-function pointedWorkspace(workspaceRoot, jobs, reference) {
+// The pointer for a job this workspace only points at (a job started with --cwd).
+// Null when the id matches a job here, or no single pointer. Callers go on with
+// pointer.jobId, never the typed prefix: in the target workspace a prefix could
+// match a job this workspace does not own.
+function pointedJob(workspaceRoot, jobs, reference) {
   if (!reference || jobs.some((job) => job.id.startsWith(reference))) {
     return null;
   }
   const hits = readJobPointers(workspaceRoot).filter((pointer) => pointer.jobId.startsWith(reference));
-  const hit = hits.find((pointer) => pointer.jobId === reference) ?? (hits.length === 1 ? hits[0] : null);
-  return hit?.workspaceRoot ?? null;
+  return hits.find((pointer) => pointer.jobId === reference) ?? (hits.length === 1 ? hits[0] : null);
 }
 
 export function buildSingleJobSnapshot(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
-  const pointed = options.viaPointer ? null : pointedWorkspace(workspaceRoot, jobs, reference);
+  const pointed = options.viaPointer ? null : pointedJob(workspaceRoot, jobs, reference);
   if (pointed) {
-    return buildSingleJobSnapshot(pointed, reference, { ...options, viaPointer: true });
+    return buildSingleJobSnapshot(pointed.workspaceRoot, pointed.jobId, { ...options, viaPointer: true });
   }
   const selected = matchJobReference(jobs, reference);
   if (!selected) {
@@ -271,9 +272,9 @@ export function buildSingleJobSnapshot(cwd, reference, options = {}) {
 export function resolveResultJob(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobs = sortJobsNewestFirst(reference ? listJobs(workspaceRoot) : filterJobsForCurrentSession(listJobs(workspaceRoot)));
-  const pointed = options.viaPointer ? null : pointedWorkspace(workspaceRoot, jobs, reference);
+  const pointed = options.viaPointer ? null : pointedJob(workspaceRoot, jobs, reference);
   if (pointed) {
-    return resolveResultJob(pointed, reference, { viaPointer: true });
+    return resolveResultJob(pointed.workspaceRoot, pointed.jobId, { viaPointer: true });
   }
   const selected = matchJobReference(
     jobs,
@@ -339,9 +340,9 @@ export async function waitForJobSettled(workspaceRoot, jobId, { timeoutMs = 5000
 export function resolveCancelableJob(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
-  const pointed = options.viaPointer ? null : pointedWorkspace(workspaceRoot, jobs, reference);
+  const pointed = options.viaPointer ? null : pointedJob(workspaceRoot, jobs, reference);
   if (pointed) {
-    return resolveCancelableJob(pointed, reference, { ...options, viaPointer: true });
+    return resolveCancelableJob(pointed.workspaceRoot, pointed.jobId, { ...options, viaPointer: true });
   }
   const activeJobs = jobs.filter((job) => job.status === "queued" || job.status === "running");
 
