@@ -1076,7 +1076,10 @@
     }
     function waitReason(session) {
       if (!session || session.archived) return '';
-      if (session.status !== 'IDLE' && session.status !== 'STALE' && session.status !== 'STOPPED') return '';
+      if (session.status === 'STOPPED') {
+        return session.lastKind === 'err' ? 'Stopped — ' + firstLine(session.lastText, 80) : '';
+      }
+      if (session.status !== 'IDLE' && session.status !== 'STALE') return '';
       var text = firstLine(session.lastText, 80);
       var phrase = ({
         cmd: 'running command "' + text + '"',
@@ -1084,10 +1087,8 @@
         think: 'thinking (reasoning summary in progress)',
         tool: 'tool call "' + text + '"',
         user: 'prompt sent, no agent response yet',
-        agent: 'agent replied — may be waiting for approval or next instruction',
-        err: text
+        agent: 'agent replied — may be waiting for approval or next instruction'
       })[session.lastKind] || (session.lastEvent || 'no displayable activity');
-      if (session.status === 'STOPPED') return 'Stopped — ' + phrase;
       return 'Waiting ' + formatDuration(session.quietMs) + ' — last activity: ' + phrase;
     }
     function processWarnings(proc, sessionStartMs) {

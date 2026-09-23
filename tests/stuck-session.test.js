@@ -25,11 +25,21 @@ test("formatDuration renders seconds, minutes, hours", () => {
   assert.equal(ctx.formatDuration(-5), "0s");
 });
 
-test("waitReason is empty unless waiting or stuck", () => {
+test("waitReason is empty unless waiting, stuck, or stopped by an aborted turn", () => {
   const ctx = helperContext();
   assert.equal(ctx.waitReason({ status: "LIVE", quietMs: 5000 }), "");
   assert.equal(ctx.waitReason({ status: "DONE", quietMs: 5000 }), "");
   assert.equal(ctx.waitReason(null), "");
+});
+
+test("waitReason explains a STOPPED session only when the turn was aborted", () => {
+  const ctx = helperContext();
+  assert.equal(
+    ctx.waitReason({ status: "STOPPED", lastKind: "err", lastText: "turn aborted" }),
+    "Stopped — turn aborted",
+  );
+  // STOPPED from a cancelled job carries no err event - stays silent, as before.
+  assert.equal(ctx.waitReason({ status: "STOPPED", lastKind: "agent", lastText: "done soon" }), "");
 });
 
 test("waitReason explains the last activity by kind", () => {
