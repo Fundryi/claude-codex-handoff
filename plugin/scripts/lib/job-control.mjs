@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
 import { getSessionRuntimeStatus } from "./codex.mjs";
-import { getConfig, listJobs, readJobFile, resolveJobFile } from "./state.mjs";
+import { getConfig, listJobs, readJobFile, readJobPointers, resolveJobFile } from "./state.mjs";
 import { SESSION_ID_ENV } from "./tracked-jobs.mjs";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
@@ -239,9 +239,24 @@ export function buildStatusSnapshot(cwd, options = {}) {
   };
 }
 
+// The workspace a job id lives in when this workspace only holds a pointer to it
+// (a job started with --cwd). Null when the id matches a job here, or no pointer.
+function pointedWorkspace(workspaceRoot, jobs, reference) {
+  if (!reference || jobs.some((job) => job.id.startsWith(reference))) {
+    return null;
+  }
+  const hits = readJobPointers(workspaceRoot).filter((pointer) => pointer.jobId.startsWith(reference));
+  const hit = hits.find((pointer) => pointer.jobId === reference) ?? (hits.length === 1 ? hits[0] : null);
+  return hit?.workspaceRoot ?? null;
+}
+
 export function buildSingleJobSnapshot(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
+  const pointed = options.viaPointer ? null : pointedWorkspace(workspaceRoot, jobs, reference);
+  if (pointed) {
+    return buildSingleJobSnapshot(pointed, reference, { ...options, viaPointer: true });
+  }
   const selected = matchJobReference(jobs, reference);
   if (!selected) {
     throw new Error(`No job found for "${reference}". Run /codex:status to inspect known jobs.`);
@@ -253,9 +268,13 @@ export function buildSingleJobSnapshot(cwd, reference, options = {}) {
   };
 }
 
-export function resolveResultJob(cwd, reference) {
+export function resolveResultJob(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobs = sortJobsNewestFirst(reference ? listJobs(workspaceRoot) : filterJobsForCurrentSession(listJobs(workspaceRoot)));
+  const pointed = options.viaPointer ? null : pointedWorkspace(workspaceRoot, jobs, reference);
+  if (pointed) {
+    return resolveResultJob(pointed, reference, { viaPointer: true });
+  }
   const selected = matchJobReference(
     jobs,
     reference,

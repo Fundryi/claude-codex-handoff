@@ -28,10 +28,12 @@ import { collectReviewContext, ensureGitRepository, resolveReviewTarget } from "
 import { binaryAvailable, terminateProcessTree } from "./lib/process.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
 import {
+  addJobPointer,
   generateJobId,
   getConfig,
   listJobs,
   resolveJobFile,
+  resolveStateDir,
   setConfig,
   updateState,
   upsertJob,
@@ -829,6 +831,20 @@ function spawnDetachedTaskWorker(cwd, jobId) {
   return child;
 }
 
+// Started with --cwd in another workspace: leave a pointer in the launcher's own
+// workspace (this process's cwd, where Claude runs), so the prompt hook there
+// delivers the result and status/result find the id without --cwd. Best-effort:
+// the job itself is already queued and must not fail over a lost pointer.
+function pointLauncherAtJob(job) {
+  try {
+    const launcher = resolveWorkspaceRoot(process.cwd());
+    if (resolveStateDir(launcher) === resolveStateDir(job.workspaceRoot)) return;
+    addJobPointer(launcher, job.id, job.workspaceRoot);
+  } catch (error) {
+    process.stderr.write(`[codex] Could not record job ${job.id} for this folder: ${error instanceof Error ? error.message : String(error)}\n`);
+  }
+}
+
 function enqueueBackgroundTask(cwd, job, request) {
   const { logFile } = createTrackedProgress(job);
   appendLogLine(logFile, "Queued for background execution.");
@@ -844,6 +860,7 @@ function enqueueBackgroundTask(cwd, job, request) {
   };
   writeJobFile(job.workspaceRoot, job.id, queuedRecord);
   upsertJob(job.workspaceRoot, queuedRecord);
+  pointLauncherAtJob(job);
 
   return {
     payload: {
@@ -928,14 +945,15 @@ async function handleTask(argv) {
     ? parseArgs(splitLeadingFlags(argv[0], taskArgConfig), taskArgConfig)
     : parseCommandInput(argv, taskArgConfig);
 
-  const cwd = resolveCommandCwd(options);
-  const workspaceRoot = resolveCommandWorkspace(options);
-  const lifted = liftInlineFlags(readTaskPrompt(cwd, options, positionals));
+  const lifted = liftInlineFlags(readTaskPrompt(resolveCommandCwd(options), options, positionals));
   if (lifted.flags.length) {
     for (const [key, value] of Object.entries(parseCommandInput(lifted.flags, taskArgConfig).options)) {
       options[key] ??= value;
     }
   }
+  // After lifting: a --cwd on the handoff's first line counts too.
+  const cwd = resolveCommandCwd(options);
+  const workspaceRoot = resolveCommandWorkspace(options);
   const prompt = lifted.prompt;
   const model = normalizeRequestedModel(options.model);
   const effort = normalizeReasoningEffort(options.effort) ?? DEFAULT_REASONING_EFFORT;

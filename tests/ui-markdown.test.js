@@ -341,6 +341,10 @@ test("resultCardModel: no known heading shows the plain answer, empty decision i
   assert.equal(none.plain, "");
   assert.equal(none.question, null);
   assert.deepEqual(plain(lib.resultCardModel(null, undefined)), { plain: "", sections: [], question: null });
+  // Codex answered above the headings and left Summary a stub: the answer still shows.
+  const preface = plain(lib.resultCardModel("I printed 1, 2, 3, 4, 5 in order.\n\n## Summary\nCompleted.\n\n## Checks run\nnone", []));
+  assert.equal(preface.plain, "I printed 1, 2, 3, 4, 5 in order.");
+  assert.deepEqual(preface.sections.map((s) => s.heading), ["Summary", "Checks run"]);
 });
 
 test("answerTarget: newest finished run, thread idle, resume folder as resumeTarget", () => {
@@ -379,7 +383,7 @@ test("resultCardModel: recorded edits match Codex's list by whole path, not subs
 
 test("the UI section parser and the plugin's parser agree (ruling R3 drift guard)", async () => {
   const renderUrl = require("node:url").pathToFileURL(path.join(__dirname, "..", "plugin", "scripts", "lib", "render.mjs")).href;
-  const { extractSection, readNeedsDecision } = await import(renderUrl);
+  const { extractPreface, extractSection, readNeedsDecision } = await import(renderUrl);
   const inputs = [
     ANSWER, ANSWER.replace(/\n/g, "\r\n"),
     "### Needs Decision:\nPick a name?\n## Other\nx", "**Needs decision:**\nPick a name?",
@@ -392,6 +396,7 @@ test("the UI section parser and the plugin's parser agree (ruling R3 drift guard
   for (const text of inputs) {
     const label = String(JSON.stringify(text)).slice(0, 60);
     assert.equal(lib.readResultQuestion(text), readNeedsDecision(text), "question: " + label);
+    assert.equal(lib.resultPreface(text), extractPreface(text), "preface: " + label);
     for (const heading of ["Summary", "Changed files", "Checks run", "Needs decision"]) {
       assert.equal(lib.extractResultSection(text, heading), extractSection(text, heading), heading + ": " + label);
     }

@@ -65,3 +65,19 @@ test("buildCompanionTaskArgs maps fast before the prompt", () => {
   );
   assert.ok(!buildCompanionTaskArgs({ cwd: "D:\\x", prompt: "p" }).includes("--fast"));
 });
+
+// The companion records a --cwd pointer in the folder it runs from. Run from the
+// viewer's folder, a resume would be handed to whatever Claude session works there.
+test("runCompanion runs the companion inside the job's folder", async () => {
+  const match = src.match(/function runCompanion[\s\S]*?\n\}/);
+  assert.ok(match, "runCompanion must be declared at top level");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "viewer-run-companion-"));
+  const job = path.join(tmp, "job folder");
+  fs.mkdirSync(job);
+  const script = path.join(tmp, "companion.js");
+  fs.writeFileSync(script, "console.log(JSON.stringify({ cwd: process.cwd() }))\n");
+  const c = { execFile: require("node:child_process").execFile, process, COMPANION_SCRIPT: script };
+  vm.runInNewContext(match[0], c);
+  const parsed = await new Promise((resolve) => c.runCompanion(["cancel", "job-1", "--cwd", job, "--json"], {}, (_err, value) => resolve(value)));
+  assert.equal(fs.realpathSync(parsed.cwd), fs.realpathSync(job));
+});

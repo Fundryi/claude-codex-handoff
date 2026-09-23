@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { sortJobsNewestFirst } from "./lib/job-control.mjs";
-import { extractSection } from "./lib/render.mjs";
+import { extractPreface, extractSection } from "./lib/render.mjs";
 import {
   listJobs,
   readJobFile,
+  readJobPointers,
   resolveJobFile,
+  resolveJobsDir,
   resolveStateDir,
   updateState,
-  writeJobFile
+  writeJobFile,
+  writeJobPointers
 } from "./lib/state.mjs";
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
@@ -28,13 +32,17 @@ function ageLabel(iso, now) {
 const MAX_DETAILED = 3;
 const MAX_LINES = 40;
 const MAX_CHARS = 2000;
+const MAX_PREFACE_LINES = 5;
 
-// The Summary section when Codex wrote the headings, otherwise the start of the
-// answer. Bounded by lines and characters: this lands in Claude's context.
+// The Summary section when Codex wrote the headings, after the first lines Codex
+// wrote above them; otherwise the start of the answer. Bounded by lines and
+// characters: this lands in Claude's context.
 export function shortResult(stored) {
   const raw = String(stored?.result?.rawOutput || stored?.errorMessage || stored?.rendered || "").trim();
   if (!raw) return [];
-  let text = (extractSection(raw, "Summary") || raw).split(/\r?\n/).slice(0, MAX_LINES).join("\n");
+  const summary = extractSection(raw, "Summary");
+  const preface = summary ? extractPreface(raw).split(/\r?\n/).slice(0, MAX_PREFACE_LINES).join("\n") : "";
+  let text = [preface, summary || raw].filter(Boolean).join("\n").split(/\r?\n/).slice(0, MAX_LINES).join("\n");
   if (text.length > MAX_CHARS) text = `${text.slice(0, MAX_CHARS)} [cut]`;
   return text.split("\n");
 }
@@ -99,17 +107,51 @@ export function markAnnounced(workspaceRoot, jobs, nowIso) {
   });
 }
 
+// Jobs this workspace started with --cwd elsewhere, found through its pointers.
+// A pointer whose job file is gone is pruned. One whose job is missing from a torn
+// state.json read is kept and simply skipped this time.
+function pointedJobs(workspaceRoot, ownIds) {
+  const pointers = readJobPointers(workspaceRoot);
+  const listed = new Map();
+  const kept = [];
+  const found = [];
+  for (const pointer of pointers) {
+    if (!fs.existsSync(path.join(resolveJobsDir(pointer.workspaceRoot), `${pointer.jobId}.json`))) continue;
+    kept.push(pointer);
+    if (!listed.has(pointer.workspaceRoot)) listed.set(pointer.workspaceRoot, listJobs(pointer.workspaceRoot));
+    const job = listed.get(pointer.workspaceRoot).find((entry) => entry.id === pointer.jobId);
+    if (job && !ownIds.has(job.id)) found.push({ root: pointer.workspaceRoot, job });
+  }
+  if (kept.length !== pointers.length) {
+    try {
+      writeJobPointers(workspaceRoot, kept);
+    } catch {
+      // Pruning is housekeeping; the next prompt tries again.
+    }
+  }
+  return found;
+}
+
 function main() {
   const workspaceRoot = resolveWorkspaceRoot(process.cwd());
   // Fast path: no state dir means this workspace has never run a job. Exit before
   // touching anything - this runs on every single user prompt.
   if (!fs.existsSync(resolveStateDir(workspaceRoot))) return;
 
-  const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
+  const own = listJobs(workspaceRoot);
+  const rootOf = new Map(own.map((job) => [job.id, workspaceRoot]));
+  let pointed = [];
+  try {
+    pointed = pointedJobs(workspaceRoot, new Set(rootOf.keys()));
+  } catch {
+    // A broken pointer never costs this workspace its own jobs.
+  }
+  for (const { root, job } of pointed) rootOf.set(job.id, root);
+  const jobs = sortJobsNewestFirst([...own, ...pointed.map((entry) => entry.job)]);
   // A torn or corrupt job file falls back to the pointer line, never to silence.
   const readStored = (job) => {
     try {
-      const jobFile = resolveJobFile(workspaceRoot, job.id);
+      const jobFile = resolveJobFile(rootOf.get(job.id), job.id);
       return fs.existsSync(jobFile) ? readJobFile(jobFile) : null;
     } catch {
       return null;
@@ -119,14 +161,18 @@ function main() {
   if (!report) return;
 
   // Delivered means written: if Claude's end of the pipe is gone (EPIPE), leave
-  // the jobs unannounced so the next prompt shows them again.
+  // the jobs unannounced so the next prompt shows them again. Each job is marked in
+  // the workspace that owns it.
   process.stdout.on("error", () => {});
   process.stdout.write(report, (error) => {
     if (error) return;
-    try {
-      markAnnounced(workspaceRoot, jobs, new Date().toISOString());
-    } catch {
-      // Best-effort: a lost stamp only means the job is reported once more.
+    const nowIso = new Date().toISOString();
+    for (const root of new Set(rootOf.values())) {
+      try {
+        markAnnounced(root, jobs.filter((job) => rootOf.get(job.id) === root), nowIso);
+      } catch {
+        // Best-effort: a lost stamp only means the job is reported once more.
+      }
     }
   });
 }

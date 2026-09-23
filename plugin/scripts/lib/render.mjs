@@ -337,6 +337,16 @@ export function extractSection(text, heading) {
   return body.join("\n").trim();
 }
 
+// What Codex wrote above its first return heading. Sometimes that is the real
+// answer and Summary is only a stub ("Completed."). Empty when there is no heading.
+export function extractPreface(text) {
+  const lines = String(text ?? "").split(/\r?\n/);
+  const first = lines.findIndex((line) =>
+    /^(?:#{2,3}\s*(summary|changed files|checks run|needs decision)\s*:?|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?)\s*$/i.test(line.trim())
+  );
+  return first > 0 ? lines.slice(0, first).join("\n").trim() : "";
+}
+
 export function readNeedsDecision(text) {
   const body = extractSection(text, "Needs decision");
   if (!body || /^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body)) return null;

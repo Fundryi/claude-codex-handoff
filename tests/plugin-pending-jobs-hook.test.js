@@ -208,7 +208,7 @@ test("a job finished after its Claude process died is delivered to the next sess
     const first = runHook("session-B");
     fs.writeFileSync(path.join(stateRoot, "hook-first-run.txt"), first.stdout);
     assert.match(first.stdout, /task-cloudcli  completed/);
-    assert.match(first.stdout, /Retry added\./);
+    assert.match(first.stdout, /  Done\.\n  Retry added\./, "the lines above Summary come first");
     assert.match(first.stdout, /Codex asks:\n {4}Keep the old API\?/);
     assert.match(first.stdout, /--resume-thread thr-9/);
     assert.match(first.stdout, /Full text: \/codex:result task-cloudcli/);
@@ -305,4 +305,20 @@ test("the hook does not mark jobs delivered when its stdout is gone", async () =
   } finally {
     process.env.CODEX_COMPANION_STATE_ROOT = previous;
   }
+});
+
+// Codex sometimes answers above the return headings and leaves Summary a stub.
+test("shortResult keeps the opening lines above Summary, within the caps", async () => {
+  const { shortResult } = await import(hookUrl);
+  const raw = (rawOutput) => shortResult({ result: { rawOutput } });
+  assert.deepEqual(
+    raw("I printed 1, 2, 3, 4, 5 in order.\n\n## Summary\nCompleted.\n\n## Checks run\nnone"),
+    ["I printed 1, 2, 3, 4, 5 in order.", "Completed."]
+  );
+  assert.deepEqual(raw("## Summary\nA done.\n## Checks run\nx"), ["A done."], "no preface: unchanged");
+  const lines = (prefix, count) => Array.from({ length: count }, (_, i) => `${prefix}${i}`).join("\n");
+  assert.deepEqual(raw(`${lines("p", 60)}\n## Summary\nS`), ["p0", "p1", "p2", "p3", "p4", "S"], "only the first few preface lines");
+  assert.equal(raw(`${lines("p", 60)}\n## Summary\n${lines("s", 60)}`).length, 40, "MAX_LINES still holds");
+  const huge = raw(`${"x".repeat(3000)}\n## Summary\n${"y".repeat(3000)}`).join("\n");
+  assert.ok(huge.length <= 2000 + " [cut]".length, "MAX_CHARS still holds");
 });

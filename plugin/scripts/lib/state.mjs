@@ -10,6 +10,7 @@ const STATE_VERSION = 1;
 export const STATE_ROOT_ENV = "CODEX_COMPANION_STATE_ROOT";
 const STATE_FILE_NAME = "state.json";
 const JOBS_DIR_NAME = "jobs";
+const POINTERS_FILE_NAME = "job-pointers.json";
 const MAX_JOBS = 50;
 
 function nowIso() {
@@ -247,6 +248,42 @@ function removeJobFile(jobFile) {
   if (fs.existsSync(jobFile)) {
     fs.unlinkSync(jobFile);
   }
+}
+
+// A job started with --cwd lives in the target workspace's state. The launcher
+// workspace (where Claude runs; under CloudCLI it can never cd) keeps a pointer to
+// it, so its prompt hook, status and result still find the job. Newest first,
+// capped at MAX_JOBS like the jobs themselves.
+export function resolvePointersFile(cwd) {
+  return path.join(resolveStateDir(cwd), POINTERS_FILE_NAME);
+}
+
+// Missing or corrupt file: no pointers. Bad entries are skipped, never fatal.
+export function readJobPointers(cwd) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(resolvePointersFile(cwd), "utf8"));
+  } catch {
+    return [];
+  }
+  return (Array.isArray(parsed) ? parsed : []).filter(
+    (entry) => entry && typeof entry.jobId === "string" && entry.jobId && typeof entry.workspaceRoot === "string" && entry.workspaceRoot
+  ).map(({ jobId, workspaceRoot }) => ({ jobId, workspaceRoot }));
+}
+
+// Atomic: a reader sees the old file or the new one, never a torn one.
+// ponytail: no lock, so two launches in the same instant can drop one pointer; add
+// a lock file if concurrent --cwd launches from one folder become common.
+export function writeJobPointers(cwd, pointers) {
+  ensureStateDir(cwd);
+  const file = resolvePointersFile(cwd);
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, `${JSON.stringify(pointers.slice(0, MAX_JOBS), null, 2)}\n`, "utf8");
+  fs.renameSync(temp, file);
+}
+
+export function addJobPointer(cwd, jobId, workspaceRoot) {
+  writeJobPointers(cwd, [{ jobId, workspaceRoot }, ...readJobPointers(cwd).filter((entry) => entry.jobId !== jobId)]);
 }
 
 export function resolveJobLogFile(cwd, jobId) {
