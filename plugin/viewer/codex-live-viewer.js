@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.15.2";
+const APP_VERSION = "2.15.3";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 function parseFlags(argv) {
   const flags = { cmd: null, host: null, tunnel: false, tunnelToken: null, token: null, noOpen: false, flagArgv: [] };
@@ -35,6 +35,7 @@ function parseFlags(argv) {
     else rest.push(a);
   }
   flags.cmd = rest[0] || "serve";
+  flags.args = rest.slice(1).map(a => a.trim().toLowerCase());
   return flags;
 }
 const FLAGS = parseFlags(process.argv.slice(2));
@@ -1048,11 +1049,21 @@ function ping(cb) {
     res.on("end", () => {
       let data;
       try { data = JSON.parse(body); } catch {}
-      cb(res.statusCode === 200 && data && data.application === APP_ID);
+      const ok = res.statusCode === 200 && data && data.application === APP_ID;
+      cb(ok, ok ? data : null);
     });
   });
   req.setTimeout(1000, () => req.destroy());
-  req.on("error", () => cb(false));
+  req.on("error", () => cb(false, null));
+}
+
+// True only when both are x.y.z and a is lower; anything unreadable counts as not older.
+function isOlderVersion(a, b) {
+  const pa = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(a || ""));
+  const pb = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(b || ""));
+  if (!pa || !pb) return false;
+  for (let i = 1; i <= 3; i++) if (Number(pa[i]) !== Number(pb[i])) return Number(pa[i]) < Number(pb[i]);
+  return false;
 }
 
 function openBrowser() {
@@ -1066,16 +1077,34 @@ function openBrowser() {
   } catch {}
 }
 
-function doStart() {
-  ping(up => {
-    if (up) { console.log("[OK] already running -> " + BASE); openBrowser(); return; }
-    spawn(process.execPath, [__filename, "serve", ...FLAGS.flagArgv], { detached: true, stdio: "ignore", windowsHide: true }).unref();
-    let tries = 0;
-    const t = setInterval(() => ping(up2 => {
-      if (up2) { clearInterval(t); console.log("[OK] Codex Live Viewer running -> " + BASE); openBrowser(); }
-      else if (++tries > 25) { clearInterval(t); console.error("[X] Failed to start within 5s. Try: node codex-live-viewer.js serve"); process.exit(1); }
-    }), 200);
+// A running viewer from an older version is replaced, so a plugin update takes effect
+// without a new session. force replaces any running viewer (restart).
+function doStart(force) {
+  ping((up, info) => {
+    if (!up) return launch();
+    const older = isOlderVersion(info.version, APP_VERSION);
+    if (!force && !older) { console.log("[OK] already running -> " + BASE); openBrowser(); return; }
+    console.log(older ? "[i] Replacing viewer " + info.version + " with " + APP_VERSION : "[i] Restarting viewer");
+    doStop(() => waitDown(launch));
   });
+}
+
+// The old viewer answers /shutdown before its port closes; launching too early would
+// see it still up, or fail to bind.
+function waitDown(cb, tries = 0) {
+  ping(up => {
+    if (!up || tries >= 25) return cb();
+    setTimeout(() => waitDown(cb, tries + 1), 200);
+  });
+}
+
+function launch() {
+  spawn(process.execPath, [__filename, "serve", ...FLAGS.flagArgv], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  let tries = 0;
+  const t = setInterval(() => ping(up2 => {
+    if (up2) { clearInterval(t); console.log("[OK] Codex Live Viewer running -> " + BASE); openBrowser(); }
+    else if (++tries > 25) { clearInterval(t); console.error("[X] Failed to start within 5s. Try: node codex-live-viewer.js serve"); process.exit(1); }
+  }), 200);
 }
 
 function doStop(cb) {
@@ -1098,17 +1127,20 @@ function doStop(cb) {
   });
 }
 
-const cmd = FLAGS.cmd;
+// "start <action>" lets /codex:viewer pass its one argument through: an empty or
+// unknown action is a plain start, never the foreground serve.
+const START_ACTIONS = ["restart", "stop", "status"];
+const cmd = FLAGS.cmd === "start" && START_ACTIONS.includes(FLAGS.args[0]) ? FLAGS.args[0] : FLAGS.cmd;
 if (cmd === "serve") serve();
-else if (cmd === "start") doStart();
-else if (cmd === "stop") doStop();
-else if (cmd === "restart") doStop(() => setTimeout(doStart, 300));
-else if (cmd === "status") ping(up => console.log(up ? "[OK] running -> " + BASE : "[i] not running"));
+else if (cmd === "start") doStart(false);
+else if (cmd === "stop") doStop(stopped => stopped && waitDown(() => ping(up => { if (up) { console.error("[X] Viewer still answers on " + BASE); process.exitCode = 1; } })));
+else if (cmd === "restart") doStart(true);
+else if (cmd === "status") ping((up, info) => console.log(up ? "[OK] running " + (info.version || "?") + " -> " + BASE : "[i] not running"));
 else {
   console.log("Usage: codex-live-viewer <start|stop|restart|status|serve>");
-  console.log("  start    run in background and open the browser");
+  console.log("  start    run in background and open the browser; replaces an older running version");
   console.log("  stop     stop the background server");
-  console.log("  restart  stop, then start");
+  console.log("  restart  stop any running viewer, then start this one");
   console.log("  status   is it running?");
   console.log("  serve    run in the foreground (default; what npm start does)");
   console.log("Flags:");

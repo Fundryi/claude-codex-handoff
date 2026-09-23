@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.15.3
+
+- **`/codex:viewer` can restart, stop and check the viewer.** `/codex:viewer restart` replaces whatever viewer runs, `/codex:viewer stop` stops it and checks that the port is free, and `/codex:viewer status` shows whether it runs and its version.
+- **Starting the viewer replaces an older one.** `/codex:viewer` and `codex-live-viewer.js start` now read the running viewer's version. If it is older, they stop it and start the new one, so a plugin update takes effect without a new session. A newer or equal viewer, or one with no version, is left alone.
+- **`CODEX_VIEWER_HOST` is documented.** It sets the bind address, and the plugin's autostart uses it too. `0.0.0.0` opens the viewer to your LAN without a token.
+
 ## 2.15.2
 
 - **Failed checks are reported as failed.** The return format now tells Codex to mark each failed command under "Checks run". If a command in a chain fails, the commands after it did not run, and Codex must not state a result from them. Before, a chained check that stopped early could come back as a finding.

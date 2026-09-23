@@ -64,7 +64,7 @@ On CloudCLI, where Claude always runs in one folder, `/codex:rescue --cwd <folde
 | `/codex:review` / `/codex:adversarial-review` | Codex reviews your working tree, or challenges your design |
 | `/codex:status` / `/codex:result` / `/codex:cancel` | Track, fetch, or stop jobs |
 | `/codex:transfer` | Move the current Claude session into a Codex thread |
-| `/codex:viewer` | Open the dashboard |
+| `/codex:viewer [restart\|stop\|status]` | Open the dashboard (starts it, and replaces one left running by an older version); `restart`, `stop` or `status` it |
 | `/codex:setup` | Check Codex CLI readiness |
 
 **Effort and fast mode** are set per job (form fields in the dashboard, `--effort`/`--fast` on the CLI, or just say "high effort" / "use fast mode" in a rescue request):
@@ -115,11 +115,15 @@ The dashboard runs on its own and only reads `~/.codex/sessions/`:
 node codex-live-viewer.js start    # background + open browser (add --no-open to skip the tab)
 node codex-live-viewer.js serve    # foreground
 node codex-live-viewer.js stop
+node codex-live-viewer.js restart  # stop whatever viewer runs, start this one
+node codex-live-viewer.js status   # running or not, and its version
 ```
+
+`start` replaces a viewer left running by an older version, so after an update it brings up the new one.
 
 Or grab a tray app from [Releases](../../releases): `Codex-Live-Viewer-Windows-x64.zip` (double-click the exe) or `Codex-Live-Viewer-Linux-x64.zip` (needs GTK 3 + Ayatana AppIndicator). The tray supervises the server and shows completion toasts. No macOS tray; use the Node CLI or the plugin's autostart.
 
-Remote access: `--host 0.0.0.0` for your LAN, `--tunnel` for a free Cloudflare quick tunnel (token-gated, URL printed on start), `--tunnel-token <t>` for a named tunnel on your own domain. Local access never needs a token.
+Remote access: `--host 0.0.0.0` (or `CODEX_VIEWER_HOST=0.0.0.0`, which the plugin's autostart also uses) for your LAN, with no token, so anyone on that network can use it; `--tunnel` for a free Cloudflare quick tunnel (token-gated, URL printed on start), `--tunnel-token <t>` for a named tunnel on your own domain. Local access never needs a token.
 
 </details>
 
@@ -133,6 +137,7 @@ Remote access: `--host 0.0.0.0` for your LAN, `--tunnel` for a free Cloudflare q
 | `CODEX_PLUGIN_UPDATE_CHECK` | `1` | `0` disables the daily update check |
 | `CODEX_VIEWER_AUTOSTART` | `1` | `0` disables the session-start dashboard autostart |
 | `CODEX_VIEWER_PORT` | `8377` | Dashboard port (also receives job-completion pushes) |
+| `CODEX_VIEWER_HOST` | `127.0.0.1` | Bind address; `0.0.0.0` opens it to your LAN |
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state (CLI + dashboard) |
 | `CODEX_HOME` | `~/.codex` | Where Codex session files are read from |
 | `CODEX_VIEWER_TRAY_PORT` | port + 1 | Tray single-instance lock |

@@ -34,6 +34,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 | `CODEX_PLUGIN_UPDATE_CHECK` | `1` | Set `0` to disable the daily session-start update check. |
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state root (plugin CLI + viewer) |
 | `CODEX_VIEWER_PORT` | `8377` | Viewer HTTP port; also where the companion POSTs job completions (`/notify`) |
+| `CODEX_VIEWER_HOST` | `127.0.0.1` | Viewer bind address (`--host` overrides; `0.0.0.0` = LAN, no token) |
 | `CODEX_VIEWER_AUTOSTART` | `1` | Set to `0` to disable SessionStart viewer autostart |
 
 ## Commands

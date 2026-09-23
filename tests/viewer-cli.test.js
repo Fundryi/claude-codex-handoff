@@ -1,0 +1,89 @@
+const assert = require("node:assert/strict");
+const { execFile } = require("node:child_process");
+const fs = require("node:fs");
+const http = require("node:http");
+const os = require("node:os");
+const path = require("node:path");
+const test = require("node:test");
+
+// End to end: the real viewer CLI against a fake "running viewer" on a spare port.
+// This is what /codex:viewer runs: `start "<argument>"`.
+const SCRIPT = path.join(__dirname, "..", "codex-live-viewer.js");
+const VERSION = require("../package.json").version;
+const home = fs.mkdtempSync(path.join(os.tmpdir(), "clv-cli-"));
+fs.mkdirSync(path.join(home, "sessions")); // serve refuses to run without it
+
+function cli(port, ...args) {
+  const env = { ...process.env, CODEX_VIEWER_PORT: String(port), CODEX_HOME: home, CODEX_COMPANION_STATE_ROOT: path.join(home, "state") };
+  return new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, ...args, "--no-open"], { env, timeout: 20000 }, (error, stdout, stderr) => {
+      resolve({ code: error ? error.code : 0, out: stdout + stderr });
+    });
+  });
+}
+
+// A fake viewer that reports `version` and shuts down on POST /shutdown, as the real one does.
+function fakeViewer(version) {
+  return new Promise((resolve) => {
+    const fake = { shutdowns: 0 };
+    fake.server = http.createServer((req, res) => {
+      if (req.url === "/health") {
+        res.setHeader("Content-Type", "application/json");
+        return res.end(JSON.stringify({ application: "codex-live-viewer", version }));
+      }
+      if (req.method === "POST" && req.url === "/shutdown") {
+        fake.shutdowns += 1;
+        res.end("{}");
+        fake.server.close();
+        fake.server.closeAllConnections();
+        return;
+      }
+      res.statusCode = 404;
+      res.end();
+    });
+    fake.server.listen(0, "127.0.0.1", () => resolve(fake));
+  });
+}
+
+test("start replaces an older viewer; status shows the version; stop confirms it is down", async () => {
+  const fake = await fakeViewer("1.0.0");
+  const port = fake.server.address().port;
+  try {
+    // An empty argument (plain /codex:viewer) is a start, never the foreground serve.
+    const started = await cli(port, "start", "");
+    assert.equal(started.code, 0, started.out);
+    assert.match(started.out, /Replacing viewer 1\.0\.0 with /);
+    assert.equal(fake.shutdowns, 1);
+
+    const status = await cli(port, "start", "status");
+    assert.match(status.out, new RegExp("running " + VERSION.replace(/\./g, "\\.") + " -> "));
+
+    const stopped = await cli(port, "start", "stop");
+    assert.equal(stopped.code, 0, stopped.out);
+    assert.match(stopped.out, /Viewer stopped/);
+    assert.doesNotMatch(stopped.out, /still answers/);
+    assert.match((await cli(port, "status")).out, /not running/);
+  } finally {
+    await cli(port, "stop");
+    fake.server.close();
+  }
+});
+
+test("start leaves a newer viewer alone; restart replaces it anyway", async () => {
+  const fake = await fakeViewer("99.0.0");
+  const port = fake.server.address().port;
+  try {
+    const started = await cli(port, "start");
+    assert.match(started.out, /already running/);
+    assert.equal(fake.shutdowns, 0);
+
+    const restarted = await cli(port, "start", "Restart");
+    assert.equal(restarted.code, 0, restarted.out);
+    assert.match(restarted.out, /Restarting viewer/);
+    assert.equal(fake.shutdowns, 1);
+    assert.match((await cli(port, "status")).out, new RegExp("running " + VERSION.replace(/\./g, "\\.")));
+  } finally {
+    await cli(port, "stop");
+    fake.server.close();
+  }
+});
