@@ -564,6 +564,28 @@
       font-size: 11px;
     }
     .toolbar-button:hover, .toolbar-button.on { background: var(--hover); color: var(--fg); }
+    #result-card { flex: none; padding: 10px clamp(14px, 3vw, 36px); border-bottom: 1px solid var(--border); background: #0e141c; }
+    .result-card-box { width: min(100%, 1080px); margin: 0 auto; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); min-width: 0; }
+    .result-card-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 4px; }
+    .result-card-toggle { display: flex; align-items: center; gap: 7px; border: 0; border-radius: 6px; padding: 4px 6px; background: transparent; color: var(--fg); cursor: pointer; font-size: 12px; font-weight: 600; transition: background-color 160ms; }
+    .result-card-toggle:hover { background: var(--hover); }
+    .result-card-caret { color: var(--muted); font-size: 10px; width: 10px; }
+    .result-card-runs { color: var(--muted); font-size: 11px; }
+    .result-card-head .spacer { flex: 1; }
+    .result-card-body { max-height: 38vh; overflow: auto; padding: 2px 14px 12px; border-top: 1px solid var(--border); }
+    .result-section { margin-top: 10px; min-width: 0; }
+    .result-section-title { margin: 0 0 4px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+    .result-section.question .result-section-title { color: var(--yellow); }
+    .result-section-body { overflow-wrap: anywhere; word-break: break-word; line-height: 1.55; font-size: 13px; }
+    .result-section-body > :first-child { margin-top: 0; }
+    .result-section-body > :last-child { margin-bottom: 0; }
+    .result-section-body code { font: 11px "Cascadia Code", Consolas, monospace; background: #0e141c; padding: 1px 4px; border-radius: 4px; }
+    .result-card-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .answer-box { margin-top: 10px; display: grid; gap: 7px; }
+    .answer-box textarea { width: 100%; min-height: 70px; resize: vertical; border: 1px solid var(--border); border-radius: 7px; padding: 7px 9px; color: var(--fg); background: var(--bg); }
+    .answer-box-actions { display: flex; justify-content: flex-end; }
+    .answer-box-actions button { border: 1px solid #36577c; border-radius: 6px; padding: 6px 11px; background: #17375a; color: #c2ddff; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .answer-box-actions button:disabled { opacity: .5; cursor: default; }
     #feed-wrap { min-height: 0; flex: 1; position: relative; overflow: hidden; }
     #feed {
       height: 100%;
@@ -683,7 +705,7 @@
       #task-header { padding-left: 10px; padding-right: 10px; }
       #task-meta { gap: 4px 9px; }
       #feed-toolbar { padding-left: 8px; padding-right: 8px; overflow-x: auto; }
-      #feed { padding-left: 12px; padding-right: 12px; }
+      #feed, #result-card { padding-left: 12px; padding-right: 12px; }
       .control-grid { grid-template-columns: 1fr; }
     }
   </style>
@@ -736,6 +758,8 @@
       <button id="internals-button" class="toolbar-button" type="button" title="Show internal Codex events (injected prompts, permissions) and auto-expand patches">Show internals</button>
       <span class="spacer"></span>
     </div>
+
+    <section id="result-card" aria-label="Handoff result" hidden></section>
 
     <div id="feed-wrap">
       <div id="feed"><div id="feed-inner"></div></div>
@@ -809,6 +833,12 @@
     var lastHomeSignature = '';
     var lastFilterSignature = '';
     var renderLimits = {};
+    // Result card, per job id and in memory only: the fetched detail (refetched when the
+    // job's updatedAt/status changes), the typed answer, and whether the reader collapsed it.
+    var resultDetails = {};
+    var answerDrafts = {};
+    var resultCardClosed = {};
+    var resultCardKey = '';
     var historyResults = [];
     var historySearchTimer = null;
     var jobsLoaded = false;
@@ -823,6 +853,7 @@
     var search = document.getElementById('search');
     var feed = document.getElementById('feed');
     var feedInner = document.getElementById('feed-inner');
+    var resultCard = document.getElementById('result-card');
     var jumpLatest = document.getElementById('jump-latest');
     var taskTitle = document.getElementById('task-title');
     var taskStatus = document.getElementById('task-status');
@@ -1292,6 +1323,12 @@
       if (opts.sandbox) b.sandbox = opts.sandbox;
       return b;
     }
+    // The resume prompt for an answer typed into the result card. The prefix keeps a
+    // leading "--" inside the prompt text; blank answers give '' (nothing to send).
+    function answerPrompt(text) {
+      var trimmed = String(text == null ? '' : text).trim();
+      return trimmed ? 'Answer from the user: ' + trimmed : '';
+    }
     function knownCwds(sessions, jobs) {
       const seen = [];
       for (const s of sessions || []) if (s.cwd && !seen.includes(s.cwd)) seen.push(s.cwd);
@@ -1522,6 +1559,46 @@
         .map(function (entry, index) { return { job: entry, index: index, ms: Date.parse(entry.updatedAt || entry.createdAt || '') || 0 }; })
         .sort(function (a, b) { return b.ms - a.ms || a.index - b.index; })
         .map(function (entry) { return entry.job; });
+    }
+    // Result card content from a job's result.rawOutput and result.touchedFiles.
+    // plain: the whole answer when it has none of the known headings.
+    // sections: Summary, Changed files (Codex's list plus recorded edits it does not
+    // already name), Checks run - empty ones left out. question: readResultQuestion.
+    function resultCardModel(rawOutput, touchedFiles) {
+      var text = String(rawOutput == null ? '' : rawOutput);
+      var summary = extractResultSection(text, 'Summary');
+      var changed = extractResultSection(text, 'Changed files');
+      var checks = extractResultSection(text, 'Checks run');
+      var decision = extractResultSection(text, 'Needs decision');
+      var none = summary == null && changed == null && checks == null && decision == null;
+      var listed = String(changed || '').replace(/\\/g, '/');
+      var tokens = listed.split(/[\s`'"(),;*]+/).filter(Boolean);
+      var recorded = [];
+      (Array.isArray(touchedFiles) ? touchedFiles : []).forEach(function (file) {
+        var path = String(file || '').replace(/\\/g, '/');
+        if (!path || recorded.indexOf(path) !== -1 || listed.indexOf(path) !== -1) return;
+        // Codex usually lists workspace-relative paths; the companion may record absolute ones.
+        if (tokens.some(function (token) { return token.indexOf('/') !== -1 && path.slice(-token.length - 1) === '/' + token; })) return;
+        recorded.push(path);
+      });
+      var changedText = [changed, recorded.length
+        ? 'Recorded file edits (patch tool only, shell edits are not listed):\n' + recorded.map(function (path) { return '- `' + path + '`'; }).join('\n')
+        : ''].filter(Boolean).join('\n\n');
+      var sections = [['Summary', summary], ['Changed files', changedText], ['Checks run', checks]]
+        .filter(function (pair) { return pair[1]; })
+        .map(function (pair) { return { heading: pair[0], body: pair[1] }; });
+      return { plain: none ? text.trim() : '', sections: sections, question: readResultQuestion(text) };
+    }
+    // Where an answer to a finished run resumes: the run's thread, in resumeTarget's folder.
+    // Null when the newest run did not complete, has no thread, or any run on the thread still works.
+    function answerTarget(row, jobs) {
+      var job = row.job;
+      if (!job || !job.threadId || job.status !== 'completed') return null;
+      var busy = threadRuns(jobs, job).some(function (run) {
+        var live = run.live || run.status;
+        return live === 'working' || live === 'possibly-stuck' || live === 'queued' || live === 'running';
+      });
+      return busy ? null : { threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project };
     }
     // Dismissed row ids worth keeping: sessions still tracked, and job-only rows ('job:<id>') whose
     // job still exists. Before the first job list arrives every job id is kept.
@@ -2154,6 +2231,7 @@
 
     function renderFeed(preservePosition) {
       // showOverview() covers "no task open" too, so selected is always truthy past this point.
+      renderResultCard();
       if (showOverview()) { renderHome(); return; }
       // Every technical/thinking-group row remembers whether the reader had it
       // open (keyed, not by position: a live task rebuilds its whole feed on
@@ -2246,6 +2324,7 @@
         renderFilters();
         renderList();
         renderHeader();
+        renderResultCard();
         if (showOverview()) renderFeed();
       } catch (_) {}
     }
@@ -2269,6 +2348,163 @@
       };
     }
 
+    async function fetchJobDetail(job) {
+      var response = await fetch('/job?dir=' + encodeURIComponent(job.stateDir) + '&id=' + encodeURIComponent(job.id));
+      var detail = await response.json();
+      if (!response.ok) throw new Error(detail.error || 'Job not found');
+      return detail;
+    }
+
+    async function loadResultDetail(job, entry) {
+      try { entry.detail = await fetchJobDetail(job); }
+      catch (error) { entry.error = error.message || String(error); }
+      renderResultCard();
+    }
+
+    // The card above the feed for a task whose newest run finished. It lives outside
+    // #feed-inner and is rebuilt only when its content changes, so live feed updates
+    // never touch it: a half-typed answer keeps its focus and cursor.
+    function renderResultCard() {
+      var row = showOverview() ? null : selectedRow();
+      var job = row && row.job;
+      if (!job || job.status !== 'completed') {
+        resultCardKey = '';
+        resultCard.hidden = true;
+        resultCard.textContent = '';
+        return;
+      }
+      var stamp = (job.updatedAt || '') + '|' + job.status;
+      var entry = resultDetails[job.id];
+      if (!entry || entry.stamp !== stamp) {
+        entry = resultDetails[job.id] = { stamp: stamp, detail: null, error: '' };
+        loadResultDetail(job, entry);
+      }
+      var target = answerTarget(row, jobs);
+      var runs = threadRuns(jobs, job).length;
+      var key = JSON.stringify([row.id, job.id, stamp, !!entry.detail, entry.error, target, runs, row.title]);
+      if (key === resultCardKey) return;
+      resultCardKey = key;
+      var old = resultCard.querySelector('.answer-box textarea');
+      var focus = old && document.activeElement === old ? [old.selectionStart, old.selectionEnd] : null;
+      buildResultCard(row, job, entry, target, runs);
+      var fresh = resultCard.querySelector('.answer-box textarea');
+      if (focus && fresh) { fresh.focus(); fresh.setSelectionRange(focus[0], focus[1]); }
+    }
+
+    function resultSection(heading, markdown, extraClass) {
+      var section = document.createElement('div');
+      section.className = 'result-section' + (extraClass ? ' ' + extraClass : '');
+      var title = document.createElement('h3');
+      title.className = 'result-section-title';
+      title.textContent = heading;
+      var body = document.createElement('div');
+      body.className = 'result-section-body';
+      body.appendChild(renderMarkdown(markdown, document));
+      section.append(title, body);
+      return section;
+    }
+
+    function buildResultCard(row, job, entry, target, runs) {
+      resultCard.textContent = '';
+      resultCard.hidden = false;
+      var box = document.createElement('div');
+      box.className = 'result-card-box';
+      var head = document.createElement('div');
+      head.className = 'result-card-head';
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'result-card-toggle';
+      var caret = document.createElement('span');
+      caret.className = 'result-card-caret';
+      var label = document.createElement('span');
+      label.textContent = 'Result';
+      toggle.append(caret, label);
+      head.appendChild(toggle);
+      if (runs > 1) {
+        var runCount = document.createElement('span');
+        runCount.className = 'result-card-runs';
+        runCount.textContent = runs + ' runs';
+        head.appendChild(runCount);
+      }
+      var spacer = document.createElement('span');
+      spacer.className = 'spacer';
+      var full = document.createElement('button');
+      full.type = 'button';
+      full.className = 'toolbar-button';
+      full.textContent = 'Show full result';
+      full.addEventListener('click', function () { openJob(job); });
+      head.append(spacer, full);
+
+      var body = document.createElement('div');
+      body.className = 'result-card-body';
+      body.id = 'result-card-body';
+      toggle.setAttribute('aria-controls', body.id);
+      function setOpen(open) {
+        body.hidden = !open;
+        caret.textContent = open ? '▾' : '▸';
+        toggle.setAttribute('aria-expanded', String(open));
+      }
+      setOpen(!resultCardClosed[job.id]);
+      toggle.addEventListener('click', function () {
+        resultCardClosed[job.id] = !body.hidden;
+        setOpen(body.hidden);
+      });
+      box.append(head, body);
+      resultCard.appendChild(box);
+
+      if (!entry.detail) {
+        var note = document.createElement('div');
+        note.className = 'result-card-note';
+        note.textContent = entry.error ? 'Could not load job result: ' + entry.error : 'Loading job result…';
+        body.appendChild(note);
+        return;
+      }
+      var result = entry.detail.result || {};
+      var model = resultCardModel(result.rawOutput, result.touchedFiles);
+      if (model.plain) body.appendChild(resultSection('Answer', model.plain));
+      model.sections.forEach(function (section) { body.appendChild(resultSection(section.heading, section.body)); });
+      if (!model.plain && !model.sections.length && !model.question) {
+        var empty = document.createElement('div');
+        empty.className = 'result-card-note';
+        empty.textContent = 'No answer text was recorded. Show full result has the details.';
+        body.appendChild(empty);
+      }
+      if (!model.question) return;
+      var question = resultSection('Needs decision', model.question, 'question');
+      body.appendChild(question);
+      if (!target) {
+        var busy = document.createElement('div');
+        busy.className = 'result-card-note';
+        busy.textContent = 'A run on this thread is still working. Answer once it finishes.';
+        question.appendChild(busy);
+        return;
+      }
+      var answer = document.createElement('div');
+      answer.className = 'answer-box';
+      var input = document.createElement('textarea');
+      input.placeholder = 'Your answer';
+      input.setAttribute('aria-label', 'Your answer to the question above');
+      input.value = answerDrafts[job.id] || '';
+      var actions = document.createElement('div');
+      actions.className = 'answer-box-actions';
+      var send = document.createElement('button');
+      send.type = 'button';
+      send.textContent = 'Answer and resume';
+      send.title = 'Opens the resume dialog with your answer as the prompt (asks first)';
+      send.disabled = !answerPrompt(input.value);
+      input.addEventListener('input', function () {
+        answerDrafts[job.id] = input.value;
+        send.disabled = !answerPrompt(input.value);
+      });
+      send.addEventListener('click', function () {
+        var prompt = answerPrompt(input.value);
+        if (prompt) openResumeModal(target, row.title, prompt);
+      });
+      actions.appendChild(send);
+      answer.append(input, actions);
+      question.appendChild(answer);
+    }
+
     async function openJob(job) {
       var token = ++jobModalToken;
       fillRunPicker(job);
@@ -2289,10 +2525,8 @@
       jobModal.hidden = false;
       if (wasHidden) jobModalClose.focus();
       try {
-        var response = await fetch('/job?dir=' + encodeURIComponent(job.stateDir) + '&id=' + encodeURIComponent(job.id));
-        var detail = await response.json();
+        var detail = await fetchJobDetail(job);
         if (token !== jobModalToken) return; // another run was picked meanwhile
-        if (!response.ok) throw new Error(detail.error || 'Job not found');
         jobModalTitle.textContent = detail.title || job.title || 'Job result';
         jobModalMeta.textContent = '';
         jobModalMeta.appendChild(modalRow('Summary', detail.summary || ''));
@@ -2470,13 +2704,14 @@
       kind.focus();
     }
 
-    function openResumeModal(session, title) {
+    function openResumeModal(session, title, promptText) {
       showControlModal('Resume Codex thread?', 'Resume');
       controlModalBody.appendChild(modalRow('Task', title || 'Codex task'));
       controlModalBody.appendChild(modalRow('Project', session.cwd || ''));
       controlModalBody.appendChild(modalRow('Thread', session.threadId || '', true));
       var prompt = document.createElement('textarea');
       prompt.placeholder = 'Optional prompt override';
+      prompt.value = promptText || '';
       controlModalBody.appendChild(controlField('Prompt override', prompt));
       var effort = effortSelect();
       var model = textInput('default');
@@ -2583,7 +2818,7 @@
         if (!response.ok || data.ok === false) {
           controlModalError.textContent = data.error || ('Request failed with HTTP ' + response.status);
           if (response.status === 409) {
-            controlModalError.textContent += '\nUse the existing Stop task process dialog first.';
+            controlModalError.textContent += '\nCancel that run first: ⋯ menu > Cancel job.';
           }
           return;
         }
@@ -2920,6 +3155,7 @@
         renderFilters();
         renderList();
         renderHeader();
+        renderResultCard();
         if (showOverview()) renderFeed();
       }
       if (data.type === 'snapshot') {

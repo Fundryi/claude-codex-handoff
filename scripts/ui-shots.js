@@ -158,12 +158,47 @@ async (page) => {
     await shot('04-running-task');
   }
 
-  // ---- 5. Finished handoff (result card lands in Task 8; baseline just shows the feed) ----
+  // ---- 5. Finished handoff: result card above the feed (Task 8) ----
   // Fixture 4 is finished, so it is not in Now/All - widen to History/Everything first.
   await view('HISTORY', 'EVERYTHING');
   if (await clickText('Fixture 4 -')) {
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(400);
     await shot('05-finished-handoff');
+    // 5b. Needs decision question + answer box, then the resume confirm prefilled from it.
+    try {
+      const box = page.locator('#result-card .answer-box textarea');
+      await box.waitFor({ state: 'visible', timeout: 3000 });
+      await box.fill('--force: cover the archived-session sweep here, "Task 11" only adds tests.');
+      await page.waitForTimeout(150);
+      await shot('05-result-card-answer-typed');
+      if (await clickText('Answer and resume', { exact: true })) {
+        await page.waitForTimeout(200);
+        await shot('05-answer-resume-dialog');
+        // Never reach the real /resume from the harness: answer it here with the server's 409.
+        await page.route('**/resume', (route) => route.fulfill({
+          status: 409, contentType: 'application/json',
+          body: JSON.stringify({ ok: false, error: 'job job-fixture-04 is still running on this thread - stop it first' })
+        }));
+        if (await clickId('control-modal-confirm')) {
+          await page.waitForTimeout(300);
+          await shot('05-answer-resume-409');
+        }
+        await page.unroute('**/resume');
+        await pressEscape();
+      }
+      await box.fill('');
+    } catch (err) {
+      skipped.push('result card answer box: ' + err.message);
+    }
+  }
+  // 5c. plain answer (no known headings) and 5d. a thread with 3 runs.
+  if (await clickText('Fixture 5 -')) {
+    await page.waitForTimeout(400);
+    await shot('05-result-card-plain');
+  }
+  if (await clickText('Fixture 6 -')) {
+    await page.waitForTimeout(400);
+    await shot('05-result-card-3-runs');
   }
   await view('NOW', 'ALL');
 
@@ -321,6 +356,22 @@ async (page) => {
     await page.waitForTimeout(200);
     await shot('12-mobile-actions-menu');
     await pressEscape();
+  }
+
+  // ---- 12c. result card with the answer box at mobile width ----
+  if (await clickId('show-side')) {
+    await page.waitForTimeout(200);
+    await view('HISTORY', 'EVERYTHING');
+    if (await clickText('Fixture 4 -')) {
+      await page.waitForTimeout(400);
+      await shot('12-mobile-result-card');
+    }
+    // Back to Now/All with the drawer closed, so step 15's Now click opens the overview.
+    if (await clickId('show-side')) {
+      await view('NOW', 'ALL');
+      await clickId('hide-side');
+      await page.waitForTimeout(200);
+    }
   }
 
   // ---- 15. Now overview at mobile width, Auto-open toggle stays visible ----

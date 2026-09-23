@@ -57,3 +57,24 @@ test("knownCwds dedupes sessions and jobs, newest first, skips blanks", () => {
     ["D:\\a", "D:\\b", "D:\\c"],
   );
 });
+
+test("answerPrompt prefixes the answer and never lets it start the prompt", () => {
+  const { answerPrompt } = ctx();
+  assert.equal(answerPrompt("  use option B  "), "Answer from the user: use option B");
+  // A leading "--" stays inside the prompt text, so it can never read as a CLI flag.
+  assert.equal(answerPrompt("--force the old API"), "Answer from the user: --force the old API");
+  // Inner quotes and newlines are kept as typed.
+  assert.equal(
+    answerPrompt('Keep "old" API\nbut rename it\'s helper\n'),
+    'Answer from the user: Keep "old" API\nbut rename it\'s helper',
+  );
+  for (const blank of ["", "   ", "\n\t \r\n", null, undefined]) assert.equal(answerPrompt(blank), "", `blank: ${JSON.stringify(blank)}`);
+});
+
+test("resumeBody carries the answer prompt from the answer box", () => {
+  const { resumeBody, answerPrompt } = ctx();
+  assert.deepEqual(
+    plain(resumeBody({ threadId: "th-1", cwd: "D:\\x" }, { prompt: answerPrompt("keep it") })),
+    { threadId: "th-1", cwd: "D:\\x", prompt: "Answer from the user: keep it" },
+  );
+});

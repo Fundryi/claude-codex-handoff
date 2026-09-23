@@ -59,6 +59,8 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 - Commands, tool output, thinking, patches, and long messages start collapsed.
 - Render at most 160 Activity events or 80 Raw events initially. Earlier events remain available through Show earlier activity.
 - Auto-scroll follows new events only while the reader is already near the bottom. Otherwise show Jump to latest.
+- A task whose newest handoff run finished shows a Result card between the feed toolbar and the feed: Summary, Changed files, Checks run and Needs decision (or the plain answer), open by default and collapsible. Live feed updates never rebuild it, so a half-typed answer keeps its text, focus and cursor.
+- The answer box shows only when the result asks a question and no run on the thread is working. "Answer and resume" opens the resume confirm prefilled with `Answer from the user: <text>`; nothing is sent without that confirm.
 
 ## Motion and accessibility
 

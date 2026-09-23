@@ -309,3 +309,56 @@ test("assignEventKeys: same kind+ts rows get distinct, order-stable keys", () =>
   // the same keys again, so a given row keeps its key and its open state.
   assert.deepEqual(plain(lib.assignEventKeys(events.slice())), plain(keys));
 });
+
+test("resultCardModel: sections, recorded edits merged into Changed files, question", () => {
+  const text = "## Summary\nDid it.\n\n## Changes\n- x\n\n## Needs decision\nArchive sweep too?\n\n## Verification\nok";
+  const model = plain(lib.resultCardModel(text, ["scripts/a.mjs", "scripts/b_c.js"]));
+  assert.equal(model.plain, "");
+  assert.deepEqual(model.sections.map((s) => s.heading), ["Summary", "Changed files"]);
+  assert.equal(model.sections[0].body, "Did it.");
+  assert.match(model.sections[1].body, /^Recorded file edits/);
+  assert.match(model.sections[1].body, /`scripts\/b_c\.js`/, "paths as inline code, so _ is never emphasis");
+  assert.equal(model.question, "Archive sweep too?");
+});
+
+test("resultCardModel: recorded edits Codex already listed are not repeated", () => {
+  const text = "## Changed files\n- `scripts/a.mjs`\n\n## Checks run\nnpm test";
+  const model = plain(lib.resultCardModel(text, ["D:\\repo\\scripts\\a.mjs", "scripts/b.mjs", "scripts/b.mjs", ""]));
+  const changed = model.sections.find((s) => s.heading === "Changed files").body;
+  assert.equal(changed.match(/a\.mjs/g).length, 1, "absolute backslash path matches Codex's relative entry");
+  assert.equal(changed.match(/b\.mjs/g).length, 1, "duplicates collapse");
+  assert.deepEqual(model.sections.map((s) => s.heading), ["Changed files", "Checks run"]);
+  assert.equal(model.question, null);
+});
+
+test("resultCardModel: no known heading shows the plain answer, empty decision is no question", () => {
+  const plainModel = plain(lib.resultCardModel("Done. Row count matches.\n", []));
+  assert.equal(plainModel.plain, "Done. Row count matches.");
+  assert.deepEqual(plainModel.sections, []);
+  assert.equal(plainModel.question, null);
+  // Only a Needs decision heading, answered "None": sections mode, nothing to ask.
+  const none = plain(lib.resultCardModel("## Needs decision\nNone.", null));
+  assert.equal(none.plain, "");
+  assert.equal(none.question, null);
+  assert.deepEqual(plain(lib.resultCardModel(null, undefined)), { plain: "", sections: [], question: null });
+});
+
+test("answerTarget: newest finished run, thread idle, resume folder as resumeTarget", () => {
+  const done = { id: "j2", threadId: "t", status: "completed", live: "completed", workspaceRoot: "D:\\w", cwd: "D:\\c", updatedAt: "2026-01-02" };
+  const older = { id: "j1", threadId: "t", status: "completed", live: "completed", updatedAt: "2026-01-01" };
+  const row = { job: done, project: "D:\\p" };
+  assert.deepEqual(plain(lib.answerTarget(row, [done, older])), { threadId: "t", cwd: "D:\\w" });
+  assert.deepEqual(plain(lib.answerTarget({ job: { ...done, workspaceRoot: "" }, project: "D:\\p" }, [done])), { threadId: "t", cwd: "D:\\c" });
+  // Another run on the same thread still works (even an older-dated one): no answer box.
+  for (const live of ["working", "possibly-stuck"]) {
+    assert.equal(lib.answerTarget(row, [done, { ...older, status: "running", live }]), null, live);
+  }
+  assert.equal(lib.answerTarget(row, [done, { id: "q", threadId: "t", status: "queued" }]), null, "queued, no live yet");
+  // A dead run on the thread, or work on another thread, does not block.
+  assert.deepEqual(plain(lib.answerTarget(row, [done, { ...older, status: "running", live: "dead" }])), { threadId: "t", cwd: "D:\\w" });
+  assert.deepEqual(plain(lib.answerTarget(row, [done, { id: "o", threadId: "other", live: "working" }])), { threadId: "t", cwd: "D:\\w" });
+  // Not finished, or no thread to resume: none.
+  assert.equal(lib.answerTarget({ job: { ...done, status: "failed", live: "failed" } }, []), null);
+  assert.equal(lib.answerTarget({ job: { ...done, threadId: null } }, []), null);
+  assert.equal(lib.answerTarget({ job: null, session: {} }, []), null);
+});
