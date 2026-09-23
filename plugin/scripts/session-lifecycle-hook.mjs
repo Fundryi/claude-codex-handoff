@@ -29,26 +29,76 @@ export function viewerPort(env = process.env) {
   return Number(env.CODEX_VIEWER_PORT) || 8377;
 }
 
-export function checkViewerHealth(port, timeoutMs = 700) {
+// state: "running" (our viewer), "foreign" (another app owns the port) or "down".
+function viewerHealth(port, timeoutMs = 700) {
   return new Promise((resolve) => {
     const req = http.get({ host: "127.0.0.1", port, path: "/health", timeout: timeoutMs }, (res) => {
       let body = "";
       res.on("data", (c) => { if (body.length < 1000) body += c; });
       res.on("end", () => {
-        let app = null;
-        try { app = JSON.parse(body).application; } catch {}
-        resolve(app === "codex-live-viewer" ? "running" : "foreign");
+        let data = null;
+        try { data = JSON.parse(body); } catch {}
+        resolve(data?.application === "codex-live-viewer"
+          ? { state: "running", version: data.version ?? null }
+          : { state: "foreign", version: null });
       });
     });
-    req.on("timeout", () => { req.destroy(); resolve("down"); });
-    req.on("error", () => resolve("down"));
+    req.on("timeout", () => { req.destroy(); resolve({ state: "down", version: null }); });
+    req.on("error", () => resolve({ state: "down", version: null }));
   });
+}
+
+export async function checkViewerHealth(port, timeoutMs = 700) {
+  return (await viewerHealth(port, timeoutMs)).state;
 }
 
 export function bundledViewerPath(pluginRoot) {
   return path.join(pluginRoot, "viewer", "codex-live-viewer.js");
 }
 
+function pluginVersion(pluginRoot) {
+  return JSON.parse(fs.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8")).version;
+}
+
+// True only when both are x.y.z and `running` is lower. Anything unreadable counts as
+// not older, so an unknown viewer is left alone.
+function isOlderVersion(running, current) {
+  const parse = (value) => /^(\d+)\.(\d+)\.(\d+)/.exec(String(value ?? ""))?.slice(1).map(Number);
+  const a = parse(running);
+  const b = parse(current);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
+}
+
+const REPLACE_WAIT_MS = 2000;
+
+// Ask the old viewer to stop (as `codex-live-viewer.js stop` does), then wait a bounded
+// time for the port to free. False when it never does: nothing new starts then.
+async function stopOldViewer(port) {
+  await new Promise((resolve) => {
+    const req = http.request({ host: "127.0.0.1", port, path: "/shutdown", method: "POST", timeout: 500 }, (res) => {
+      res.resume();
+      res.on("end", resolve);
+    });
+    req.on("timeout", () => { req.destroy(); resolve(); });
+    req.on("error", resolve);
+    req.end();
+  });
+  const deadline = Date.now() + REPLACE_WAIT_MS;
+  while (Date.now() < deadline) {
+    if ((await viewerHealth(port, 300)).state === "down") return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
+// Starts the bundled viewer when none runs, and replaces one an older plugin started:
+// that viewer would otherwise keep the port forever. An equal or newer viewer, one
+// with no readable version, and a foreign app are all left alone. The tray launcher
+// never restarts its viewer on its own, so the two cannot fight over the port.
 export async function maybeStartViewer(env = process.env) {
   try {
     if (env.CODEX_VIEWER_AUTOSTART === "0") return "disabled";
@@ -56,10 +106,17 @@ export async function maybeStartViewer(env = process.env) {
     if (!pluginRoot) return "no-plugin-root";
     const script = bundledViewerPath(pluginRoot);
     if (!fs.existsSync(script)) return "no-bundle";
-    const state = await checkViewerHealth(viewerPort(env));
-    if (state !== "down") return state; // running, or a foreign process owns the port
-    spawn(process.execPath, [script, "serve"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
-    return "started";
+    const port = viewerPort(env);
+    const health = await viewerHealth(port);
+    let outcome = "started";
+    if (health.state === "running" && isOlderVersion(health.version, pluginVersion(pluginRoot))) {
+      if (!(await stopOldViewer(port))) return "port-busy";
+      outcome = "replaced";
+    } else if (health.state !== "down") {
+      return health.state; // running, or a foreign process owns the port
+    }
+    spawn(process.execPath, [script, "serve"], { detached: true, stdio: "ignore", windowsHide: true, env }).unref();
+    return outcome;
   } catch {
     return "error";
   }
@@ -69,10 +126,9 @@ export async function sessionUpdateNotice(env = process.env) {
   try {
     const pluginRoot = env.CLAUDE_PLUGIN_ROOT;
     if (!pluginRoot) return null;
-    const manifest = JSON.parse(fs.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8"));
     const stateRoot = env.CODEX_COMPANION_STATE_ROOT || path.join(os.homedir(), ".codex-companion");
     return await checkForUpdate({
-      currentVersion: manifest.version,
+      currentVersion: pluginVersion(pluginRoot),
       cacheFile: path.join(stateRoot, "update-check.json"),
       env
     });
