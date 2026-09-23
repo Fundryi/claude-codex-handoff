@@ -52,6 +52,8 @@ The dashboard classifies every job from ground truth (real PID + heartbeat), not
 
 Recovery is always flag-only: the dashboard marks, you click. It never resumes or kills anything on its own. Job workers are detached and the SessionEnd hook leaves them alone, so restarting Claude Code, or sending a new message under a host like CloudCLI that ends the session per turn, doesn't kill your handoffs. The next prompt brings back a short result for each finished job: its Summary, any question Codex asks, and the job id for the full text.
 
+On CloudCLI, where Claude always runs in one folder, `/codex:rescue --cwd <folder>` targets another project and its result still comes back to Claude's folder. Two limits: a resume started from the viewer is not reported through Claude's prompt hook (only a session in the job's own folder sees it), and `/codex:status` with no job id shows only the current folder's jobs (pass the id to see a `--cwd` job).
+
 ## What you get
 
 **In Claude Code:**

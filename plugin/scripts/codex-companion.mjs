@@ -708,12 +708,13 @@ async function executeTransfer(cwd, options = {}) {
 // A caller sometimes pastes its routing flags into the prompt text, so the
 // prompt opens with "--model astra --effort high". Codex then runs on the wrong
 // model and the job is titled after the flag line. Lift leading flag lines out
-// of the prompt; explicit CLI flags still win over lifted ones.
-function liftInlineFlags(prompt) {
+// of the prompt; explicit CLI flags still win over lifted ones. splitLeadingFlags
+// keeps backslashes, so a Windows --cwd path survives.
+function liftInlineFlags(prompt, config) {
   const lines = String(prompt ?? "").split(/\r?\n/);
   const flags = [];
   while (lines.length && /^--[a-z]/i.test(lines[0].trim())) {
-    flags.push(...splitRawArgumentString(lines.shift().trim()));
+    flags.push(...splitLeadingFlags(lines.shift().trim(), config));
   }
   while (lines.length && !lines[0].trim()) {
     lines.shift();
@@ -945,14 +946,19 @@ async function handleTask(argv) {
     ? parseArgs(splitLeadingFlags(argv[0], taskArgConfig), taskArgConfig)
     : parseCommandInput(argv, taskArgConfig);
 
-  const lifted = liftInlineFlags(readTaskPrompt(resolveCommandCwd(options), options, positionals));
+  const lifted = liftInlineFlags(readTaskPrompt(resolveCommandCwd(options), options, positionals), taskArgConfig);
   if (lifted.flags.length) {
-    for (const [key, value] of Object.entries(parseCommandInput(lifted.flags, taskArgConfig).options)) {
+    // parseArgs, not parseCommandInput: its normalizeArgv would re-split a lone
+    // token like --cwd=C:\x and eat the backslashes.
+    for (const [key, value] of Object.entries(parseArgs(lifted.flags, taskArgConfig).options)) {
       options[key] ??= value;
     }
   }
   // After lifting: a --cwd on the handoff's first line counts too.
   const cwd = resolveCommandCwd(options);
+  if (options.cwd && !fs.statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new Error(`--cwd folder does not exist: ${cwd}`);
+  }
   const workspaceRoot = resolveCommandWorkspace(options);
   const prompt = lifted.prompt;
   const model = normalizeRequestedModel(options.model);
@@ -1237,7 +1243,8 @@ async function handleCancel(argv) {
   }
 
   // Force stop: external interrupt covers broker-hosted turns, then kill the tree.
-  const interrupt = await interruptAppServerTurn(cwd, { threadId, turnId });
+  // The job's own workspace: a --cwd job found through a pointer lives elsewhere.
+  const interrupt = await interruptAppServerTurn(workspaceRoot, { threadId, turnId });
   if (interrupt.attempted) {
     appendLogLine(
       job.logFile,

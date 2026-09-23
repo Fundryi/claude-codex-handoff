@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { execFile, spawnSync } = require("node:child_process");
+const { execFile, spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -68,8 +68,12 @@ test("a --cwd job reaches the launcher's hook once, and status and result find i
   state.upsertJob(dirs.other, { id: "task-unrelated", status: "completed", title: "Elsewhere", completedAt: new Date().toISOString() });
 
   // Routing flags ride on the handoff's first line, as /codex:rescue sends them.
-  const target = dirs.target.split(path.sep).join("/");
-  const launched = await companionRun(["task", "--background", "--json", `--cwd "${target}"\nPrint 1 to 5 in order`]);
+  // The native path: on Windows its backslashes must survive the lift.
+  await assert.rejects(
+    companionRun(["task", "--background", "--json", `--cwd "${path.join(dirs.target, "missing")}"\nPrint 1 to 5 in order`]),
+    (error) => error.stderr.includes(`--cwd folder does not exist: ${path.join(dirs.target, "missing")}`)
+  );
+  const launched = await companionRun(["task", "--background", "--json", `--cwd "${dirs.target}"\nPrint 1 to 5 in order`]);
   const { jobId } = JSON.parse(launched.stdout);
   assert.ok(jobId, launched.stdout);
   assert.ok(state.loadState(dirs.target).jobs.some((job) => job.id === jobId), "the job lives in the target workspace");
@@ -122,4 +126,89 @@ test("a corrupt pointer file never breaks the hook, and pointers to deleted jobs
   assert.deepEqual(state.readJobPointers(dirs.launcher).map((pointer) => pointer.jobId), ["task-live"]);
 
   await assert.rejects(companionRun(["result", "task-gone", "--json"]), /No job found for "task-gone"/);
+});
+
+// A worker stand-in that stops safely the way the real one does: it sees
+// cancelRequested on its job file and marks the job cancelled.
+const SAFE_STOP_WORKER = `
+const fs = require("node:fs");
+const file = process.argv[1];
+setInterval(() => {
+  const job = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (!job.cancelRequested) return;
+  fs.writeFileSync(file, JSON.stringify({ ...job, status: "cancelled", pid: null }));
+  process.exit(0);
+}, 50);
+setTimeout(() => process.exit(1), 20000);
+`;
+
+test("cancel finds a --cwd job from the launcher folder", async () => {
+  const { dirs, state, companionRun } = await setup();
+  const job = { id: "task-cancel-me", status: "running", title: "Long run", workspaceRoot: dirs.target, startedAt: new Date().toISOString() };
+  const jobFile = state.writeJobFile(dirs.target, job.id, job);
+  const worker = spawn(process.execPath, ["-e", SAFE_STOP_WORKER, jobFile], { stdio: "ignore" });
+  try {
+    state.writeJobFile(dirs.target, job.id, { ...job, pid: worker.pid });
+    state.upsertJob(dirs.target, { ...job, pid: worker.pid });
+    state.addJobPointer(dirs.launcher, job.id, dirs.target);
+
+    const payload = JSON.parse((await companionRun(["cancel", job.id, "--json"])).stdout);
+    assert.equal(payload.jobId, job.id);
+    assert.equal(payload.status, "cancelled");
+    assert.equal(payload.stopMode, "safe");
+    assert.equal(state.readJobFile(jobFile).cancelRequested, true, "the request landed in the job's own workspace");
+  } finally {
+    worker.kill();
+  }
+});
+
+// Counts every git spawn in the hook process. The hook spawns git to resolve a
+// workspace, so this is what its cost per prompt scales with.
+function gitCounter(dir) {
+  const counter = path.join(dir, "count-git.cjs");
+  const countFile = path.join(dir, "git-count.txt");
+  fs.writeFileSync(counter, `
+const cp = require("node:child_process");
+const { syncBuiltinESMExports } = require("node:module");
+const original = cp.spawnSync;
+cp.spawnSync = function (command, ...rest) {
+  if (command === "git") require("node:fs").appendFileSync(${JSON.stringify(countFile)}, "x");
+  return original.call(this, command, ...rest);
+};
+syncBuiltinESMExports();
+`);
+  return { counter, count: () => (fs.existsSync(countFile) ? fs.readFileSync(countFile, "utf8").length : 0), reset: () => fs.rmSync(countFile, { force: true }) };
+}
+
+test("the hook's git calls grow with target folders, not with pointers", async () => {
+  const { dirs, state } = await setup();
+  const base = path.dirname(dirs.launcher);
+  const few = path.join(base, "few");
+  const many = path.join(base, "many");
+  fs.mkdirSync(few);
+  fs.mkdirSync(many);
+  const done = new Date().toISOString();
+  for (let i = 0; i < 20; i++) {
+    const root = i % 2 ? dirs.target : dirs.other;
+    const job = { id: `task-p${i}`, status: "completed", completedAt: done, announcedAt: done };
+    state.writeJobFile(root, job.id, job);
+    state.upsertJob(root, job);
+    if (i < 2) state.addJobPointer(few, job.id, root);
+    state.addJobPointer(many, job.id, root);
+  }
+  const git = gitCounter(dirs.state);
+  const runIn = (cwd) => {
+    git.reset();
+    const run = spawnSync(process.execPath, [hook], {
+      cwd,
+      env: { ...process.env, CODEX_COMPANION_STATE_ROOT: dirs.state, CODEX_VIEWER_PORT: "1", NODE_OPTIONS: `--require "${git.counter.split(path.sep).join("/")}"` },
+      input: "{}",
+      encoding: "utf8"
+    });
+    assert.equal(run.status, 0, run.stderr);
+    return git.count();
+  };
+  const fewCount = runIn(few);
+  assert.ok(fewCount > 0, "the counter sees the hook's git calls");
+  assert.equal(runIn(many), fewCount, "20 pointers into 2 folders cost what 2 pointers do");
 });

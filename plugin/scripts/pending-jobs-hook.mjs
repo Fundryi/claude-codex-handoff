@@ -110,21 +110,31 @@ export function markAnnounced(workspaceRoot, jobs, nowIso) {
 // Jobs this workspace started with --cwd elsewhere, found through its pointers.
 // A pointer whose job file is gone is pruned. One whose job is missing from a torn
 // state.json read is kept and simply skipped this time.
+// Each distinct target costs git spawns (resolving its state dir), so everything
+// per target is cached: the cost grows with target folders, not with pointers.
 function pointedJobs(workspaceRoot, ownIds) {
-  const pointers = readJobPointers(workspaceRoot);
-  const listed = new Map();
-  const kept = [];
+  const targets = new Map();
+  const target = (root) => {
+    if (!targets.has(root)) targets.set(root, { jobsDir: resolveJobsDir(root), jobs: null });
+    return targets.get(root);
+  };
+  const dead = new Set();
   const found = [];
-  for (const pointer of pointers) {
-    if (!fs.existsSync(path.join(resolveJobsDir(pointer.workspaceRoot), `${pointer.jobId}.json`))) continue;
-    kept.push(pointer);
-    if (!listed.has(pointer.workspaceRoot)) listed.set(pointer.workspaceRoot, listJobs(pointer.workspaceRoot));
-    const job = listed.get(pointer.workspaceRoot).find((entry) => entry.id === pointer.jobId);
+  for (const pointer of readJobPointers(workspaceRoot)) {
+    const entry = target(pointer.workspaceRoot);
+    if (!fs.existsSync(path.join(entry.jobsDir, `${pointer.jobId}.json`))) {
+      dead.add(pointer.jobId);
+      continue;
+    }
+    entry.jobs ??= listJobs(pointer.workspaceRoot);
+    const job = entry.jobs.find((candidate) => candidate.id === pointer.jobId);
     if (job && !ownIds.has(job.id)) found.push({ root: pointer.workspaceRoot, job });
   }
-  if (kept.length !== pointers.length) {
+  if (dead.size) {
     try {
-      writeJobPointers(workspaceRoot, kept);
+      // Re-read right before writing: a launch since the first read may have
+      // added a pointer, and only the dead ids may go.
+      writeJobPointers(workspaceRoot, readJobPointers(workspaceRoot).filter((pointer) => !dead.has(pointer.jobId)));
     } catch {
       // Pruning is housekeeping; the next prompt tries again.
     }

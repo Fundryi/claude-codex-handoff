@@ -66,17 +66,23 @@ function fakePluginRoot(version) {
     for (let i = 0; i < 50 && !fs.existsSync(path.join(root, "viewer", "started")); i++) await new Promise((r) => setTimeout(r, 100));
     return fs.existsSync(path.join(root, "viewer", "started"));
   };
-  return { root, started };
+  // The hook's env, with its own state folder so no test touches the real one.
+  const env = (port) => ({ CLAUDE_PLUGIN_ROOT: root, CODEX_VIEWER_PORT: String(port), CODEX_COMPANION_STATE_ROOT: path.join(root, "state") });
+  return { root, started, env };
 }
 
-// A stand-in /health server. `closesOnShutdown: false` models a port that never frees.
-async function fakeViewer(body, { closesOnShutdown = true } = {}) {
+// A stand-in /health server. After /shutdown it closes ("closes"), keeps answering
+// ("answers": the port never frees) or accepts and never replies ("hangs").
+async function fakeViewer(body, { afterShutdown = "closes" } = {}) {
+  let shutDown = false;
   const calls = [];
   const server = await listen((req, res) => {
     calls.push(`${req.method} ${req.url}`);
+    if (shutDown && afterShutdown === "hangs") return;
     if (req.url === "/shutdown") {
       res.end("bye");
-      if (closesOnShutdown) { server.close(); server.closeAllConnections(); }
+      shutDown = true;
+      if (afterShutdown === "closes") { server.close(); server.closeAllConnections(); }
       return;
     }
     res.setHeader("Content-Type", "application/json");
@@ -89,7 +95,7 @@ test("an older viewer is shut down and replaced by the bundled one", async () =>
   const { maybeStartViewer } = await import(hookUrl);
   const plugin = fakePluginRoot("2.15.1");
   const viewer = await fakeViewer({ application: "codex-live-viewer", version: "2.11.6" });
-  const outcome = await maybeStartViewer({ CLAUDE_PLUGIN_ROOT: plugin.root, CODEX_VIEWER_PORT: String(viewer.port) });
+  const outcome = await maybeStartViewer(plugin.env(viewer.port));
   assert.equal(outcome, "replaced");
   assert.ok(viewer.calls.includes("POST /shutdown"));
   assert.equal(await plugin.started(), true, "the bundled viewer starts on the freed port");
@@ -106,7 +112,7 @@ test("an equal or newer viewer and a foreign app are left alone", async () => {
   ]) {
     const viewer = await fakeViewer(body);
     try {
-      assert.equal(await maybeStartViewer({ CLAUDE_PLUGIN_ROOT: plugin.root, CODEX_VIEWER_PORT: String(viewer.port) }), expected, JSON.stringify(body));
+      assert.equal(await maybeStartViewer(plugin.env(viewer.port)), expected, JSON.stringify(body));
       assert.deepEqual(viewer.calls.filter((call) => call.startsWith("POST")), [], "never shut down");
     } finally {
       await close(viewer.server);
@@ -115,17 +121,25 @@ test("an equal or newer viewer and a foreign app are left alone", async () => {
   assert.equal(fs.existsSync(path.join(plugin.root, "viewer", "started")), false);
 });
 
-test("an old viewer whose port never frees makes the hook give up in time", async () => {
+test("an old viewer that never frees its port is given up on in time, once per version", async () => {
   const { maybeStartViewer } = await import(hookUrl);
-  const plugin = fakePluginRoot("2.15.1");
-  const viewer = await fakeViewer({ application: "codex-live-viewer", version: "2.11.6" }, { closesOnShutdown: false });
-  try {
-    const started = Date.now();
-    const outcome = await maybeStartViewer({ CLAUDE_PLUGIN_ROOT: plugin.root, CODEX_VIEWER_PORT: String(viewer.port) });
-    assert.equal(outcome, "port-busy");
-    assert.ok(Date.now() - started < 5000, "bounded wait");
-    assert.equal(fs.existsSync(path.join(plugin.root, "viewer", "started")), false, "nothing started on a busy port");
-  } finally {
-    await close(viewer.server);
+  // "hangs": a health check that times out is not proof the port is free.
+  for (const afterShutdown of ["answers", "hangs"]) {
+    const plugin = fakePluginRoot("2.15.1");
+    const viewer = await fakeViewer({ application: "codex-live-viewer", version: "2.11.6" }, { afterShutdown });
+    try {
+      const started = Date.now();
+      assert.equal(await maybeStartViewer(plugin.env(viewer.port)), "port-busy", afterShutdown);
+      assert.ok(Date.now() - started < 3500, `bounded wait (${afterShutdown})`);
+      assert.equal(fs.existsSync(path.join(plugin.root, "viewer", "started")), false, "nothing started on a busy port");
+
+      // CloudCLI runs this hook on every message: no second attempt for this version.
+      const again = await maybeStartViewer(plugin.env(viewer.port));
+      if (afterShutdown === "answers") assert.equal(again, "running");
+      assert.equal(viewer.calls.filter((call) => call === "POST /shutdown").length, 1, "shut down once only");
+    } finally {
+      viewer.server.closeAllConnections();
+      await close(viewer.server);
+    }
   }
 });

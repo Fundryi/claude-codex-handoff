@@ -339,6 +339,10 @@ export async function waitForJobSettled(workspaceRoot, jobId, { timeoutMs = 5000
 export function resolveCancelableJob(cwd, reference, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
+  const pointed = options.viaPointer ? null : pointedWorkspace(workspaceRoot, jobs, reference);
+  if (pointed) {
+    return resolveCancelableJob(pointed, reference, { ...options, viaPointer: true });
+  }
   const activeJobs = jobs.filter((job) => job.status === "queued" || job.status === "running");
 
   if (reference) {
