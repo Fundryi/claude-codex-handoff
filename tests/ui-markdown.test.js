@@ -291,3 +291,21 @@ test("technicalEventKey: stable per kind+ts, and a thinking group keys off its f
   assert.notEqual(groupedFirst, groupedAgain, "a fresh object each call");
   assert.equal(lib.technicalEventKey(groupedFirst), lib.technicalEventKey(groupedAgain));
 });
+
+// Fix round 2, #1: two rows with the same kind+ts (parallel tool calls in one
+// Codex turn) must not collide onto one technicalEventKey.
+test("assignEventKeys: same kind+ts rows get distinct, order-stable keys", () => {
+  const events = [
+    { kind: "cmd", ts: 100, text: "first" },
+    { kind: "cmd", ts: 100, text: "second - same kind and ts as the first" },
+    { kind: "patch", ts: 100, text: "unrelated, different kind" },
+    { kind: "cmd", ts: 100, text: "third - same kind and ts again" },
+  ];
+  const keys = lib.assignEventKeys(events);
+  assert.deepEqual(plain(keys), ["cmd|100#0", "cmd|100#1", "patch|100#0", "cmd|100#2"]);
+  assert.equal(new Set(keys).size, keys.length, "every key is unique");
+
+  // Recomputing from the same ordered list (what every render does) assigns
+  // the same keys again, so a given row keeps its key and its open state.
+  assert.deepEqual(plain(lib.assignEventKeys(events.slice())), plain(keys));
+});

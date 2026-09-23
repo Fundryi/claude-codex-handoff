@@ -1114,6 +1114,21 @@
       return event.kind + '|' + event.ts;
     }
 
+    // Parallel tool calls in one turn can share a kind and a timestamp, so
+    // technicalEventKey alone can collide (two rows fighting over one open
+    // state). This appends an occurrence counter in feed order - #0, #1, ...
+    // per repeated base key - computed fresh from the same ordered event list
+    // every render, so a given row keeps the same key across renders.
+    function assignEventKeys(events) {
+      var counts = {};
+      return events.map(function (event) {
+        var base = technicalEventKey(event);
+        var n = counts[base] || 0;
+        counts[base] = n + 1;
+        return base + '#' + n;
+      });
+    }
+
     // -- Thinking groups: consecutive THINKING events collapse into one row.
     function groupThinking(events) {
       var result = [];
@@ -1972,10 +1987,11 @@
     }
 
     // A thinking group collapses to one row; expanding shows each step, Markdown rendered.
-    function createThinkGroupEvent(event) {
+    // `key` comes from assignEventKeys (technicalEventKey is not collision-safe on its own).
+    function createThinkGroupEvent(event, key) {
       var details = document.createElement('details');
       details.className = 'event technical thinkgroup';
-      details.dataset.key = technicalEventKey(event);
+      details.dataset.key = key || technicalEventKey(event);
       var summary = document.createElement('summary');
       var stepWord = event.steps.length === 1 ? ' step' : ' steps';
       summary.textContent = 'Thinking · ' + eventTime(event.ts) + ' · ' + event.steps.length + stepWord + ' · ' + firstLine(event.text, 120);
@@ -1995,13 +2011,15 @@
       return details;
     }
 
-    function createEvent(event) {
-      if (event.kind === 'thinkgroup') return createThinkGroupEvent(event);
+    // `key` comes from assignEventKeys (technicalEventKey is not collision-safe on its own,
+    // since parallel tool calls in one turn can share a kind and a timestamp).
+    function createEvent(event, key) {
+      if (event.kind === 'thinkgroup') return createThinkGroupEvent(event, key);
       var isLongMessage = ['user', 'agent'].includes(event.kind) && String(event.text || '').length > 3000;
       if (technicalEvent(event) || isLongMessage) {
         var details = document.createElement('details');
         details.className = 'event technical ' + event.kind;
-        details.dataset.key = technicalEventKey(event);
+        details.dataset.key = key || technicalEventKey(event);
         if (prefs.internals) details.open = event.kind === 'patch';
         var summary = document.createElement('summary');
         summary.textContent = eventLabel(event) + '  ' + eventTime(event.ts) + '  ' + firstLine(event.text, 150) + (isLongMessage ? '  (expand)' : '');
@@ -2145,11 +2163,15 @@
       feedInner.querySelectorAll('details[data-key]').forEach(function (d) { openStates[d.dataset.key] = d.open; });
       feedInner.textContent = '';
       var allEvents = groupThinking((store[selected] || []).filter(eventVisible));
+      // Keyed off the full, unpaged list so a row's key doesn't shift as
+      // "Show earlier activity" changes which slice of it is on screen.
+      var allKeys = assignEventKeys(allEvents);
       var renderKey = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
       var defaultLimit = 160;
       var limit = renderLimits[renderKey] || defaultLimit;
       var hiddenCount = Math.max(0, allEvents.length - limit);
       var events = hiddenCount ? allEvents.slice(hiddenCount) : allEvents;
+      var keys = hiddenCount ? allKeys.slice(hiddenCount) : allKeys;
       if (!allEvents.length) {
         var empty = document.createElement('div');
         empty.className = 'feed-empty';
@@ -2177,7 +2199,7 @@
           });
           fragment.appendChild(earlier);
         }
-        events.forEach(function (event) { fragment.appendChild(createEvent(event)); });
+        events.forEach(function (event, idx) { fragment.appendChild(createEvent(event, keys[idx])); });
         feedInner.appendChild(fragment);
       }
       feedInner.querySelectorAll('details[data-key]').forEach(function (d) {
