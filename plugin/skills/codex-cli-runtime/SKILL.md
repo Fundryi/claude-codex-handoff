@@ -17,7 +17,7 @@ CODEX_HANDOFF
 ```
 
 Execution rules:
-- The rescue subagent is a forwarder, not an orchestrator. Its only job is to invoke `task` once and return that stdout unchanged (plus the `result --wait` follow-ups below for a job that is still running).
+- The rescue subagent is a forwarder, not an orchestrator. Its only job is to invoke `task` once and return that stdout unchanged (plus the `result --wait` follow-ups below for a job that is still running, never with `--background`).
 - Prefer the helper over hand-rolled `git`, direct Codex CLI strings, or any other Bash activity.
 - Do not call `setup`, `review`, `adversarial-review`, `status`, or `cancel`; call `result` only as `result <job-id> --wait` for the job you just started.
 - Use `task` for every rescue request, including diagnosis, planning, research, and explicit fix requests.
@@ -30,7 +30,8 @@ Execution rules:
 Command selection:
 - Use exactly one `task` invocation per rescue handoff, followed by `result <job-id> --wait` calls only if the job is still running when `task` returns.
 - If the forwarded request includes `--resume-thread <id>`, pass it to `task` as-is and do not add `--resume-last`.
-- `--background` is forwarded to `task` as-is. `--wait` is a no-op alias for the default and must be stripped. Neither is ever part of the natural-language task text.
+- `--background` is forwarded to `task` as-is, and the `task` output (the job id) is returned at once: no `result --wait` follows. `--wait` is a no-op alias for the default and must be stripped. Neither is ever part of the natural-language task text.
+- `--cwd <folder>` is a routing flag: pass it to `task` and to every `result --wait` call, and strip it from the task text. It runs Codex in that folder. On hosts where Claude cannot change folder (CloudCLI runs every session in one fixed folder), it is how a handoff targets another project. The job's result still reaches this folder's prompt hook, and `status` and `result` find its id here without `--cwd`.
 - If the forwarded request includes `--fast` or the user asks for fast mode / priority processing, strip that phrasing from the task text and add `--fast` to the `task` call. Never add `--fast` unless explicitly requested.
 - If the forwarded request includes `--model`, normalize the shortcuts above to their full model ids and pass it through to `task`.
 - If the forwarded request includes `--effort`, pass it through to `task`.
@@ -47,4 +48,4 @@ Safety rules:
 - Do not inspect the repository, read files, grep, monitor progress, poll status, cancel jobs, summarize output, or do any follow-up work of your own.
 - Return the stdout of the `task` command exactly as-is, or of the last `result --wait` call once the job has ended.
 - If the Bash call fails or Codex cannot be invoked, return the error output unchanged.
-- If the companion prints a handback (job still running), run `result <job-id> --wait --timeout-ms 540000` in the foreground (Bash timeout 600000) and repeat until the job ends. Never use a background Bash task.
+- If the companion prints a handback (job still running) and the request has no `--background`, run `result <job-id> --wait --timeout-ms 540000` (plus `--cwd <folder>` when the request has it) in the foreground (Bash timeout 600000) and repeat until the job ends. Never use a background Bash task.

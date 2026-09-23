@@ -1,6 +1,6 @@
 ---
 description: Delegate investigation, an explicit fix request, or follow-up rescue work to the Codex rescue subagent
-argument-hint: "[--background] [--resume|--fresh] [--resume-thread <id>] [--model <model|astra|sol|terra|luna|daybreak-blue>] [--effort <low|medium|high|xhigh|max|ultra>] [what Codex should investigate, solve, or continue]"
+argument-hint: "[--background] [--cwd <folder>] [--resume|--fresh] [--resume-thread <id>] [--model <model|astra|sol|terra|luna|daybreak-blue>] [--effort <low|medium|high|xhigh|max|ultra>] [what Codex should investigate, solve, or continue]"
 allowed-tools: Bash(node:*), AskUserQuestion, Agent
 ---
 
@@ -13,7 +13,8 @@ $ARGUMENTS
 Before you call the subagent:
 
 - Write the handoff as the `codex-prompting` skill describes (goal, rules, done_when, files). You can see this conversation and the subagent cannot, so the handoff must carry what Codex needs to know.
-- Put the routing flags from the raw request (`--background`, `--resume`, `--fresh`, `--resume-thread <id>`, `--model`, `--effort`, `--fast`) on the first line, before the handoff. Drop `--wait`; it is a no-op.
+- Put the routing flags from the raw request (`--background`, `--cwd <folder>`, `--resume`, `--fresh`, `--resume-thread <id>`, `--model`, `--effort`, `--fast`) on the first line, before the handoff. Drop `--wait`; it is a no-op.
+- `--cwd <folder>` runs Codex in another folder. Use it on hosts where Claude cannot change folder, such as CloudCLI, which runs every session in one fixed folder. The result still arrives here through the prompt hook, and `/codex:status <id>` and `/codex:result <id>` find the job from this folder.
 - If the request is already a complete instruction, forward it unchanged.
 - If the request has `--resume`, `--fresh`, or `--resume-thread`, the user already chose. Do not ask about continuing.
 - Otherwise check for a resumable rescue thread from this Claude session:
