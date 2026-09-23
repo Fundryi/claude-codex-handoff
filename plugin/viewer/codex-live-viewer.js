@@ -20,8 +20,9 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.15.4";
+const APP_VERSION = "2.15.5";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
+const PID_FILE = path.join(os.tmpdir(), "codex-live-viewer-" + PORT + ".pid");
 function parseFlags(argv) {
   const flags = { cmd: null, host: null, tunnel: false, tunnelToken: null, token: null, noOpen: false, flagArgv: [] };
   const rest = [];
@@ -1000,6 +1001,9 @@ function serve() {
       }
     }
     if (FLAGS.tunnel) startTunnel(TOKEN);
+    // Written only once the port is ours, so `kill` can find a viewer too hung to answer.
+    try { fs.writeFileSync(PID_FILE, String(process.pid)); } catch {}
+    process.on("exit", () => { try { if (fs.readFileSync(PID_FILE, "utf8").trim() === String(process.pid)) fs.unlinkSync(PID_FILE); } catch {} });
     console.log("[OK] Watching: " + SESSIONS_DIR);
     tick();
     watchSessions();
@@ -1062,8 +1066,42 @@ function ping(cb) {
 }
 
 function reportBusy() {
-  console.log("[i] Something on " + BASE + " is not answering (a viewer still starting, or busy). Try again in a few seconds.");
+  console.log("[i] Something on " + BASE + " is not answering (a viewer still starting, or busy). Try again in a few seconds, or force it with kill.");
   process.exitCode = 1;
+}
+
+// Force-quit the viewer that owns PORT, even a hung one: the pid comes from the file
+// serve writes, and the process must still be a codex-live-viewer (a recycled pid
+// belonging to anything else is never killed).
+function doKill() {
+  let pid;
+  try { pid = parseInt(fs.readFileSync(PID_FILE, "utf8"), 10); } catch {}
+  if (!pid || !pidAlive(pid)) {
+    try { fs.unlinkSync(PID_FILE); } catch {}
+    console.log("[i] No viewer process recorded for port " + PORT + ".");
+    return;
+  }
+  const check = process.platform === "win32"
+    ? ["powershell", ["-NoProfile", "-Command", "(Get-CimInstance Win32_Process -Filter 'ProcessId=" + pid + "').CommandLine"]]
+    : ["ps", ["-p", String(pid), "-o", "command="]];
+  execFile(check[0], check[1], { windowsHide: true }, (_err, cmdline) => {
+    if (!/codex-live-viewer/.test(String(cmdline || ""))) {
+      try { fs.unlinkSync(PID_FILE); } catch {}
+      console.log("[i] Process " + pid + " is not a viewer (the record was stale). Nothing killed.");
+      return;
+    }
+    const done = () => {
+      try { fs.unlinkSync(PID_FILE); } catch {}
+      waitDown(() => ping((up, _i, busy) => {
+        if (up || busy) { console.error("[X] Port " + PORT + " still answers after killing " + pid + "."); process.exitCode = 1; }
+        else console.log("[OK] Viewer killed (pid " + pid + ").");
+      }));
+    };
+    // /T also ends a tunnel child. On POSIX a detached viewer leads its own process group.
+    if (process.platform === "win32") return execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }, done);
+    try { process.kill(-pid, "SIGKILL"); } catch { try { process.kill(pid, "SIGKILL"); } catch {} }
+    done();
+  });
 }
 
 // True only when both are x.y.z and a is lower; anything unreadable counts as not older.
@@ -1142,19 +1180,21 @@ function doStop(cb) {
 
 // "start <action>" lets /codex:viewer pass its one argument through: an empty or
 // unknown action is a plain start, never the foreground serve.
-const START_ACTIONS = ["restart", "stop", "status"];
+const START_ACTIONS = ["restart", "stop", "status", "kill"];
 const cmd = FLAGS.cmd === "start" && START_ACTIONS.includes(FLAGS.args[0]) ? FLAGS.args[0] : FLAGS.cmd;
 if (cmd === "serve") serve();
 else if (cmd === "start") doStart(false);
+else if (cmd === "kill") doKill();
 else if (cmd === "stop") doStop(stopped => stopped && waitDown(() => ping(up => { if (up) { console.error("[X] Viewer still answers on " + BASE); process.exitCode = 1; } })));
 else if (cmd === "restart") doStart(true);
 else if (cmd === "status") ping((up, info, busy) => busy ? reportBusy() : console.log(up ? "[OK] running " + (info.version || "?") + " -> " + BASE : "[i] not running"));
 else {
-  console.log("Usage: codex-live-viewer <start|stop|restart|status|serve>");
+  console.log("Usage: codex-live-viewer <start|stop|restart|status|kill|serve>");
   console.log("  start    run in background and open the browser; replaces an older running version");
   console.log("  stop     stop the background server");
   console.log("  restart  stop any running viewer, then start this one");
   console.log("  status   is it running?");
+  console.log("  kill     force-quit the viewer, even a hung one");
   console.log("  serve    run in the foreground (default; what npm start does)");
   console.log("Flags:");
   console.log("  --host <addr>         bind address (default 127.0.0.1; 0.0.0.0 = LAN)");

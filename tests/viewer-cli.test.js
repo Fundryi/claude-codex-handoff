@@ -59,6 +59,9 @@ test("start replaces an older viewer; status shows the version; stop confirms it
     // Overlapping health checks once printed this line up to four times.
     assert.equal(started.out.match(/running -> /g).length, 1, started.out);
 
+    // The running viewer records its pid so kill can find it even when hung.
+    assert.equal(alive(Number(fs.readFileSync(pidFile(port), "utf8"))), true);
+
     const status = await cli(port, "start", "status");
     assert.match(status.out, new RegExp("running " + VERSION.replace(/\./g, "\\.") + " -> "));
 
@@ -67,6 +70,7 @@ test("start replaces an older viewer; status shows the version; stop confirms it
     assert.match(stopped.out, /Viewer stopped/);
     assert.doesNotMatch(stopped.out, /still answers/);
     assert.match((await cli(port, "status")).out, /not running/);
+    assert.equal(fs.existsSync(pidFile(port)), false, "a clean stop removes the pid record");
   } finally {
     await cli(port, "stop");
     fake.server.close();
@@ -105,5 +109,54 @@ test("a viewer too slow to answer is reported busy, never replaced or stopped", 
   } finally {
     fake.server.close();
     fake.server.closeAllConnections();
+  }
+});
+
+function pidFile(port) {
+  return path.join(os.tmpdir(), "codex-live-viewer-" + port + ".pid");
+}
+
+function alive(pid) {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+function freePort() {
+  return new Promise((resolve) => {
+    const probe = http.createServer().listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+test("kill force-quits a hung viewer, and never a process a stale record points at", async () => {
+  const { spawn } = require("node:child_process");
+  const port = await freePort();
+  // A "viewer" that holds the port but never answers: its path names codex-live-viewer,
+  // like the real one, so kill accepts it.
+  const script = path.join(home, "codex-live-viewer-hung.js");
+  fs.writeFileSync(script, `require("http").createServer(() => {}).listen(${port}, "127.0.0.1");`);
+  const hung = spawn(process.execPath, [script], { stdio: "ignore" });
+  const other = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  try {
+    for (let i = 0; i < 50 && !(await new Promise((r) => http.get(`http://127.0.0.1:${port}/`).on("error", () => r(false)).setTimeout(100, () => r(true)))); i++);
+    fs.writeFileSync(pidFile(port), String(hung.pid));
+    assert.match((await cli(port, "start", "stop")).out, /not answering.*kill/);
+
+    const killed = await cli(port, "start", "kill");
+    assert.equal(killed.code, 0, killed.out);
+    assert.ok(killed.out.includes("Viewer killed (pid " + hung.pid + ")"), killed.out);
+    assert.equal(alive(hung.pid), false);
+    assert.equal(fs.existsSync(pidFile(port)), false);
+    assert.match((await cli(port, "status")).out, /not running/);
+
+    // A recycled pid that belongs to something else is left alone.
+    fs.writeFileSync(pidFile(port), String(other.pid));
+    assert.match((await cli(port, "kill")).out, /not a viewer/);
+    assert.equal(alive(other.pid), true);
+    assert.match((await cli(port, "kill")).out, /No viewer process recorded/);
+  } finally {
+    for (const child of [hung, other]) try { child.kill("SIGKILL"); } catch {}
+    try { fs.unlinkSync(pidFile(port)); } catch {}
   }
 });

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.15.5
+
+- **`/codex:viewer kill` force-quits the viewer.** It works when the viewer hangs and no longer answers, which `stop` cannot handle. The viewer now records its process id when it starts. `kill` checks that this process is still a viewer before it ends it, so a stale record never kills another program. On Windows it also ends a tunnel the viewer started. `stop` and `status` now point to `kill` when the viewer does not answer.
+
 ## 2.15.4
 
 - **A slow viewer is not taken for a stopped one.** The viewer commands wait 1 second for an answer. A viewer still loading its history can take longer, and was then reported as "not running". A replace could also start the new viewer while the old one still held the port. Now a slow answer is reported as "not answering, try again", and nothing is started or stopped.

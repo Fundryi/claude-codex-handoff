@@ -64,7 +64,7 @@ On CloudCLI, where Claude always runs in one folder, `/codex:rescue --cwd <folde
 | `/codex:review` / `/codex:adversarial-review` | Codex reviews your working tree, or challenges your design |
 | `/codex:status` / `/codex:result` / `/codex:cancel` | Track, fetch, or stop jobs |
 | `/codex:transfer` | Move the current Claude session into a Codex thread |
-| `/codex:viewer [restart\|stop\|status]` | Open the dashboard (starts it, and replaces one left running by an older version); `restart`, `stop` or `status` it |
+| `/codex:viewer [restart\|stop\|kill\|status]` | Open the dashboard (starts it, and replaces one left running by an older version); `restart`, `stop`, force-quit (`kill`) or `status` it |
 | `/codex:setup` | Check Codex CLI readiness |
 
 **Effort and fast mode** are set per job (form fields in the dashboard, `--effort`/`--fast` on the CLI, or just say "high effort" / "use fast mode" in a rescue request):
@@ -117,6 +117,7 @@ node codex-live-viewer.js serve    # foreground
 node codex-live-viewer.js stop
 node codex-live-viewer.js restart  # stop whatever viewer runs, start this one
 node codex-live-viewer.js status   # running or not, and its version
+node codex-live-viewer.js kill     # force-quit, also a hung viewer
 ```
 
 `start` replaces a viewer left running by an older version, so after an update it brings up the new one.
