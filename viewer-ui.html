@@ -88,7 +88,7 @@
     #brand-copy { min-width: 0; flex: 1; }
     #brand-title { font-size: 14px; font-weight: 650; letter-spacing: .1px; }
     #brand-subtitle { color: var(--muted); font-size: 11px; margin-top: 1px; }
-    #new-task-button, #resume-session-button { height: 32px; white-space: nowrap; }
+    #start-button, #resume-session-button { height: 32px; white-space: nowrap; }
     #connection {
       display: inline-flex;
       align-items: center;
@@ -115,8 +115,6 @@
     }
     #search::placeholder { color: var(--faint); }
     [hidden] { display: none !important; }
-    #jobs-actions { display: flex; gap: 6px; margin-top: 8px; }
-    #jobs-actions button { flex: 1; }
     /* Tabs: one fixed row, 28 px. Chips: one small wrapping row inside the tab. */
     #tabs { display: flex; margin-top: 8px; border-bottom: 1px solid var(--border); }
     .tab-button {
@@ -538,6 +536,9 @@
     .control-field textarea { min-height: 90px; resize: vertical; }
     .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .control-checkbox { display: flex; align-items: center; gap: 7px; color: var(--fg); font-size: 12px; }
+    .control-checkbox-wrap { display: grid; gap: 4px; }
+    .control-hint { color: var(--faint); font-size: 10px; }
+    .control-model { display: grid; gap: 6px; }
     #control-modal-error { min-height: 18px; margin-top: 10px; color: #ff9b95; font-size: 12px; white-space: pre-wrap; }
     #control-modal-confirm { background: #17375a; border-color: #36577c; color: #c2ddff; font-weight: 700; }
     #control-modal-confirm.danger { background: #6d2925; border-color: #8a3a34; color: #ffd0cc; }
@@ -718,17 +719,13 @@
         <div id="brand-title">Codex Live Viewer</div>
         <div id="brand-subtitle"><span id="connection"><span id="connection-dot"></span><span id="connection-text">Connecting</span></span></div>
       </div>
-      <button id="new-task-button" class="toolbar-button" type="button">New task</button>
+      <button id="start-button" class="toolbar-button" type="button">Start</button>
       <button id="hide-side" class="icon-button" type="button" title="Collapse session list" aria-label="Collapse session list">&#x2039;</button>
     </div>
     <div id="side-controls">
       <input id="search" type="search" placeholder="Search tasks, projects, or IDs" aria-label="Search sessions">
       <div id="tabs" aria-label="Views"></div>
       <div id="chips" aria-label="Filter this view"></div>
-      <div id="jobs-actions" hidden>
-        <button id="review-button" class="toolbar-button" type="button">Review</button>
-        <button id="adversarial-review-button" class="toolbar-button" type="button">Adversarial</button>
-      </div>
     </div>
     <div id="open-elsewhere" hidden>Open: <span id="open-elsewhere-title"></span> (not in this view) &#xB7; <button id="open-elsewhere-show" type="button">Show</button></div>
     <div id="list"></div>
@@ -884,7 +881,6 @@
     var controlModalError = document.getElementById('control-modal-error');
     var controlModalConfirm = document.getElementById('control-modal-confirm');
     var controlModalCancel = document.getElementById('control-modal-cancel');
-    var jobsActions = document.getElementById('jobs-actions');
     var resumeSessionButton = document.getElementById('resume-session-button');
     var controlAction = null;
     var pendingKillPid = null;
@@ -1313,6 +1309,18 @@
       if (f.sandbox) b.sandbox = f.sandbox;
       return b;
     }
+    function reviewFormBody(f) {
+      const b = { cwd: String(f.cwd || '').trim(), kind: f.kind };
+      if (f.model && String(f.model).trim()) b.model = String(f.model).trim();
+      if (f.fast) b.fast = true;
+      if (f.kind === 'adversarial-review' && f.focus && String(f.focus).trim()) b.focus = String(f.focus).trim();
+      return b;
+    }
+    // Model select: a shortcut value (astra, sol, ...) is sent as-is; 'custom' sends the
+    // trimmed free-text box; anything else (Default, '') sends '' so the body omits model.
+    function resolveModelValue(selectValue, customValue) {
+      return selectValue === 'custom' ? String(customValue || '').trim() : selectValue;
+    }
     function resumeBody(session, opts) {
       const b = { threadId: session.threadId, cwd: session.cwd };
       if (opts.prompt) b.prompt = opts.prompt;
@@ -1717,7 +1725,6 @@
     }
 
     function renderFilters() {
-      jobsActions.hidden = prefs.tab !== 'HANDOFFS';
       var counts = viewCounts(currentRows(), prefs.dismissed);
       var perTab = tabCounts(counts);
       var signature = JSON.stringify([prefs.tab, prefs.chip, counts]);
@@ -2647,59 +2654,91 @@
       controlAction = null;
     }
 
-    function openTaskModal() {
-      showControlModal('Start a new Codex task', 'Start task');
-      var session = currentSession();
-      var cwd = workspaceControls(session ? session.cwd : '');
-      var prompt = document.createElement('textarea');
-      prompt.placeholder = 'What should Codex do?';
-      controlModalBody.appendChild(controlField('Prompt', prompt));
-      var effort = effortSelect();
-      var model = textInput('default');
-      var sandbox = sandboxSelect();
-      var write = controlCheckbox('Allow writes');
-      var fast = controlCheckbox('Fast (priority processing \u2014 uses more quota)');
-      var grid = document.createElement('div');
-      grid.className = 'control-grid';
-      grid.append(controlField('Effort', effort), controlField('Model', model), controlField('Sandbox', sandbox), write.label, fast.label);
-      controlModalBody.appendChild(grid);
-      controlAction = function () {
-        return {
-          endpoint: '/task',
-          body: taskFormBody({ cwd: cwd(), prompt: prompt.value, effort: effort.value, model: model.value, write: write.input.checked, fast: fast.input.checked, sandbox: sandbox.value }),
-          onSuccess: function () { chooseView('HANDOFFS', 'ALL'); }
-        };
-      };
-      prompt.focus();
+    function modelControls() {
+      var select = controlSelect([
+        ['', 'Default'], ['astra', 'astra'], ['sol', 'sol'], ['terra', 'terra'],
+        ['luna', 'luna'], ['daybreak-blue', 'daybreak-blue'], ['custom', 'Custom']
+      ]);
+      select.id = 'start-model';
+      var custom = textInput('Custom model name');
+      custom.id = 'start-model-custom';
+      custom.hidden = true;
+      select.addEventListener('change', function () { custom.hidden = select.value !== 'custom'; });
+      var wrap = document.createElement('div');
+      wrap.className = 'control-model';
+      wrap.append(select, custom);
+      controlModalBody.appendChild(controlField('Model', wrap));
+      return function () { return resolveModelValue(select.value, custom.value); };
     }
 
-    function openReviewModal(initialKind) {
-      showControlModal('Launch a Codex review', 'Start review');
+    // One dialog for every kind of Codex run. Request bodies for the same inputs stay
+    // byte-for-byte what taskFormBody/reviewFormBody produced when Task/Review/Adversarial
+    // were three separate entry points.
+    function openStartModal(initialKind) {
+      showControlModal('Start Codex run', 'Start task');
       var session = currentSession();
       var cwd = workspaceControls(session ? session.cwd : '');
-      var kind = controlSelect([['review', 'Review'], ['adversarial-review', 'Adversarial']]);
-      kind.value = initialKind === 'adversarial-review' ? 'adversarial-review' : 'review';
-      var model = textInput('default');
-      var fast = controlCheckbox('Fast (priority processing \u2014 uses more quota)');
+
+      var kind = controlSelect([['task', 'Task'], ['review', 'Review'], ['adversarial-review', 'Adversarial review']]);
+      kind.id = 'start-kind';
+      kind.value = ['task', 'review', 'adversarial-review'].indexOf(initialKind) !== -1 ? initialKind : 'task';
+      controlModalBody.appendChild(controlField('Kind', kind));
+
+      var prompt = document.createElement('textarea');
+      prompt.placeholder = 'What should Codex do?';
+      var promptField = controlField('Prompt', prompt);
+      controlModalBody.appendChild(promptField);
+
       var focus = document.createElement('textarea');
       focus.placeholder = 'Adversarial focus';
+      var focusField = controlField('Focus', focus);
+      controlModalBody.appendChild(focusField);
+
+      var effort = effortSelect();
+      var effortField = controlField('Effort', effort);
+      var model = modelControls();
+      var sandbox = sandboxSelect();
+      var sandboxField = controlField('Sandbox', sandbox);
+      var write = controlCheckbox('Mark as write task');
+      var writeWrap = document.createElement('div');
+      writeWrap.className = 'control-checkbox-wrap';
+      var writeHint = document.createElement('div');
+      writeHint.className = 'control-hint';
+      writeHint.textContent = 'Label only. The Sandbox setting controls file access.';
+      writeWrap.append(write.label, writeHint);
+      var fast = controlCheckbox('Fast (priority processing \u2014 uses more quota)');
       var grid = document.createElement('div');
       grid.className = 'control-grid';
-      grid.append(controlField('Kind', kind), controlField('Model', model), fast.label);
-      var focusField = controlField('Focus', focus);
-      controlModalBody.append(grid, focusField);
-      function updateFocus() {
-        focusField.hidden = kind.value !== 'adversarial-review';
+      grid.append(effortField, sandboxField, writeWrap, fast.label);
+      controlModalBody.appendChild(grid);
+
+      function updateKind() {
+        var isTask = kind.value === 'task';
+        var isAdversarial = kind.value === 'adversarial-review';
+        promptField.hidden = !isTask;
+        effortField.hidden = !isTask;
+        sandboxField.hidden = !isTask;
+        writeWrap.hidden = !isTask;
+        focusField.hidden = !isAdversarial;
         if (focusField.hidden) focus.value = '';
+        controlModalConfirm.textContent = isTask ? 'Start task' : 'Start review';
       }
-      kind.addEventListener('change', updateFocus);
-      updateFocus();
+      kind.addEventListener('change', updateKind);
+      updateKind();
+
       controlAction = function () {
-        var body = { cwd: cwd(), kind: kind.value };
-        if (model.value.trim()) body.model = model.value.trim();
-        if (fast.input.checked) body.fast = true;
-        if (kind.value === 'adversarial-review' && focus.value.trim()) body.focus = focus.value.trim();
-        return { endpoint: '/review', body: body, onSuccess: function () { chooseView('HANDOFFS', 'ALL'); } };
+        if (kind.value === 'task') {
+          return {
+            endpoint: '/task',
+            body: taskFormBody({ cwd: cwd(), prompt: prompt.value, effort: effort.value, model: model(), write: write.input.checked, fast: fast.input.checked, sandbox: sandbox.value }),
+            onSuccess: function () { chooseView('HANDOFFS', 'ALL'); }
+          };
+        }
+        return {
+          endpoint: '/review',
+          body: reviewFormBody({ cwd: cwd(), kind: kind.value, model: model(), fast: fast.input.checked, focus: focus.value }),
+          onSuccess: function () { chooseView('HANDOFFS', 'ALL'); }
+        };
       };
       kind.focus();
     }
@@ -2867,9 +2906,7 @@
       if (event.key === 'Escape') { closeContextMenu(); closeActionMenu(); }
     });
 
-    document.getElementById('new-task-button').addEventListener('click', openTaskModal);
-    document.getElementById('review-button').addEventListener('click', function () { openReviewModal('review'); });
-    document.getElementById('adversarial-review-button').addEventListener('click', function () { openReviewModal('adversarial-review'); });
+    document.getElementById('start-button').addEventListener('click', function () { openStartModal('task'); });
     resumeSessionButton.addEventListener('click', function () {
       var row = selectedRow();
       var target = row && resumeTarget(row);

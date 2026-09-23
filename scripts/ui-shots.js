@@ -232,26 +232,24 @@ async (page) => {
     skipped.push('context menu: ' + err.message);
   }
 
-  // ---- 8. Start dialog per kind ----
-  if (await clickId('new-task-button')) {
+  // ---- 8. One Start dialog: Kind switch (Task/Review/Adversarial) + Custom model ----
+  if (await clickId('start-button')) {
     await page.waitForTimeout(200);
     await shot('08-start-dialog-task');
-    await pressEscape();
-  }
-  if (await view('HANDOFFS', 'ALL')) {
-    await page.waitForTimeout(200);
-    if (await clickId('review-button')) {
+    try {
+      await page.locator('#start-kind').selectOption('review');
       await page.waitForTimeout(200);
       await shot('08-start-dialog-review');
-      await pressEscape();
-    }
-    if (await clickId('adversarial-review-button')) {
+      await page.locator('#start-kind').selectOption('adversarial-review');
       await page.waitForTimeout(200);
       await shot('08-start-dialog-adversarial-review');
-      await pressEscape();
+      await page.locator('#start-model').selectOption('custom');
+      await page.waitForTimeout(200);
+      await shot('08-start-dialog-custom-model');
+    } catch (err) {
+      skipped.push('start dialog kind/model switch: ' + err.message);
     }
-  } else {
-    skipped.push('Handoffs tab not found - could not reach review start dialogs');
+    await pressEscape();
   }
 
   // ---- 9. result dialog: open Fixture 5, then ... > Job > Show full result ----

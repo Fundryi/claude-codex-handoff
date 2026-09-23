@@ -29,6 +29,39 @@ test("taskFormBody includes fast only when enabled", () => {
   assert.deepEqual(plain(taskFormBody({ cwd: "D:\\x", prompt: "p", fast: false })), { cwd: "D:\\x", prompt: "p" });
 });
 
+test("reviewFormBody trims and omits empty optionals", () => {
+  const { reviewFormBody } = ctx();
+  assert.deepEqual(
+    plain(reviewFormBody({ cwd: " D:\\x ", kind: "review", model: "", fast: false, focus: "" })),
+    { cwd: "D:\\x", kind: "review" },
+  );
+  assert.deepEqual(
+    plain(reviewFormBody({ cwd: "D:\\x", kind: "adversarial-review", model: "astra", fast: true, focus: " check auth " })),
+    { cwd: "D:\\x", kind: "adversarial-review", model: "astra", fast: true, focus: "check auth" },
+  );
+});
+
+test("reviewFormBody sends focus only for adversarial-review", () => {
+  const { reviewFormBody } = ctx();
+  assert.deepEqual(
+    plain(reviewFormBody({ cwd: "D:\\x", kind: "review", focus: "ignored" })),
+    { cwd: "D:\\x", kind: "review" },
+  );
+  assert.deepEqual(
+    plain(reviewFormBody({ cwd: "D:\\x", kind: "adversarial-review", focus: "" })),
+    { cwd: "D:\\x", kind: "adversarial-review" },
+  );
+});
+
+test("resolveModelValue passes shortcuts through as-is and trims custom", () => {
+  const { resolveModelValue } = ctx();
+  assert.equal(resolveModelValue("", "ignored"), "");
+  assert.equal(resolveModelValue("astra", ""), "astra");
+  assert.equal(resolveModelValue("daybreak-blue", ""), "daybreak-blue");
+  assert.equal(resolveModelValue("custom", "  my-model  "), "my-model");
+  assert.equal(resolveModelValue("custom", "   "), "");
+});
+
 test("resumeBody carries thread, cwd and adjustments", () => {
   const { resumeBody } = ctx();
   assert.deepEqual(
