@@ -223,10 +223,15 @@ function addJob(job) {
 }
 
 // ---------------- 7. Queued job, no session file ----------------
+// A real queued job already has a live detached-worker pid (the companion
+// writes it at launch, before the worker has produced a rollout file) -
+// pid: null would make classifyJobLiveness call it "dead" instead of
+// working/running. Use this fixture process's own pid, like fixture 9.
 addJob({
   id: "job-fixture-07", cwd: WORKSPACE_CWD, kind: "task", title: "Fixture 7 - queued job, no session",
-  status: "queued", pid: null, threadId: null, sessionId: "fixture-session",
-  createdAt: new Date(now - 60 * 1000).toISOString(), updatedAt: new Date(now - 60 * 1000).toISOString(),
+  status: "queued", pid: process.pid, threadId: null, sessionId: "fixture-session",
+  heartbeatAt: new Date(now).toISOString(),
+  createdAt: new Date(now - 60 * 1000).toISOString(), updatedAt: new Date(now).toISOString(),
 });
 
 // ---------------- 8. Dead job on a quiet session ----------------
@@ -369,6 +374,10 @@ function stop() {
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
 child.on("exit", (code) => { if (!stopping) process.exit(code ?? 0); });
+child.on("error", (err) => {
+  console.error(`[ui-fixture] failed to start codex-live-viewer.js: ${err.message}`);
+  process.exit(1);
+});
 
 console.log(`[ui-fixture] viewer at http://127.0.0.1:${PORT}`);
 console.log(`[ui-fixture] fixture root: ${root}`);
