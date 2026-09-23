@@ -65,3 +65,36 @@ test("captureTurn still resolves normally when the turn completes before close",
   const state = await capture;
   assert.equal(state.finalTurn.status, "completed");
 });
+
+// The job log is the record that lets someone check what Codex really ran. A chained
+// command used to be cut at 96 characters ("rg ... &..."), hiding the second half.
+test("the job log shows each command in full, and marks a giant one as truncated", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const { captureTurn } = await import(href("codex.mjs"));
+  const { createProgressReporter } = await import(href("tracked-jobs.mjs"));
+  const logFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "clv-cmdlog-")), "job.log");
+  fs.writeFileSync(logFile, "");
+  const client = fakeClient();
+  const capture = captureTurn(client, "thread-1", async () => ({ turn: { id: "turn-1", status: "inProgress" } }), {
+    onProgress: createProgressReporter({ logFile })
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const chained = `rg -n "resolveWorkspaceRoot" plugin/scripts --glob '*.mjs' ${"-e pattern ".repeat(12)}&& git rev-parse --show-toplevel && echo CHAINED-TAIL`;
+  const giant = `echo ${"z".repeat(9000)} GIANT-TAIL`;
+  const item = (command, extra = {}) => ({ type: "commandExecution", id: command.slice(0, 8), command, ...extra });
+  const send = (method, params) => client.notificationHandler({ method, params: { threadId: "thread-1", turnId: "turn-1", ...params } });
+  send("item/started", { item: item(chained) });
+  send("item/completed", { item: item(chained, { status: "completed", exitCode: 0 }) });
+  send("item/started", { item: item(giant) });
+  send("turn/completed", { turn: { id: "turn-1", status: "completed" } });
+  await capture;
+
+  const log = fs.readFileSync(logFile, "utf8");
+  assert.ok(chained.length > 200, "the scenario needs a long chained command");
+  assert.ok(log.includes(`Running command: ${chained}`), "started line carries the whole chain");
+  assert.ok(log.includes(`Command completed: ${chained} (exit 0)`), "completed line carries the whole chain");
+  assert.equal(log.includes("GIANT-TAIL"), false, "a giant command is capped");
+  assert.match(log, /Running command: echo z{3000,} \(truncated\)/, "the cap is generous and marked");
+});

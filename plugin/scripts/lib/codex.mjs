@@ -119,6 +119,15 @@ function shorten(text, limit = 72) {
   return `${normalized.slice(0, limit - 3)}...`;
 }
 
+// The job log is how anyone checks what Codex really ran, so a command is logged
+// whole (on one line). The cap only guards log size and says when it bites.
+const MAX_LOGGED_COMMAND = 4000;
+
+function fullCommand(command) {
+  const normalized = String(command ?? "").trim().replace(/\s+/g, " ");
+  return normalized.length <= MAX_LOGGED_COMMAND ? normalized : `${normalized.slice(0, MAX_LOGGED_COMMAND)} (truncated)`;
+}
+
 function looksLikeVerificationCommand(command) {
   return /\b(test|tests|lint|build|typecheck|type-check|check|verify|validate|pytest|jest|vitest|cargo test|npm test|pnpm test|yarn test|go test|mvn test|gradle test|tsc|eslint|ruff)\b/i.test(
     command
@@ -270,7 +279,7 @@ function describeStartedItem(state, item) {
       return { message: `Reviewer started: ${item.review}`, phase: "reviewing" };
     case "commandExecution":
       return {
-        message: `Running command: ${shorten(item.command, 96)}`,
+        message: `Running command: ${fullCommand(item.command)}`,
         phase: looksLikeVerificationCommand(item.command) ? "verifying" : "running"
       };
     case "fileChange":
@@ -300,7 +309,7 @@ function describeCompletedItem(state, item) {
       const exitCode = item.exitCode ?? "?";
       const statusLabel = item.status === "completed" ? "completed" : item.status;
       return {
-        message: `Command ${statusLabel}: ${shorten(item.command, 96)} (exit ${exitCode})`,
+        message: `Command ${statusLabel}: ${fullCommand(item.command)} (exit ${exitCode})`,
         phase: looksLikeVerificationCommand(item.command) ? "verifying" : "running"
       };
     }
