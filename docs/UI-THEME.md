@@ -22,8 +22,8 @@ Status color has one meaning everywhere: list rows, filter chips, and the select
 |---|---|---|
 | Running | Blue `#67a8ff` | Circular spinner indicates active work |
 | Waiting | Yellow `#e5b849` | Quiet for at least 20 seconds, no job evidence |
-| Needs attention | Orange `#ee964b` | The job process died or its heartbeat stopped, or it failed. Sessions without a job never get this |
-| Needs answer | Orange outline, `?` chip | The finished job's result asks a question (Needs decision) and no run on the thread is working |
+| Needs attention | Orange `#ee964b` | The job process died or its heartbeat stopped, or it failed, and the session is not running again. Sessions without a job never get this |
+| Needs answer | Orange outline, `?` chip | The finished job's result asks a question (Needs decision), no run on the thread is working, and the session has not written since (answered elsewhere) |
 | Finished | Green `#4ac26b` | Completion event received |
 | Stopped | Gray: chip dot `#7b8794`, badge `#9fb0c3` on `#262d38` | Cancelled job or aborted turn. Not an alarm |
 | Archived | Gray: chip dot `#9fb0c3`, badge `#9fb0c3` on `#262d38` (same badge as Stopped, lighter chip dot) | Not a task state |
@@ -49,7 +49,7 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 - One list of rows: a Codex session and the handoff jobs on its thread share one row. Rows show 3 lines: badges, title, project · model · effort · tokens. Full path, thread, sandbox, reason and job detail are in the row tooltip.
 - Tabs Now, Handoffs, History sit in one fixed row. Each tab has filter chips with counts (Now: All, Running, Waiting, Needs attention, Needs answer; Handoffs: All, Running, Needs attention, Needs answer, Finished, Stopped; History: Finished, Stopped, Archived, Dismissed, Everything). Order and position never change when counts update.
 - Choosing a tab or chip pauses auto-open (also closes the Now overview if it was open). A background update must not override an explicit choice.
-- Auto-open is resumed only through its toggle, in the Now overview header ("Auto-open new runs: On/Off"). When resumed, it selects the newest Running task and shows Now/Running unless the current view already shows it.
+- Auto-open is resumed only through its toggle, in the Now overview header ("Auto-open new runs: On/Off"). Turning it on leaves the overview, opens the newest Running task, and shows Now/Running unless the current view already shows it.
 - If the selected task itself changes status, the view moves to that status's chip (same tab first) so the selected row remains visible. History/Everything and Handoffs/All stay put.
 - When the open task is not in the current view, a thin bar above the list says "Open: <title> (not in this view) · Show"; Show switches to a view that contains it.
 - The Now overview (Needs answer, Needs attention, Running, Recently finished) shows when no task is open, and when the Now tab is clicked while already active. It replaces the old Home view; there is no separate Home button.
@@ -57,7 +57,7 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 
 ## Menu behavior
 
-- The task header's `...` menu and a row's right-click menu build from the same item list, grouped under small section labels: Resume (when the row is resumable), Job (Show full result, Cancel job…), Session (Dismiss task / Restore task), Terminal commands (Copy resume, Copy continue, Copy fork, Copy archive / Copy unarchive), Diagnostics (Show processes, Stop task process…, Windows only).
+- The task header's `...` menu and a row's right-click menu build from the same item list, grouped under small section labels: Resume (when the row is resumable), Job (Show full result, or Show job details while the job has not ended; Cancel job…), Session (Dismiss task / Restore task), Terminal commands (Copy resume, Copy continue, Copy fork, Copy archive / Copy unarchive), Diagnostics (Show processes, Stop task process…, Windows only; Stop is left out once the task finished or its job was cancelled, but kept for an aborted turn, whose Codex window may still run).
 - Cancel job… and Stop task process… are the only dangerous entries; both ask for confirmation in-app and never fire from a single click.
 - Escape closes the open menu, in addition to dialogs and the context menu.
 
@@ -68,9 +68,10 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 - "Show internals" reveals internal Codex events (injected prompts, permissions) and auto-expands patches; it replaces the old separate Raw log view.
 - Render at most 160 events initially. Earlier events remain available through Show earlier activity, up to a 500-event cap.
 - The feed follows new events automatically while the reader is already near the bottom, and pauses the moment they scroll up. A paused feed shows Jump to latest instead of a toggle.
+- Live updates rebuild the feed at most once per frame, and not while the reader has text selected in it: the rebuild waits until the selection clears. Open rows and keyboard focus on a row survive a rebuild.
 - A task whose newest handoff run finished shows a Result card between the feed toolbar and the feed: Summary, Changed files, Checks run and Needs decision (or the plain answer), open by default and collapsible. Live feed updates never rebuild it, so a half-typed answer keeps its text, focus and cursor.
 - "Show full result" (in the Result card, the header `...` menu, or a row's right-click menu) opens the job result dialog. It lists every run on the thread, newest first, so an earlier run stays reachable after a resume.
-- The answer box shows only when the result asks a question and no run on the thread is working. "Answer and resume" opens the resume confirm prefilled with `Answer from the user: <text>`; nothing is sent without that confirm.
+- The answer box shows only when the result asks a question, no run on the thread is working, and the session is not running again. When the session wrote more than 5 s after the run asked, the question counts as answered outside the viewer: the row reads Finished and the box hides. "Answer and resume" opens the resume confirm prefilled with `Answer from the user: <text>`; nothing is sent without that confirm.
 
 ## Motion and accessibility
 

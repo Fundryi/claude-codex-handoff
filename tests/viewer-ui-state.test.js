@@ -154,3 +154,24 @@ test("Follow newest deliberately returns to the running view", () => {
   assert.deepEqual(view(context), ["NOW", "ALL"]);
   assert.equal(context.selected, "running");
 });
+
+test("turning Auto-open on from the Now overview leaves it and opens the running task", () => {
+  // The toggle only shows on the overview (prefs.home), where followRunningSession stands down.
+  const running = { id: "running", threadId: "t-run", status: "LIVE" };
+  const context = navigation({ sessions: [{ id: "selected", threadId: "t-sel", status: "IDLE" }, running] });
+  context.prefs.home = true;
+  context.prefs.autoFollow = false;
+
+  context.setAutoOpen(true, running);
+  assert.equal(context.prefs.autoFollow, true);
+  assert.equal(context.prefs.home, false, "the overview closes so the opened task shows");
+  assert.equal(context.selected, "running");
+
+  // Turning it off opens nothing and leaves the view alone.
+  context.prefs.home = true;
+  context.selected = "selected";
+  context.setAutoOpen(false, running);
+  assert.equal(context.prefs.autoFollow, false);
+  assert.equal(context.prefs.home, true);
+  assert.equal(context.selected, "selected");
+});

@@ -361,4 +361,50 @@ test("answerTarget: newest finished run, thread idle, resume folder as resumeTar
   assert.equal(lib.answerTarget({ job: { ...done, status: "failed", live: "failed" } }, []), null);
   assert.equal(lib.answerTarget({ job: { ...done, threadId: null } }, []), null);
   assert.equal(lib.answerTarget({ job: null, session: {} }, []), null);
+  // The thread runs again (resumed in a terminal): answering here would start a second Codex.
+  assert.equal(lib.answerTarget({ ...row, session: { status: "LIVE" } }, [done]), null, "LIVE session");
+  // The session wrote after the run asked: answered outside the viewer, the box goes.
+  const asked = Date.parse(done.updatedAt);
+  assert.equal(lib.answerTarget({ ...row, session: { status: "IDLE", lastGrow: asked + 6000 } }, [done]), null, "answered elsewhere");
+  assert.deepEqual(plain(lib.answerTarget({ ...row, session: { status: "IDLE", lastGrow: asked + 4000 } }, [done])), { threadId: "t", cwd: "D:\\w" }, "within 5 s");
+});
+
+test("resultCardModel: recorded edits match Codex's list by whole path, not substring", () => {
+  const text = "## Changed files\n- `src/a.json`\n- `lib/b.js:12`.\n";
+  const model = plain(lib.resultCardModel(text, ["src/a.js", "D:\\repo\\lib\\b.js"]));
+  const changed = model.sections.find((s) => s.heading === "Changed files").body;
+  assert.match(changed, /`src\/a\.js`/, "src/a.js is its own file, not part of src/a.json");
+  assert.equal(changed.match(/b\.js/g).length, 1, "a line reference still names the listed file");
+});
+
+test("the UI section parser and the plugin's parser agree (ruling R3 drift guard)", async () => {
+  const renderUrl = require("node:url").pathToFileURL(path.join(__dirname, "..", "plugin", "scripts", "lib", "render.mjs")).href;
+  const { extractSection, readNeedsDecision } = await import(renderUrl);
+  const inputs = [
+    ANSWER, ANSWER.replace(/\n/g, "\r\n"),
+    "### Needs Decision:\nPick a name?\n## Other\nx", "**Needs decision:**\nPick a name?",
+    "## Needs decision\n**Keep the old API?**\n- keep\n- delete",
+    "## Needs decision\nKeep the old API?\n**Options:**\n- keep\n- delete\n**Summary**\nx",
+    ...["None", "none.", "-", "N/A", "", "None - all clear.", "No decision needed.", "No questions."].map((e) => `## Summary\nok\n## Needs decision\n${e}`),
+    "No headings at all.", `## Needs decision\n${"q".repeat(3000)}`,
+    "## Summary\nDid it.\n**Changed files:**\n- a.js\n# Top\nx", "**Checks run**:\nnpm test", null, undefined, ""
+  ];
+  for (const text of inputs) {
+    const label = String(JSON.stringify(text)).slice(0, 60);
+    assert.equal(lib.readResultQuestion(text), readNeedsDecision(text), "question: " + label);
+    for (const heading of ["Summary", "Changed files", "Checks run", "Needs decision"]) {
+      assert.equal(lib.extractResultSection(text, heading), extractSection(text, heading), heading + ": " + label);
+    }
+  }
+});
+
+test("selectionInside: a non-empty selection that touches the feed holds its rebuild", () => {
+  const feed = { contains: (node) => node === "in" };
+  const sel = (text, anchorNode, focusNode) => ({ isCollapsed: !text, rangeCount: 1, toString: () => text, anchorNode, focusNode });
+  assert.equal(lib.selectionInside(sel("abc", "in", "in"), feed), true);
+  assert.equal(lib.selectionInside(sel("abc", "out", "in"), feed), true, "dragged in from outside");
+  assert.equal(lib.selectionInside(sel("abc", "out", "out"), feed), false, "selection elsewhere on the page");
+  assert.equal(lib.selectionInside(sel("", "in", "in"), feed), false, "a caret is not a selection");
+  assert.equal(lib.selectionInside({ ...sel("abc", "in", "in"), rangeCount: 0 }, feed), false);
+  assert.equal(lib.selectionInside(null, feed), false);
 });

@@ -350,6 +350,7 @@
     }
     #header-top { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
     #show-side { display: none; flex: none; }
+    #side-backdrop { display: none; } /* the mobile drawer's backdrop; shown only in the 760px media query */
     body.side-collapsed #show-side { display: inline-grid; }
     #task-copy { flex: 1; min-width: 0; }
     #task-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -838,6 +839,9 @@
     var lastHomeSignature = '';
     var lastFilterSignature = '';
     var renderLimits = {};
+    // Live feed batches rebuild at most once per frame, and not while the reader selects text in it.
+    var feedRenderPending = false;
+    var feedRenderFrame = 0;
     // Result card, per job id and in memory only: the fetched detail (refetched when the
     // job's updatedAt/status changes), the typed answer, and whether the reader collapsed it.
     var resultDetails = {};
@@ -902,7 +906,7 @@
       IDLE: { label: 'Waiting', help: 'No new events for 20 seconds and no live job process. It may be running a quiet tool.' },
       STALE: { label: 'Needs attention', help: 'The job process died or stopped its heartbeat before completing.' },
       DONE: { label: 'Finished', help: 'The session reported that the task completed.' },
-      STOPPED: { label: 'Stopped', help: 'The job for this session was cancelled on request.' },
+      STOPPED: { label: 'Stopped', help: 'Stopped: the job was cancelled, or the Codex turn was aborted.' },
       ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' },
       NEEDS_ANSWER: { label: 'Needs answer', help: 'The handoff finished and Codex asked a question.' }
     };
@@ -1389,15 +1393,21 @@
     // Unified row model: sessions and handoff jobs become one list of rows.
     // Row status ids: RUNNING, WAITING, ATTENTION, ANSWER, STOPPED, FINISHED, ARCHIVED.
     var TABS = { NOW: ['ALL', 'RUNNING', 'WAITING', 'ATTENTION', 'ANSWER'], HANDOFFS: ['ALL', 'RUNNING', 'ATTENTION', 'ANSWER', 'FINISHED', 'STOPPED'], HISTORY: ['FINISHED', 'STOPPED', 'ARCHIVED', 'DISMISSED', 'EVERYTHING'] };
+    // The session wrote more than 5 s after the run finished asking: answered outside the viewer.
+    function answeredElsewhere(session, job) {
+      var asked = job ? Date.parse(job.updatedAt || '') : NaN;
+      return !!(session && asked && session.lastGrow > asked + 5000);
+    }
     function rowStatus(session, job) {
       // Job liveness wins over session quiet time; an active job even beats the archive flag.
       var state = job ? job.live || job.status : '';
       if (state === 'working' || state === 'running' || state === 'queued') return 'RUNNING';
+      // A live session beats any ended job, dead or failed ones too: the thread was resumed after
+      // the handoff (often from a copied command), so it runs, and a Resume would start a second Codex.
+      if (session && session.status === 'LIVE' && !session.archived) return 'RUNNING';
       if (state === 'possibly-stuck' || state === 'dead' || state === 'failed') return 'ATTENTION';
       if (session && session.archived) return 'ARCHIVED';
-      // A live session beats a finished or cancelled job: the thread was resumed after the handoff.
-      if (session && session.status === 'LIVE') return 'RUNNING';
-      if (state === 'completed') return String(job.needsDecision || '').trim() ? 'ANSWER' : 'FINISHED';
+      if (state === 'completed') return String(job.needsDecision || '').trim() && !answeredElsewhere(session, job) ? 'ANSWER' : 'FINISHED';
       if (state === 'cancelled') return 'STOPPED';
       var map = { LIVE: 'RUNNING', IDLE: 'WAITING', STALE: 'ATTENTION', STOPPED: 'STOPPED', DONE: 'FINISHED' };
       return (session && map[session.status]) || 'WAITING';
@@ -1518,8 +1528,9 @@
         if (job) add('Resume', 'resume-job', 'Resume job', 'Continue this handoff on its thread (asks first)');
         else add('Resume', 'resume-session', 'Resume', 'Continue this session on its thread (asks first)');
       }
-      if (job && (live === 'completed' || live === 'failed' || live === 'cancelled')) {
-        add('Job', 'show-result', 'Show full result', 'Open the handoff result');
+      if (job) {
+        var ended = live === 'completed' || live === 'failed' || live === 'cancelled';
+        add('Job', 'show-result', ended ? 'Show full result' : 'Show job details', ended ? 'Open the handoff result' : 'Open the handoff job details');
       }
       if (job && (live === 'working' || live === 'possibly-stuck')) {
         add('Job', 'cancel-job', 'Cancel job…', 'Cancel this handoff job (asks first)', true);
@@ -1536,7 +1547,8 @@
       }
       if (session && !archived && opts.windows !== false) {
         add('Diagnostics', 'show-processes', 'Show processes', 'List the Codex processes that match this task');
-        if (session.status !== 'DONE' && session.status !== 'STOPPED') {
+        // An aborted turn is STOPPED too, but its interactive Codex window often still runs.
+        if (session.status !== 'DONE' && !(session.status === 'STOPPED' && live === 'cancelled')) {
           add('Diagnostics', 'stop', 'Stop task process…', 'Pick a matching Codex process and end it (asks first)', true);
         }
       }
@@ -1544,10 +1556,12 @@
     }
     // Where Resume continues, or null when the row is not resumable: a dead or failed handoff
     // with a thread, or a STALE session with no handoff job (a possibly-stuck job may still run).
+    // Never while the session is LIVE: the thread already runs (e.g. resumed in a terminal).
     function resumeTarget(row) {
       var job = row.job;
       var session = row.session;
       var live = job ? job.live || job.status : '';
+      if (session && session.status === 'LIVE') return null;
       if (job) return job.threadId && (live === 'dead' || live === 'failed') ? { threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project } : null;
       if (session && session.status === 'STALE' && session.threadId && !session.archived) return { threadId: session.threadId, cwd: session.cwd };
       return null;
@@ -1588,11 +1602,12 @@
       var decision = extractResultSection(text, 'Needs decision');
       var none = summary == null && changed == null && checks == null && decision == null;
       var listed = String(changed || '').replace(/\\/g, '/');
-      var tokens = listed.split(/[\s`'"(),;*]+/).filter(Boolean);
+      // Whole tokens, minus a trailing line reference or sentence period (src/a.js:12.).
+      var tokens = listed.split(/[\s`'"(),;*]+/).map(function (token) { return token.replace(/(?::\d+)*[.:]*$/, ''); }).filter(Boolean);
       var recorded = [];
       (Array.isArray(touchedFiles) ? touchedFiles : []).forEach(function (file) {
         var path = String(file || '').replace(/\\/g, '/');
-        if (!path || recorded.indexOf(path) !== -1 || listed.indexOf(path) !== -1) return;
+        if (!path || recorded.indexOf(path) !== -1 || tokens.indexOf(path) !== -1) return;
         // Codex usually lists workspace-relative paths; the companion may record absolute ones.
         if (tokens.some(function (token) { return token.indexOf('/') !== -1 && path.slice(-token.length - 1) === '/' + token; })) return;
         recorded.push(path);
@@ -1606,10 +1621,12 @@
       return { plain: none ? text.trim() : '', sections: sections, question: readResultQuestion(text) };
     }
     // Where an answer to a finished run resumes: the run's thread, in resumeTarget's folder.
-    // Null when the newest run did not complete, has no thread, or any run on the thread still works.
+    // Null when the newest run did not complete, has no thread, or any run on the thread still works,
+    // the session is LIVE again, or it was answered outside the viewer.
     function answerTarget(row, jobs) {
       var job = row.job;
       if (!job || !job.threadId || job.status !== 'completed') return null;
+      if (row.session && (row.session.status === 'LIVE' || answeredElsewhere(row.session, job))) return null;
       var busy = threadRuns(jobs, job).some(function (run) {
         var live = run.live || run.status;
         return live === 'working' || live === 'possibly-stuck' || live === 'queued' || live === 'running';
@@ -1703,6 +1720,12 @@
       if (key === 'ArrowLeft') return (currentIndex - 1 + itemCount) % itemCount;
       return currentIndex;
     }
+    // Whether the reader holds a non-empty text selection that starts or ends inside container.
+    // A feed rebuild waits while this is true: it would wipe the selection.
+    function selectionInside(selection, container) {
+      if (!selection || !selection.rangeCount || selection.isCollapsed || !String(selection).length) return false;
+      return container.contains(selection.anchorNode) || container.contains(selection.focusNode);
+    }
     // Whether an element is a text-entry field '/' must not steal a keystroke from.
     function isEditableElement(el) {
       if (!el) return false;
@@ -1764,6 +1787,7 @@
             lastHomeSignature = '';
             savePrefs();
             applyPrefs();
+            renderList();
             renderHeader();
             renderFeed();
             return;
@@ -1806,6 +1830,17 @@
       savePrefs();
     }
 
+    // The Auto-open toggle lives on the Now overview, where followRunningSession stands down.
+    // Turning it on leaves the overview and opens the running task now, as Follow newest did.
+    function setAutoOpen(on, running) {
+      prefs.autoFollow = on;
+      if (on) {
+        prefs.home = false;
+        followRunningSession(running);
+      }
+      savePrefs();
+    }
+
     function followRunningSession(running) {
       if (prefs.home) return;
       if (!prefs.autoFollow || !running) return;
@@ -1828,7 +1863,8 @@
         return hint !== null;
       });
       var openRow = selected ? findRow(rows, selected) : null;
-      var openHidden = !!openRow && !rowInView(openRow, prefs.tab, prefs.chip, prefs.dismissed);
+      // The overview hides the open task, so there is nothing to point at while it shows.
+      var openHidden = !showOverview() && !!openRow && !rowInView(openRow, prefs.tab, prefs.chip, prefs.dismissed);
       var openTitle = openHidden ? sessionTitle(currentSession(), jobs) : '';
       // Only what a row shows: whole rows carry quietMs, which changes on every broadcast.
       function rowKey(row) {
@@ -2260,9 +2296,13 @@
     }
 
     function renderFeed(preservePosition) {
+      feedRenderPending = false; // this rebuild covers any batch still waiting for a frame
       // showOverview() covers "no task open" too, so selected is always truthy past this point.
       renderResultCard();
       if (showOverview()) { renderHome(); return; }
+      // Keyboard focus on a row survives the rebuild: same data-key, new element.
+      var focusHost = feedInner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
+      var focusKey = focusHost ? focusHost.dataset.key : null;
       // Every technical/thinking-group row remembers whether the reader had it
       // open (keyed, not by position: a live task rebuilds its whole feed on
       // every SSE batch, and an open row snapping shut mid-read - along with
@@ -2312,6 +2352,7 @@
       }
       feedInner.querySelectorAll('details[data-key]').forEach(function (d) {
         if (Object.prototype.hasOwnProperty.call(openStates, d.dataset.key)) d.open = openStates[d.dataset.key];
+        if (d.dataset.key === focusKey) d.querySelector('summary').focus({ preventScroll: true });
       });
       if (!preservePosition) requestAnimationFrame(scrollToLatest);
       jumpLatest.hidden = true;
@@ -2485,7 +2526,19 @@
       if (!entry.detail) {
         var note = document.createElement('div');
         note.className = 'result-card-note';
-        note.textContent = entry.error ? 'Could not load job result: ' + entry.error : 'Loading job result…';
+        note.textContent = entry.error ? 'Could not load job result: ' + entry.error + ' ' : 'Loading job result…';
+        if (entry.error) {
+          // Only on request: an automatic refetch would repeat on every SSE batch.
+          var retry = document.createElement('button');
+          retry.type = 'button';
+          retry.className = 'toolbar-button';
+          retry.textContent = 'Retry';
+          retry.addEventListener('click', function () {
+            delete resultDetails[job.id];
+            renderResultCard();
+          });
+          note.appendChild(retry);
+        }
         body.appendChild(note);
         return;
       }
@@ -2503,6 +2556,8 @@
       var question = resultSection('Needs decision', model.question, 'question');
       body.appendChild(question);
       if (!target) {
+        // Answered outside the viewer (rowStatus made it Finished): the question stays, no box.
+        if (row.status === 'FINISHED') return;
         var busy = document.createElement('div');
         busy.className = 'result-card-note';
         busy.textContent = 'A run on this thread is still working. Answer once it finishes.';
@@ -2544,8 +2599,9 @@
       jobModalMeta.appendChild(modalRow('Thread', job.threadId || '', true));
       if (job.fast) jobModalMeta.appendChild(modalRow('Tier', 'fast (priority)'));
       jobModalResult.textContent = 'Loading job result\u2026';
-      // Same rule and folder as every other Resume.
-      var target = resumeTarget({ job: job, session: null, project: '' });
+      // Same rule and folder as every other Resume, so no Resume while the thread's session is LIVE.
+      var threadSession = job.threadId ? sessions.find(function (s) { return s.threadId === job.threadId; }) : null;
+      var target = resumeTarget({ job: job, session: threadSession || null, project: '' });
       jobModalResume.hidden = !target;
       jobModalResume.onclick = target ? function () {
         jobModal.hidden = true;
@@ -3012,9 +3068,7 @@
       renderFeed();
     });
     autoOpenToggle.addEventListener('click', function () {
-      prefs.autoFollow = !prefs.autoFollow;
-      if (prefs.autoFollow) followRunningSession(newestRunning());
-      savePrefs();
+      setAutoOpen(!prefs.autoFollow, newestRunning());
       applyPrefs();
       renderFilters();
       renderList();
@@ -3224,6 +3278,26 @@
       if (window.innerWidth > 760) document.body.classList.remove('mobile-side-open');
     });
 
+    // Grouping (thinking steps) means new events can't just be appended one at a time; a full
+    // rebuild keeps counts and groups correct. It runs once per frame however many batches came,
+    // and waits while the reader has text selected in the feed (the rebuild would wipe it).
+    // Scroll position is unaffected: new content only lands below what is on screen.
+    function requestFeedRender() {
+      feedRenderPending = true;
+      if (!feedRenderFrame) feedRenderFrame = requestAnimationFrame(flushFeedRender);
+    }
+    function flushFeedRender() {
+      feedRenderFrame = 0;
+      if (!feedRenderPending || showOverview()) return;
+      if (selectionInside(window.getSelection(), feedInner)) return; // selectionchange retries
+      var shouldFollow = nearBottom();
+      renderFeed(!shouldFollow);
+      if (!shouldFollow) jumpLatest.hidden = false;
+    }
+    document.addEventListener('selectionchange', function () {
+      if (feedRenderPending && !feedRenderFrame) feedRenderFrame = requestAnimationFrame(flushFeedRender);
+    });
+
     var events = new EventSource('/events');
     events.onopen = function () { setConnection('connected', 'Live updates connected'); };
     events.onerror = function () { setConnection('disconnected', 'Reconnecting\u2026'); };
@@ -3263,12 +3337,7 @@
         existing.push.apply(existing, data.events);
         if (existing.length > 500) existing.splice(0, existing.length - 500);
         if (data.session === selected && !showOverview()) {
-          // Grouping (thinking steps) means new events can't just be appended one at a time;
-          // a full re-render keeps counts and groups correct. Scroll position is unaffected
-          // since new content only ever lands below what's already on screen.
-          var shouldFollow = nearBottom();
-          renderFeed(!shouldFollow);
-          if (!shouldFollow) jumpLatest.hidden = false;
+          requestFeedRender();
         } else if (data.session !== selected) {
           unread.add(data.session);
           renderList();

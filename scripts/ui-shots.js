@@ -155,7 +155,10 @@ async (page) => {
     await shot('03-auto-open-off');
     await clickId('auto-open-toggle');
     await page.waitForTimeout(150);
+    // Turning it on leaves the overview and opens the running task (Fixture 1).
     await shot('03-auto-open-on');
+    await clickSel('#tabs [data-tab="NOW"]'); // back to the overview for Show more
+    await page.waitForTimeout(150);
   }
 
   // ---- 3c. "Show more" under Recently finished -> History/Finished ----

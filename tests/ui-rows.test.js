@@ -88,7 +88,12 @@ test("rowStatus: job liveness wins over session quiet time", () => {
   const cases = [
     [idle, { live: "working" }, "RUNNING"],
     [idle, { status: "queued" }, "RUNNING"],
-    [{ status: "LIVE" }, { live: "dead" }, "ATTENTION"],
+    // A live session beats a dead, failed or stuck job: someone resumed the thread in a terminal,
+    // and a Resume here would start a second Codex on it.
+    [{ status: "LIVE" }, { live: "dead" }, "RUNNING"],
+    [{ status: "LIVE" }, { live: "failed" }, "RUNNING"],
+    [{ status: "LIVE" }, { live: "possibly-stuck" }, "RUNNING"],
+    [{ status: "LIVE", archived: true }, { live: "dead" }, "ATTENTION"],
     [idle, { live: "possibly-stuck" }, "ATTENTION"],
     [idle, { live: "failed" }, "ATTENTION"],
     // A thread resumed interactively after its handoff ended: the live session wins over the old job.
@@ -99,6 +104,11 @@ test("rowStatus: job liveness wins over session quiet time", () => {
     [{ status: "IDLE" }, { live: "completed" }, "FINISHED"],
     [idle, { live: "completed", needsDecision: "Keep the API?" }, "ANSWER"],
     [idle, { live: "completed", needsDecision: "   " }, "FINISHED"],
+    // The session wrote more than 5 s after the run asked: answered outside the viewer.
+    [{ status: "IDLE", lastGrow: T0 + 5000 }, { live: "completed", needsDecision: "Q?", updatedAt: iso(0) }, "ANSWER"],
+    [{ status: "IDLE", lastGrow: T0 + 5001 }, { live: "completed", needsDecision: "Q?", updatedAt: iso(0) }, "FINISHED"],
+    [{ status: "LIVE", lastGrow: T0 + 9000 }, { live: "completed", needsDecision: "Q?", updatedAt: iso(0) }, "RUNNING"],
+    [{ status: "IDLE", lastGrow: T0 + 9000 }, { live: "completed", needsDecision: "Q?" }, "ANSWER", "no updatedAt: nothing to compare"],
     [idle, { live: "cancelled" }, "STOPPED"],
     [{ status: "DONE", archived: true }, { live: "completed" }, "ARCHIVED"],
     [{ status: "LIVE" }, null, "RUNNING"],
@@ -109,8 +119,8 @@ test("rowStatus: job liveness wins over session quiet time", () => {
     [{ status: "LIVE", archived: true }, null, "ARCHIVED"],
     [null, { live: "completed", needsDecision: "Which one?" }, "ANSWER"]
   ];
-  for (const [session, job, want] of cases) {
-    assert.equal(rowStatus(session, job), want, JSON.stringify([session, job]));
+  for (const [session, job, want, note] of cases) {
+    assert.equal(rowStatus(session, job), want, note || JSON.stringify([session, job]));
   }
 });
 
@@ -206,12 +216,20 @@ test("menuItems: grouped items with today's conditions", () => {
   assert.equal(archived[0].label, "Restore task");
 
   // Cancel only while the job works; Resume only when resumable; full result once finished.
+  // The job dialog opens for any job: "Show full result" once it ended, "Show job details" before.
   const working = menuItems(row(null, [{ id: "j", threadId: "t", live: "working" }]), win);
-  assert.deepEqual(ids(working), ["cancel-job", "dismiss", "copy-resume", "copy-continue", "copy-fork"]);
-  assert.equal(working[0].group, "Job");
-  assert.equal(working[0].danger, true);
-  assert.deepEqual(ids(menuItems(row(null, [{ id: "j", threadId: "t", live: "dead" }]), win)), ["resume-job", "dismiss", "copy-resume", "copy-continue", "copy-fork"]);
-  assert.deepEqual(ids(menuItems(row(null, [{ id: "j", live: "failed" }]), win)), ["show-result", "dismiss"], "no thread: nothing to resume or copy");
+  assert.deepEqual(ids(working), ["show-result", "cancel-job", "dismiss", "copy-resume", "copy-continue", "copy-fork"]);
+  assert.equal(working[0].label, "Show job details");
+  assert.equal(working[1].group, "Job");
+  assert.equal(working[1].danger, true);
+  const dead = menuItems(row(null, [{ id: "j", threadId: "t", live: "dead" }]), win);
+  assert.deepEqual(ids(dead), ["resume-job", "show-result", "dismiss", "copy-resume", "copy-continue", "copy-fork"]);
+  assert.equal(dead[1].label, "Show job details");
+  const stuck = menuItems(row({ id: "s", threadId: "t", status: "STALE" }, [{ id: "j", threadId: "t", live: "possibly-stuck" }]), win);
+  assert.equal(stuck.find((i) => i.id === "show-result").label, "Show job details");
+  const failed = menuItems(row(null, [{ id: "j", live: "failed" }]), win);
+  assert.deepEqual(ids(failed), ["show-result", "dismiss"], "no thread: nothing to resume or copy");
+  assert.equal(failed[0].label, "Show full result");
   const done = menuItems(row({ id: "s", threadId: "t", status: "DONE" }, [{ id: "j", threadId: "t", live: "completed" }]), win);
   assert.deepEqual(ids(done), ["show-result", "dismiss", "copy-resume", "copy-continue", "copy-fork", "copy-archive", "show-processes"]);
 
@@ -341,7 +359,10 @@ test("header Resume: shown for a dead or failed job and a STALE session without 
     "archived STALE session": one({ id: "s", threadId: "t", status: "STALE", archived: true }),
     "STALE session without thread": one({ id: "s", status: "STALE" }),
     "waiting session": one({ id: "s", threadId: "t", status: "IDLE" }),
-    "running session": one({ id: "s", threadId: "t", status: "LIVE" })
+    "running session": one({ id: "s", threadId: "t", status: "LIVE" }),
+    // Resumed from a copied command in a terminal: Resume here would start a second Codex on the thread.
+    "dead job on a LIVE session": one({ id: "s", threadId: "t", status: "LIVE" }, [{ id: "j", threadId: "t", live: "dead" }]),
+    "failed job on a LIVE session": one({ id: "s", threadId: "t", status: "LIVE" }, [{ id: "j", threadId: "t", live: "failed" }])
   };
   for (const [name, row] of Object.entries(hidden)) assert.equal(resumeTarget(row), null, name);
 });
