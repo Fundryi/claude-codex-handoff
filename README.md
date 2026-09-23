@@ -6,7 +6,7 @@
 
 <p align="center">
   Hand coding tasks from <a href="https://claude.com/claude-code">Claude Code</a> to the <a href="https://github.com/openai/codex">OpenAI Codex CLI</a> without losing them.<br>
-  A reliability-first fork of the official <code>codex</code> plugin, plus a live dashboard to start, watch, resume, and cancel runs.
+  A reliability-first fork of the official <code>codex</code> plugin, plus a live dashboard to watch, resume, and cancel runs.
 </p>
 
 <p align="center">

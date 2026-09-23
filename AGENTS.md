@@ -1,6 +1,6 @@
 # Codex Control Panel — Agent Guide
 
-Browser dashboard + control panel for local OpenAI Codex CLI sessions (including headless handoffs), bundled with our own fork of the `codex` Claude Code plugin. Follows `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, streams activity to the browser over SSE, and can start/review/resume/cancel Codex jobs through the bundled plugin's companion script.
+Browser dashboard + control panel for local OpenAI Codex CLI sessions (including headless handoffs), bundled with our own fork of the `codex` Claude Code plugin. Follows `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, streams activity to the browser over SSE, and can resume or cancel Codex jobs (and answer a question by resuming) through the bundled plugin's companion script. It does not start new runs; those come from Claude or a Codex CLI.
 
 ## Layout
 
@@ -18,7 +18,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 
 - **Zero npm dependencies.** Node stdlib only (`node >= 22`; requirements always track a current LTS, never an EOL line). Never add a package.
 - Server stays one file, UI stays one file. No build step for the Node side.
-- The viewer never *edits* Codex session files or anything under `~/.codex`. It DOES spawn codex via `plugin/scripts/codex-companion.mjs` (task/review/resume/cancel) and shares plugin job state at `~/.codex-companion/state`. All state-changing endpoints are POST, origin-guarded (`trustedControlOrigin`), and confirmed in-app — never `window.confirm`/`alert`.
+- The viewer never *edits* Codex session files or anything under `~/.codex`. It DOES spawn codex via `plugin/scripts/codex-companion.mjs` (resume/cancel) and shares plugin job state at `~/.codex-companion/state`. All state-changing endpoints are POST, origin-guarded (`trustedControlOrigin`), and confirmed in-app — never `window.confirm`/`alert`.
 - Recovery is flag-only: the classifier marks jobs working / possibly-stuck / dead; the user clicks Resume. No auto-resume, no auto-kill. The one permitted automatic state write is liveness bookkeeping — a `queued`/`running` record whose pid is gone is reconciled to `failed` on read (`reconcileDeadJobs`), because nothing else will ever correct it and a frozen record permanently jams `/codex:result`.
   This covers dead or stuck jobs. When Claude answers a Codex "Needs decision" question and resumes that thread (`codex-result-handling` skill), that is a new handoff Claude chooses, not recovery.
 - Nothing depends on the Claude process staying alive. Hosts like CloudCLI end it on every new message, and the session id can change. Every result must reach Claude through the prompt hook on the next message, so the hook's scope is the whole workspace, never one session.
