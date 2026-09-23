@@ -517,11 +517,13 @@
       border: 1px solid var(--border);
       border-radius: 7px;
       background: var(--bg);
-      color: #b8c5d1;
-      font: 11px/1.55 "Cascadia Code", Consolas, monospace;
-      white-space: pre-wrap;
+      color: var(--fg);
+      font-size: 13px;
+      line-height: 1.55;
       overflow-wrap: anywhere;
     }
+    #job-modal-result :first-child { margin-top: 0; }
+    #job-modal-result :last-child { margin-bottom: 0; }
     #control-modal-box { width: min(92vw, 640px); }
     #control-modal-body { display: grid; gap: 11px; }
     .control-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
@@ -596,6 +598,23 @@
       line-height: 1.55;
       font-size: 13px;
     }
+    .event-body :first-child { margin-top: 0; }
+    .event-body :last-child { margin-bottom: 0; }
+    .md-h1, .md-h2, .md-h3 { margin: 10px 0 4px; font-weight: 650; color: var(--fg); }
+    .md-h1 { font-size: 15px; }
+    .md-h2 { font-size: 14px; }
+    .md-h3 { font-size: 13px; }
+    .md-p { margin: 6px 0; }
+    .md-list { margin: 6px 0; padding-left: 20px; }
+    .md-list li { margin: 2px 0; }
+    .md-quote { margin: 6px 0; padding: 2px 10px; border-left: 2px solid var(--border); color: var(--muted); }
+    .md-code { margin: 8px 0; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; background: #0e141c; }
+    .md-code-lang { padding: 4px 10px; color: var(--muted); font: 10px/1.4 "Cascadia Code", Consolas, monospace; border-bottom: 1px solid var(--border); }
+    .md-code pre { margin: 0; padding: 10px; color: #b8c5d1; font: 11px/1.55 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .event-body code, .md-quote code { font: 11px "Cascadia Code", Consolas, monospace; background: #0e141c; padding: 1px 4px; border-radius: 4px; }
+    .thinkgroup-step { padding: 6px 10px 6px 0; border-top: 1px solid var(--border); }
+    .thinkgroup-step:first-of-type { border-top: none; }
+    .thinkgroup-step-time { color: var(--faint); font-size: 10px; margin-bottom: 3px; }
     .event.user .event-kind { color: var(--blue); }
     .event.user .event-body { border-left-color: #376da8; background: #101b28; }
     .event.agent .event-kind { color: var(--green); }
@@ -714,9 +733,8 @@
     </header>
 
     <div id="feed-toolbar">
-      <button id="internals-button" class="toolbar-button" type="button" title="Show internal Codex events (injected prompts, permissions) and auto-expand patches">Internals</button>
+      <button id="internals-button" class="toolbar-button" type="button" title="Show internal Codex events (injected prompts, permissions) and auto-expand patches">Show internals</button>
       <span class="spacer"></span>
-      <button id="autoscroll-button" class="toolbar-button" type="button">Auto-scroll</button>
     </div>
 
     <div id="feed-wrap">
@@ -741,7 +759,7 @@
       <h2 id="job-modal-title">Job result</h2>
       <label id="job-modal-runs-field" class="control-field" hidden><span>Run on this thread</span><select id="job-modal-runs"></select></label>
       <div id="job-modal-meta"></div>
-      <pre id="job-modal-result"></pre>
+      <div id="job-modal-result"></div>
       <div id="job-modal-actions">
         <button id="job-modal-resume" type="button" hidden>Resume</button>
         <button id="job-modal-close" type="button">Close</button>
@@ -776,7 +794,6 @@
       internals: false,
       home: false,
       autoFollow: true,
-      autoScroll: true,
       selected: null,
       dismissed: []
     };
@@ -841,7 +858,6 @@
     var controlAction = null;
     var pendingKillPid = null;
     var autoOpenToggle = document.getElementById('auto-open-toggle');
-    var autoscrollButton = document.getElementById('autoscroll-button');
     var internalsButton = document.getElementById('internals-button');
     var connection = document.getElementById('connection');
     var connectionText = document.getElementById('connection-text');
@@ -906,6 +922,195 @@
       var value = String(text || '').replace(/\s+/g, ' ').trim();
       return value.length > limit ? value.slice(0, limit - 1) + '\u2026' : value;
     }
+
+    // -- Markdown: a safe subset (headings, paragraphs, bold/italic/inline code,
+    // fenced code, lists, block quotes). Links become plain "text (url)" - never
+    // an <a>. No HTML is ever parsed, so "<script>" etc. stay literal text.
+    function markdownEscapeRegExp(text) {
+      return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    function parseInline(text) {
+      var withLinks = String(text || '').replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, function (m, label, url) {
+        return label + ' (' + url + ')';
+      });
+      var tokens = [];
+      var re = /(\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*)/g;
+      var last = 0;
+      var match;
+      while ((match = re.exec(withLinks))) {
+        if (match.index > last) tokens.push({ type: 'text', text: withLinks.slice(last, match.index) });
+        if (match[2] !== undefined) tokens.push({ type: 'bold', text: match[2] });
+        else if (match[3] !== undefined) tokens.push({ type: 'code', text: match[3] });
+        else tokens.push({ type: 'italic', text: match[4] });
+        last = re.lastIndex;
+      }
+      if (last < withLinks.length) tokens.push({ type: 'text', text: withLinks.slice(last) });
+      if (!tokens.length) tokens.push({ type: 'text', text: '' });
+      return tokens;
+    }
+    // Blocks are nested-free: no indentation-based nesting of lists or quotes.
+    function parseMarkdown(text) {
+      var lines = String(text == null ? '' : text).replace(/\r\n/g, '\n').split('\n');
+      var blocks = [];
+      var i = 0;
+      while (i < lines.length) {
+        var line = lines[i];
+        if (!line.trim()) { i++; continue; }
+        var heading = line.match(/^(#{1,3})\s+(.*)$/);
+        if (heading) {
+          blocks.push({ type: 'heading', level: heading[1].length, inline: parseInline(heading[2].trim()) });
+          i++;
+          continue;
+        }
+        var fence = line.match(/^```(.*)$/);
+        if (fence) {
+          var lang = fence[1].trim();
+          var codeLines = [];
+          i++;
+          while (i < lines.length && !/^```/.test(lines[i])) { codeLines.push(lines[i]); i++; }
+          if (i < lines.length) i++; // skip closing fence
+          blocks.push({ type: 'code', lang: lang, text: codeLines.join('\n') });
+          continue;
+        }
+        if (/^>\s?/.test(line)) {
+          var quoteLines = [];
+          while (i < lines.length && /^>\s?/.test(lines[i])) { quoteLines.push(lines[i].replace(/^>\s?/, '')); i++; }
+          blocks.push({ type: 'quote', inline: parseInline(quoteLines.join(' ').trim()) });
+          continue;
+        }
+        var bullet = line.match(/^[-*]\s+(.*)$/);
+        var numbered = line.match(/^\d+\.\s+(.*)$/);
+        if (bullet || numbered) {
+          var ordered = !!numbered;
+          var items = [];
+          while (i < lines.length) {
+            var itemMatch = ordered ? lines[i].match(/^\d+\.\s+(.*)$/) : lines[i].match(/^[-*]\s+(.*)$/);
+            if (!itemMatch) break;
+            items.push(parseInline(itemMatch[1]));
+            i++;
+          }
+          blocks.push({ type: ordered ? 'ol' : 'ul', items: items });
+          continue;
+        }
+        var paraLines = [];
+        while (i < lines.length && lines[i].trim() && !/^(#{1,3}\s|```|>\s?|[-*]\s|\d+\.\s)/.test(lines[i])) {
+          paraLines.push(lines[i]);
+          i++;
+        }
+        blocks.push({ type: 'paragraph', inline: parseInline(paraLines.join(' ')) });
+      }
+      return blocks;
+    }
+    function appendInline(parent, tokens, doc) {
+      tokens.forEach(function (token) {
+        if (token.type === 'bold') {
+          var strong = doc.createElement('strong');
+          strong.textContent = token.text;
+          parent.appendChild(strong);
+        } else if (token.type === 'italic') {
+          var em = doc.createElement('em');
+          em.textContent = token.text;
+          parent.appendChild(em);
+        } else if (token.type === 'code') {
+          var code = doc.createElement('code');
+          code.textContent = token.text;
+          parent.appendChild(code);
+        } else {
+          parent.appendChild(doc.createTextNode(token.text));
+        }
+      });
+    }
+    function renderMarkdownBlock(block, doc) {
+      if (block.type === 'heading') {
+        var heading = doc.createElement('div');
+        heading.className = 'md-h' + block.level;
+        appendInline(heading, block.inline, doc);
+        return heading;
+      }
+      if (block.type === 'code') {
+        var wrap = doc.createElement('div');
+        wrap.className = 'md-code';
+        if (block.lang) {
+          var label = doc.createElement('div');
+          label.className = 'md-code-lang';
+          label.textContent = block.lang;
+          wrap.appendChild(label);
+        }
+        var pre = doc.createElement('pre');
+        pre.textContent = block.text;
+        wrap.appendChild(pre);
+        return wrap;
+      }
+      if (block.type === 'quote') {
+        var quote = doc.createElement('blockquote');
+        quote.className = 'md-quote';
+        appendInline(quote, block.inline, doc);
+        return quote;
+      }
+      if (block.type === 'ul' || block.type === 'ol') {
+        var list = doc.createElement(block.type === 'ol' ? 'ol' : 'ul');
+        list.className = 'md-list';
+        block.items.forEach(function (inline) {
+          var li = doc.createElement('li');
+          appendInline(li, inline, doc);
+          list.appendChild(li);
+        });
+        return list;
+      }
+      var p = doc.createElement('p');
+      p.className = 'md-p';
+      appendInline(p, block.inline, doc);
+      return p;
+    }
+    // Pure but for `doc`, passed in so tests can hand it a minimal DOM shim.
+    // Never innerHTML: every node is built with createElement/createTextNode.
+    function renderMarkdown(text, doc) {
+      var fragment = doc.createDocumentFragment();
+      parseMarkdown(text).forEach(function (block) {
+        fragment.appendChild(renderMarkdownBlock(block, doc));
+      });
+      return fragment;
+    }
+
+    // -- Result-card section parsing, mirroring plugin/scripts/lib/render.mjs
+    // extractSection/readNeedsDecision exactly (renamed for the UI's own use),
+    // so the two never drift out of sync (see tests/plugin-task-result.test.js).
+    function extractResultSection(text, heading) {
+      var lines = String(text == null ? '' : text).split(/\r?\n/);
+      var name = markdownEscapeRegExp(heading);
+      var startRe = new RegExp('^(?:#{2,3}\\s*' + name + '\\s*:?|\\*\\*' + name + '\\s*:?\\s*\\*\\*\\s*:?)\\s*$', 'i');
+      var start = lines.findIndex(function (line) { return startRe.test(line.trim()); });
+      if (start === -1) return null;
+      var endRe = /^(#{1,3}\s|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i;
+      var body = [];
+      for (var i = start + 1; i < lines.length; i++) {
+        if (endRe.test(lines[i].trim())) break;
+        body.push(lines[i]);
+      }
+      return body.join('\n').trim();
+    }
+    function readResultQuestion(text) {
+      var body = extractResultSection(text, 'Needs decision');
+      if (!body || /^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body)) return null;
+      return body.slice(0, 1000);
+    }
+
+    // -- Thinking groups: consecutive THINKING events collapse into one row.
+    function groupThinking(events) {
+      var result = [];
+      var i = 0;
+      while (i < events.length) {
+        var event = events[i];
+        if (event.kind !== 'think') { result.push(event); i++; continue; }
+        var steps = [event];
+        var j = i + 1;
+        while (j < events.length && events[j].kind === 'think') { steps.push(events[j]); j++; }
+        result.push({ kind: 'thinkgroup', ts: steps[steps.length - 1].ts, steps: steps, text: steps[0].text });
+        i = j;
+      }
+      return result;
+    }
+
     function projectName(cwd) {
       var parts = String(cwd || '').split(/[\\/]/).filter(Boolean);
       return parts.length ? parts[parts.length - 1] : 'Unknown project';
@@ -1378,10 +1583,8 @@
       autoOpenToggle.classList.toggle('on', !!prefs.autoFollow);
       autoOpenToggle.setAttribute('aria-pressed', prefs.autoFollow ? 'true' : 'false');
       autoOpenToggle.textContent = 'Auto-open new runs: ' + (prefs.autoFollow ? 'On' : 'Off');
-      autoscrollButton.classList.toggle('on', !!prefs.autoScroll);
-      autoscrollButton.textContent = prefs.autoScroll ? 'Auto-scroll on' : 'Auto-scroll off';
       internalsButton.classList.toggle('on', !!prefs.internals);
-      internalsButton.textContent = prefs.internals ? 'Internals on' : 'Internals';
+      internalsButton.textContent = prefs.internals ? 'Show internals: on' : 'Show internals';
     }
 
     function currentRows() { return buildRows(sessions, jobs); }
@@ -1741,15 +1944,38 @@
     }
 
     function technicalEvent(event) {
-      return ['cmd', 'out', 'patch', 'tool', 'think'].includes(event.kind);
+      return ['cmd', 'out', 'patch', 'tool', 'think', 'thinkgroup'].includes(event.kind);
     }
 
     function eventLabel(event) {
       if (isInternal(event)) return 'INTERNAL';
-      return ({ user: 'USER', agent: 'CODEX', cmd: 'COMMAND', out: 'OUTPUT', patch: 'PATCH', tool: 'TOOL', think: 'THINKING', done: 'COMPLETE', err: 'ERROR', sys: 'STATUS' })[event.kind] || 'EVENT';
+      return ({ user: 'USER', agent: 'CODEX', cmd: 'COMMAND', out: 'OUTPUT', patch: 'PATCH', tool: 'TOOL', think: 'THINKING', thinkgroup: 'THINKING', done: 'COMPLETE', err: 'ERROR', sys: 'STATUS' })[event.kind] || 'EVENT';
+    }
+
+    // A thinking group collapses to one row; expanding shows each step, Markdown rendered.
+    function createThinkGroupEvent(event) {
+      var details = document.createElement('details');
+      details.className = 'event technical thinkgroup';
+      var summary = document.createElement('summary');
+      summary.textContent = 'Thinking · ' + event.steps.length + ' steps · ' + firstLine(event.text, 120);
+      details.appendChild(summary);
+      event.steps.forEach(function (step) {
+        var stepEl = document.createElement('div');
+        stepEl.className = 'thinkgroup-step';
+        var stepTime = document.createElement('div');
+        stepTime.className = 'thinkgroup-step-time';
+        stepTime.textContent = eventTime(step.ts);
+        var stepBody = document.createElement('div');
+        stepBody.className = 'event-body';
+        stepBody.appendChild(renderMarkdown(step.text || '', document));
+        stepEl.append(stepTime, stepBody);
+        details.appendChild(stepEl);
+      });
+      return details;
     }
 
     function createEvent(event) {
+      if (event.kind === 'thinkgroup') return createThinkGroupEvent(event);
       var isLongMessage = ['user', 'agent'].includes(event.kind) && String(event.text || '').length > 3000;
       if (technicalEvent(event) || isLongMessage) {
         var details = document.createElement('details');
@@ -1776,7 +2002,8 @@
       head.append(kind, time);
       var body = document.createElement('div');
       body.className = 'event-body';
-      body.textContent = event.text || '';
+      if (event.kind === 'user' || event.kind === 'agent') body.appendChild(renderMarkdown(event.text || '', document));
+      else body.textContent = event.text || '';
       article.append(head, body);
       return article;
     }
@@ -1889,7 +2116,7 @@
       // showOverview() covers "no task open" too, so selected is always truthy past this point.
       if (showOverview()) { renderHome(); return; }
       feedInner.textContent = '';
-      var allEvents = (store[selected] || []).filter(eventVisible);
+      var allEvents = groupThinking((store[selected] || []).filter(eventVisible));
       var renderKey = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
       var defaultLimit = 160;
       var limit = renderLimits[renderKey] || defaultLimit;
@@ -1903,7 +2130,7 @@
         var detail = document.createElement('span');
         detail.textContent = prefs.internals
           ? 'Running tasks are selected automatically unless Auto-open is paused.'
-          : 'Toggle Internals to include internal Codex events.';
+          : 'Toggle Show internals to include internal Codex events.';
         empty.append(strong, detail);
         feedInner.appendChild(empty);
       } else {
@@ -1925,7 +2152,7 @@
         events.forEach(function (event) { fragment.appendChild(createEvent(event)); });
         feedInner.appendChild(fragment);
       }
-      if (prefs.autoScroll && !preservePosition) requestAnimationFrame(scrollToLatest);
+      if (!preservePosition) requestAnimationFrame(scrollToLatest);
       jumpLatest.hidden = true;
     }
 
@@ -2018,9 +2245,11 @@
         jobModalMeta.appendChild(modalRow('Summary', detail.summary || ''));
         jobModalMeta.appendChild(modalRow('Thread', detail.threadId || '', true));
         if (job.fast) jobModalMeta.appendChild(modalRow('Tier', 'fast (priority)'));
-        jobModalResult.textContent = detail.rendered
+        var resultText = detail.rendered
           || [detail.errorMessage, detail.stderrTail].filter(Boolean).join('\n\n')
           || 'No rendered result is available.';
+        jobModalResult.textContent = '';
+        jobModalResult.appendChild(renderMarkdown(resultText, document));
       } catch (error) {
         if (token !== jobModalToken) return;
         jobModalResult.textContent = 'Could not load job result: ' + error.message;
@@ -2398,12 +2627,6 @@
       applyPrefs();
       renderFeed();
     });
-    autoscrollButton.addEventListener('click', function () {
-      prefs.autoScroll = !prefs.autoScroll;
-      savePrefs();
-      applyPrefs();
-      if (prefs.autoScroll) scrollToLatest();
-    });
     autoOpenToggle.addEventListener('click', function () {
       prefs.autoFollow = !prefs.autoFollow;
       if (prefs.autoFollow) followRunningSession(newestRunning());
@@ -2655,16 +2878,12 @@
         existing.push.apply(existing, data.events);
         if (existing.length > 500) existing.splice(0, existing.length - 500);
         if (data.session === selected && !showOverview()) {
-          var shouldFollow = prefs.autoScroll && nearBottom();
-          data.events.filter(eventVisible).forEach(function (event) {
-            var key = String(selected || '') + '|' + (prefs.internals ? 'int' : 'std');
-            var limit = renderLimits[key] || 160;
-            var rendered = feedInner.querySelectorAll('.event');
-            if (rendered.length >= limit && rendered.length) rendered[0].remove();
-            feedInner.appendChild(createEvent(event));
-          });
-          if (shouldFollow) requestAnimationFrame(scrollToLatest);
-          else jumpLatest.hidden = false;
+          // Grouping (thinking steps) means new events can't just be appended one at a time;
+          // a full re-render keeps counts and groups correct. Scroll position is unaffected
+          // since new content only ever lands below what's already on screen.
+          var shouldFollow = nearBottom();
+          renderFeed(!shouldFollow);
+          if (!shouldFollow) jumpLatest.hidden = false;
         } else if (data.session !== selected) {
           unread.add(data.session);
           renderList();
@@ -2683,6 +2902,7 @@
     // Prefs saved before the tabs carry filter/home instead of tab/chip. TABS exists only from here on.
     Object.assign(prefs, savedView(prefs));
     delete prefs.filter;
+    delete prefs.autoScroll; // dropped pref: auto-scroll is now always the follow-at-bottom behavior
     applyPrefs();
     renderFilters();
     renderList();
