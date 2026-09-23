@@ -90,5 +90,5 @@ test("jobDetailLine lists the agents a job used", () => {
 test("child sessions render nested with a nickname chip", () => {
   assert.match(html, /\.session\.child\s*\{/);
   assert.match(html, /\.status\.AGENT\s*\{/);
-  assert.match(html, /STALE: \{ label: 'Possibly stuck', help: 'The job process died or stopped its heartbeat before completing\.' \}/);
+  assert.match(html, /STALE: \{ label: 'Needs attention', help: 'The job process died or stopped its heartbeat before completing\.' \}/);
 });

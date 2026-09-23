@@ -106,5 +106,29 @@ test("UI knows the STOPPED status", () => {
 test("UI help text explains job-liveness-aware statuses", () => {
   assert.match(html, /LIVE: \{ label: 'Running', help: 'The session is writing new events, or its job process is alive and streaming\.' \}/);
   assert.match(html, /IDLE: \{ label: 'Waiting', help: 'No new events for 20 seconds and no live job process\. It may be running a quiet tool\.' \}/);
-  assert.match(html, /STALE: \{ label: 'Possibly stuck', help: 'The job process died or stopped its heartbeat before completing\.' \}/);
+  assert.match(html, /STALE: \{ label: 'Needs attention', help: 'The job process died or stopped its heartbeat before completing\.' \}/);
+});
+
+test("quiet session that ended in a turn_aborted error reports STOPPED with the error as reason", () => {
+  const ctx = serverContext();
+  const aborted = makeSession(60000);
+  aborted.events = [{ kind: "err", text: "turn aborted" }];
+  assert.equal(ctx.sessionSummary(aborted, new Map()).status, "STOPPED");
+  assert.equal(ctx.sessionSummary(aborted).status, "STOPPED");
+  assert.equal(ctx.sessionSummary(aborted).lastText, "turn aborted");
+});
+
+test("a turn_aborted session with a working job stays LIVE", () => {
+  const ctx = serverContext();
+  const jobs = ctx.threadJobStatuses([{ threadId: "t-1", status: "running", pid: ALIVE_PID, heartbeatAt: beat(30000) }]);
+  const aborted = makeSession(60000);
+  aborted.events = [{ kind: "err", text: "turn aborted" }];
+  assert.equal(ctx.sessionSummary(aborted, jobs).status, "LIVE");
+});
+
+test("a quiet session that ended normally with no job stays IDLE", () => {
+  const ctx = serverContext();
+  const normal = makeSession(60000);
+  normal.events = [{ kind: "agent", text: "all done" }];
+  assert.equal(ctx.sessionSummary(normal, new Map()).status, "IDLE");
 });

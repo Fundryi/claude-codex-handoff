@@ -373,6 +373,9 @@ function sessionSummary(s, threadJobStatus) {
     : "IDLE";
   if ((status === "IDLE" || status === "STALE") && jobLive === "cancelled") status = "STOPPED";
   const last = s.events[s.events.length - 1];
+  // A quiet session whose last event is an error (e.g. "turn aborted") and
+  // that has no working job is stopped, not waiting forever.
+  if (status === "IDLE" && last && last.kind === "err" && jobLive !== "working") status = "STOPPED";
   return {
     id: s.id,
     threadId: s.meta.threadId || "",

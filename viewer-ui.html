@@ -287,6 +287,7 @@
     .status.STALE { background: #4a2c12; color: #f0a254; }
     .status.DONE { background: #173923; color: #72dc8c; }
     .status.STOPPED { background: #43181d; color: #ff8f88; }
+    .status.NEEDS_ANSWER { background: transparent; border: 1px solid #ee964b; color: #ee964b; }
     .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
     .status.FAST { background: #3d2a14; color: #ffb86b; }
     .status.AGENT { background: #2a2440; color: #c9b6ff; }
@@ -802,7 +803,7 @@
     var STATUS = {
       LIVE: { label: 'Running', help: 'The session is writing new events, or its job process is alive and streaming.' },
       IDLE: { label: 'Waiting', help: 'No new events for 20 seconds and no live job process. It may be running a quiet tool.' },
-      STALE: { label: 'Possibly stuck', help: 'The job process died or stopped its heartbeat before completing.' },
+      STALE: { label: 'Needs attention', help: 'The job process died or stopped its heartbeat before completing.' },
       DONE: { label: 'Finished', help: 'The session reported that the task completed.' },
       STOPPED: { label: 'Stopped', help: 'The job for this session was cancelled on request.' },
       ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' }
@@ -879,20 +880,22 @@
       return parts.join('   |   ');
     }
     function jobStatusLabel(job) {
+      if (job.live === 'completed' && job.needsDecision) return 'Needs answer';
       var map = {
-        working: 'RUNNING',
-        'possibly-stuck': 'QUIET \u2014 process alive',
-        dead: 'DEAD \u2014 resumable',
-        completed: 'DONE',
-        failed: 'FAILED',
-        cancelled: 'CANCELLED'
+        working: 'Running',
+        'possibly-stuck': 'Needs attention',
+        dead: 'Needs attention',
+        failed: 'Needs attention',
+        completed: 'Finished',
+        cancelled: 'Stopped',
+        queued: 'Running'
       };
-      return map[job.live] || String(job.status || '').toUpperCase() || '?';
+      return map[job.live] || map[job.status] || String(job.status || job.live || '?');
     }
     function jobBadgeClass(job) {
+      if (job.live === 'completed' && job.needsDecision) return 'NEEDS_ANSWER';
       return job.live === 'working' ? 'LIVE'
-        : job.live === 'possibly-stuck' ? 'IDLE'
-        : job.live === 'dead' || job.live === 'failed' ? 'STALE'
+        : job.live === 'possibly-stuck' || job.live === 'dead' || job.live === 'failed' ? 'STALE'
         : job.live === 'cancelled' ? 'STOPPED' : 'DONE';
     }
     function jobDetailLine(job, now) {
@@ -1072,7 +1075,8 @@
       return seen;
     }
     function waitReason(session) {
-      if (!session || session.archived || (session.status !== 'IDLE' && session.status !== 'STALE')) return '';
+      if (!session || session.archived) return '';
+      if (session.status !== 'IDLE' && session.status !== 'STALE' && session.status !== 'STOPPED') return '';
       var text = firstLine(session.lastText, 80);
       var phrase = ({
         cmd: 'running command "' + text + '"',
@@ -1080,8 +1084,10 @@
         think: 'thinking (reasoning summary in progress)',
         tool: 'tool call "' + text + '"',
         user: 'prompt sent, no agent response yet',
-        agent: 'agent replied — may be waiting for approval or next instruction'
+        agent: 'agent replied — may be waiting for approval or next instruction',
+        err: text
       })[session.lastKind] || (session.lastEvent || 'no displayable activity');
+      if (session.status === 'STOPPED') return 'Stopped — ' + phrase;
       return 'Waiting ' + formatDuration(session.quietMs) + ' — last activity: ' + phrase;
     }
     function processWarnings(proc, sessionStartMs) {

@@ -6,15 +6,15 @@
 //
 // Usage (mkdir the out dir first - this script cannot):
 //   node scripts/ui-fixture.mjs &
-//   mkdir -p docs/superpowers/ui-audit/after/task-0-baseline
-//   playwright-cli -s=uifix run-code "globalThis.UI_SHOTS_OUT_DIR='docs/superpowers/ui-audit/after/task-0-baseline'"
+//   mkdir -p docs/superpowers/ui-audit/after/latest
+//   playwright-cli -s=uifix run-code "globalThis.UI_SHOTS_OUT_DIR='docs/superpowers/ui-audit/after/latest'"
 //   playwright-cli -s=uifix run-code --filename=scripts/ui-shots.js
 //
 // Selects elements by visible text or stable ids so this keeps working as
 // later tasks change markup; a missing element logs a note and the shot is
 // skipped instead of throwing, so the run never stops partway through.
 async (page) => {
-  const OUT = globalThis.UI_SHOTS_OUT_DIR || 'docs/superpowers/ui-audit/after/task-0-baseline';
+  const OUT = globalThis.UI_SHOTS_OUT_DIR || 'docs/superpowers/ui-audit/after/latest';
   const URL = globalThis.UI_SHOTS_URL || 'http://127.0.0.1:8399';
 
   const log = (...a) => console.log('[ui-shots]', ...a);

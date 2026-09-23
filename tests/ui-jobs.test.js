@@ -10,15 +10,16 @@ const slice = script.match(/function jobStatusLabel[\s\S]*?function jobDetailLin
 
 function ctx() { const c = {}; vm.runInNewContext(slice, c); return c; }
 
-test("jobStatusLabel maps liveness to user-facing badges", () => {
+test("jobStatusLabel maps liveness to one title-case status vocabulary", () => {
   const { jobStatusLabel } = ctx();
-  assert.equal(jobStatusLabel({ live: "working" }), "RUNNING");
-  assert.equal(jobStatusLabel({ live: "possibly-stuck" }), "QUIET — process alive");
-  assert.equal(jobStatusLabel({ live: "dead" }), "DEAD — resumable");
-  assert.equal(jobStatusLabel({ live: "completed" }), "DONE");
-  assert.equal(jobStatusLabel({ live: "failed" }), "FAILED");
-  assert.equal(jobStatusLabel({ live: "cancelled" }), "CANCELLED");
-  assert.equal(jobStatusLabel({ live: "queued", status: "queued" }), "QUEUED");
+  assert.equal(jobStatusLabel({ live: "working" }), "Running");
+  assert.equal(jobStatusLabel({ live: "possibly-stuck" }), "Needs attention");
+  assert.equal(jobStatusLabel({ live: "dead" }), "Needs attention");
+  assert.equal(jobStatusLabel({ live: "failed" }), "Needs attention");
+  assert.equal(jobStatusLabel({ live: "completed" }), "Finished");
+  assert.equal(jobStatusLabel({ live: "completed", needsDecision: "Keep the API?" }), "Needs answer");
+  assert.equal(jobStatusLabel({ live: "cancelled" }), "Stopped");
+  assert.equal(jobStatusLabel({ live: "queued", status: "queued" }), "Running");
 });
 
 test("jobDetailLine includes phase, heartbeat age, effort/model and died reason", () => {
