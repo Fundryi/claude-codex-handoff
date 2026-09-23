@@ -1112,6 +1112,161 @@
         return liveIds.indexOf(entry.id) === -1;
       });
     }
+    // Unified row model: sessions and handoff jobs become one list of rows.
+    // Row status ids: RUNNING, WAITING, ATTENTION, ANSWER, STOPPED, FINISHED, ARCHIVED.
+    var TABS = { NOW: ['ALL', 'RUNNING', 'WAITING', 'ATTENTION', 'ANSWER'], HANDOFFS: ['ALL', 'RUNNING', 'ATTENTION', 'ANSWER', 'FINISHED', 'STOPPED'], HISTORY: ['FINISHED', 'STOPPED', 'ARCHIVED', 'DISMISSED', 'EVERYTHING'] };
+    function rowStatus(session, job) {
+      // Job liveness wins over session quiet time; an active job even beats the archive flag.
+      var state = job ? job.live || job.status : '';
+      if (state === 'working' || state === 'running' || state === 'queued') return 'RUNNING';
+      if (state === 'possibly-stuck' || state === 'dead' || state === 'failed') return 'ATTENTION';
+      if (session && session.archived) return 'ARCHIVED';
+      if (state === 'completed') return String(job.needsDecision || '').trim() ? 'ANSWER' : 'FINISHED';
+      if (state === 'cancelled') return 'STOPPED';
+      var map = { LIVE: 'RUNNING', IDLE: 'WAITING', STALE: 'ATTENTION', STOPPED: 'STOPPED', DONE: 'FINISHED' };
+      return (session && map[session.status]) || 'WAITING';
+    }
+    function buildRows(sessions, jobs) {
+      sessions = sessions || [];
+      // Newest job first per thread; server order breaks ties.
+      var sorted = (jobs || []).map(function (job, index) {
+        return { job: job, index: index, ms: Date.parse(job.updatedAt || job.createdAt || '') || 0 };
+      }).sort(function (a, b) { return b.ms - a.ms || a.index - b.index; });
+      var byThread = {};
+      var threadOrder = [];
+      var loose = [];
+      sorted.forEach(function (entry) {
+        var threadId = entry.job.threadId;
+        if (!threadId) { loose.push([entry.job]); return; }
+        if (!byThread[threadId]) { byThread[threadId] = []; threadOrder.push(threadId); }
+        byThread[threadId].push(entry.job);
+      });
+      var claimed = {};
+      function makeRow(session, threadJobs) {
+        var job = threadJobs && threadJobs.length ? threadJobs[0] : null;
+        var status = rowStatus(session, job);
+        var jobMs = job ? Math.max(Date.parse(job.updatedAt || '') || 0, Date.parse(job.heartbeatAt || '') || 0) : 0;
+        return {
+          id: session ? session.id : 'job:' + job.id,
+          session: session || null,
+          job: job,
+          olderJobs: job ? threadJobs.length - 1 : 0,
+          status: status,
+          title: session ? sessionTitle(session, threadJobs) : job.title || job.kindLabel || 'Untitled Codex job',
+          project: (session && session.cwd) || (job && (job.workspaceRoot || job.cwd)) || '',
+          threadId: (session && session.threadId) || (job && job.threadId) || null,
+          fast: !!(job && job.fast),
+          needsAnswer: status === 'ANSWER',
+          updatedMs: Math.max((session && session.lastGrow) || 0, jobMs),
+          children: []
+        };
+      }
+      function sessionRow(session) {
+        // The first session on a thread takes its jobs; a thread never feeds two rows.
+        var threadJobs = session.threadId && !claimed[session.threadId] ? byThread[session.threadId] : null;
+        if (session.threadId) claimed[session.threadId] = true;
+        return makeRow(session, threadJobs);
+      }
+      var grouped = childSessions(sessions);
+      var drawn = {};
+      var rows = [];
+      // Today's nesting: one level, each session once, grandchildren and cycles stay hidden.
+      sessions.forEach(function (session) {
+        if (grouped.isChild(session.id) || drawn[session.id]) return;
+        drawn[session.id] = true;
+        var row = sessionRow(session);
+        (grouped.byParent[session.threadId] || []).forEach(function (kid) {
+          if (drawn[kid.id]) return;
+          drawn[kid.id] = true;
+          row.children.push(sessionRow(kid));
+        });
+        rows.push(row);
+      });
+      threadOrder.forEach(function (threadId) {
+        if (!claimed[threadId]) rows.push(makeRow(null, byThread[threadId]));
+      });
+      loose.forEach(function (threadJobs) { rows.push(makeRow(null, threadJobs)); });
+      return rows.map(function (row, index) { return { row: row, index: index }; })
+        .sort(function (a, b) { return b.row.updatedMs - a.row.updatedMs || a.index - b.index; })
+        .map(function (entry) { return entry.row; });
+    }
+    function rowInView(row, tab, chip, dismissedIds) {
+      if (!row || !Object.prototype.hasOwnProperty.call(TABS, tab) || TABS[tab].indexOf(chip) === -1) return false;
+      var dismissed = (dismissedIds || []).indexOf(row.id) !== -1;
+      if (tab === 'HISTORY' && chip === 'EVERYTHING') return true;
+      if (tab === 'HISTORY' && chip === 'DISMISSED') return dismissed;
+      if (dismissed) return false;
+      if (tab === 'HISTORY') return row.status === chip;
+      if (row.status === 'ARCHIVED') return false;
+      if (tab === 'HANDOFFS' && !row.job) return false;
+      // Now/All keeps today's Active rule: everything not finished.
+      if (chip === 'ALL') return tab === 'HANDOFFS' || row.status !== 'FINISHED';
+      return row.status === chip;
+    }
+    function viewCounts(rows, dismissedIds) {
+      var counts = {};
+      Object.keys(TABS).forEach(function (tab) {
+        counts[tab] = {};
+        TABS[tab].forEach(function (chip) {
+          counts[tab][chip] = (rows || []).filter(function (row) { return rowInView(row, tab, chip, dismissedIds); }).length;
+        });
+      });
+      return counts;
+    }
+    function legacyFilterView(prefs) {
+      var map = {
+        ACTIVE: ['NOW', 'ALL'], JOBS: ['HANDOFFS', 'ALL'], LIVE: ['NOW', 'RUNNING'], IDLE: ['NOW', 'WAITING'],
+        STALE: ['NOW', 'ATTENTION'], DONE: ['HISTORY', 'FINISHED'], STOPPED: ['HISTORY', 'STOPPED'],
+        ARCHIVED: ['HISTORY', 'ARCHIVED'], ALL: ['HISTORY', 'EVERYTHING']
+      };
+      var saved = prefs && typeof prefs === 'object' ? prefs : {};
+      if (saved.home === true) return { tab: 'NOW', chip: 'ALL', overview: true };
+      var hit = typeof saved.filter === 'string' && Object.prototype.hasOwnProperty.call(map, saved.filter) ? map[saved.filter] : map.ACTIVE;
+      return { tab: hit[0], chip: hit[1], overview: false };
+    }
+    // One builder for the ... menu and the right-click menu. context: { dismissed, windows }.
+    // windows defaults to true: the page cannot see the server platform, and today Stop always shows.
+    function menuItems(row, context) {
+      var items = [];
+      var opts = context || {};
+      var session = row.session;
+      var job = row.job;
+      var live = job ? job.live || job.status : '';
+      var archived = !!(session && session.archived);
+      function add(group, id, label, title, danger) {
+        var item = { group: group, id: id, label: label, title: title };
+        if (danger) item.danger = true;
+        items.push(item);
+      }
+      if (job && job.threadId && (live === 'dead' || live === 'failed')) {
+        add('Resume', 'resume-job', 'Resume job', 'Continue this handoff on its thread (asks first)');
+      } else if (!job && session && session.status === 'STALE' && session.threadId && !archived) {
+        add('Resume', 'resume-session', 'Resume', 'Continue this session on its thread (asks first)');
+      }
+      if (job && (live === 'completed' || live === 'failed' || live === 'cancelled')) {
+        add('Job', 'show-result', 'Show full result', 'Open the handoff result');
+      }
+      if (job && (live === 'working' || live === 'possibly-stuck')) {
+        add('Job', 'cancel-job', 'Cancel job…', 'Cancel this handoff job (asks first)', true);
+      }
+      add('Session', 'dismiss', opts.dismissed ? 'Restore task' : 'Dismiss task', 'Hide this task from all filters except All. Viewer-only, undoable.');
+      if (row.threadId && !archived) {
+        add('Terminal commands', 'copy-resume', 'Copy resume command', 'codex resume — reopen this conversation interactively');
+        add('Terminal commands', 'copy-continue', 'Copy continue command', 'codex exec resume — continue this task headlessly where it left off');
+        add('Terminal commands', 'copy-fork', 'Copy fork command', 'codex fork — experiment on a copy; the original session stays untouched');
+        if (session) add('Terminal commands', 'copy-archive', 'Copy archive command', 'codex archive — move this session out of the list permanently (paste in your terminal)');
+      }
+      if (row.threadId && archived) {
+        add('Terminal commands', 'copy-unarchive', 'Copy unarchive command', 'codex unarchive — move this session back into the active list (paste in your terminal)');
+      }
+      if (session && !archived && opts.windows !== false) {
+        add('Diagnostics', 'show-processes', 'Show processes', 'List the Codex processes that match this task');
+        if (session.status !== 'DONE' && session.status !== 'STOPPED') {
+          add('Diagnostics', 'stop', 'Stop task process…', 'Pick a matching Codex process and end it (asks first)', true);
+        }
+      }
+      return items;
+    }
     function setConnection(state, label) {
       connection.className = state;
       connectionText.textContent = label;
