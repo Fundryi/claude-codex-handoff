@@ -61,9 +61,23 @@ test("childSessions ignores self-parent links and the list never recurses past o
   ]);
   assert.equal(grouped.isChild("self"), false);
   assert.equal(grouped.byParent["t-self"], undefined);
-  assert.match(html, /if \(drawn\[session\.id\]\) return;/);
-  assert.match(html, /if \(!depth && kids\.length\) \{/);
-  assert.match(html, /sessionCard\(kid, 1, group\)/);
+
+  // The list draws buildRows output: each session once, children one level deep.
+  const { buildRows } = slice(/function firstLine[\s\S]*?(?=\n    function setConnection)/);
+  const rows = buildRows([
+    { id: "self", threadId: "t-self", parentThreadId: "t-self" },
+    { id: "a", threadId: "t-a", parentThreadId: "t-b" },
+    { id: "b", threadId: "t-b", parentThreadId: "t-a" },
+    { id: "p", threadId: "t-p" },
+    { id: "kid", threadId: "t-k", parentThreadId: "t-p" },
+    { id: "grandkid", threadId: "t-g", parentThreadId: "t-k" },
+  ], []);
+  const drawn = rows.flatMap((row) => [row.id, ...row.children.map((kid) => kid.id)]);
+  assert.equal(new Set(drawn).size, drawn.length, "no session drawn twice");
+  assert.ok(rows.every((row) => row.children.every((kid) => kid.children.length === 0)), "one level only");
+  assert.deepEqual(plain(rows.find((row) => row.id === "p").children.map((kid) => kid.id)), ["kid"]);
+  assert.match(html, /row\.children\.forEach\(function \(kid\) \{ group\.appendChild\(rowElement\(kid, 1, /);
+  assert.match(html, /'Agent team · ' \+ \(row\.children\.length \+ 1\)/);
 });
 
 test("homeCards folds child agents into the parent card", () => {

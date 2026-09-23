@@ -114,24 +114,44 @@
       font-size: 13px;
     }
     #search::placeholder { color: var(--faint); }
-    #filters { display: grid; gap: 2px; margin-top: 8px; }
     [hidden] { display: none !important; }
     #jobs-actions { display: flex; gap: 6px; margin-top: 8px; }
     #jobs-actions button { flex: 1; }
-    .filter-button {
-      border: 1px solid transparent;
-      border-radius: 6px;
-      padding: 5px 8px;
+    /* Tabs: one fixed row, 28 px. Chips: one small wrapping row inside the tab. */
+    #tabs { display: flex; margin-top: 8px; border-bottom: 1px solid var(--border); }
+    .tab-button {
+      flex: 1;
+      height: 28px;
+      border: 0;
+      border-bottom: 2px solid transparent;
       background: transparent;
       color: var(--muted);
       cursor: pointer;
       font-size: 11px;
+      white-space: nowrap;
     }
-    .filter-button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; }
-    .filter-button, .toolbar-button {
+    .tab-button:hover { color: var(--fg); background: var(--hover); }
+    .tab-button.on { color: #b9d8ff; border-bottom-color: var(--blue); font-weight: 600; }
+    .tab-button .count { margin-left: 0; }
+    #chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .chip-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .tab-button, .chip-button, .toolbar-button {
       transition: color .14s ease, background-color .14s ease, border-color .14s ease;
     }
-    .filter-button::before {
+    .chip-button::before {
       content: '';
       width: 8px;
       height: 8px;
@@ -139,9 +159,8 @@
       background: #7b8794;
       flex: none;
     }
-    .filter-button[data-filter="ACTIVE"]::before { background: var(--blue); }
-    .filter-button[data-filter="LIVE"]::before { background: var(--blue); }
-    .filter-button[data-filter="LIVE"].has-sessions::before {
+    .chip-button[data-chip="ALL"]::before, .chip-button[data-chip="RUNNING"]::before { background: var(--blue); }
+    .chip-button[data-chip="RUNNING"].has-sessions::before {
       width: 9px;
       height: 9px;
       border: 2px solid var(--blue);
@@ -149,17 +168,32 @@
       background: transparent;
       animation: spin .8s linear infinite;
     }
-    .filter-button[data-filter="IDLE"]::before { background: var(--yellow); }
-    .filter-button[data-filter="STALE"]::before { background: #ee964b; }
-    .filter-button[data-filter="DONE"]::before { background: var(--green); }
-    .filter-button[data-filter="ALL"]::before { background: #7b8794; }
-    .filter-button[data-filter="ARCHIVED"]::before { background: #9fb0c3; }
-    .filter-button:hover { background: var(--hover); color: var(--fg); }
-    .filter-button.on {
+    .chip-button[data-chip="WAITING"]::before { background: var(--yellow); }
+    .chip-button[data-chip="ATTENTION"]::before { background: #ee964b; }
+    .chip-button[data-chip="ANSWER"]::before { background: transparent; border: 1px solid #ee964b; }
+    .chip-button[data-chip="FINISHED"]::before { background: var(--green); }
+    .chip-button[data-chip="STOPPED"]::before { background: #ff8f88; }
+    .chip-button[data-chip="ARCHIVED"]::before { background: #9fb0c3; }
+    .chip-button:hover { background: var(--hover); color: var(--fg); }
+    .chip-button.on {
       border-color: #36577c;
       background: #172a40;
       color: #b9d8ff;
     }
+    #open-elsewhere {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    #open-elsewhere-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+    #open-elsewhere-show { flex: none; border: 0; padding: 0 2px; background: transparent; color: var(--blue); cursor: pointer; font-size: 11px; }
+    #open-elsewhere-show:hover { text-decoration: underline; }
     .count { opacity: .7; margin-left: auto; }
     #list { overflow-y: auto; min-height: 0; flex: 1; }
     .session {
@@ -236,8 +270,7 @@
       text-overflow: ellipsis;
     }
     .session-last { display: none; }
-    .session.job .session-last { display: block; white-space: normal; }
-    .job-open {
+    .row-open {
       width: 100%;
       display: block;
       border: 0;
@@ -260,6 +293,8 @@
     }
     .job-actions button:hover { background: var(--hover); color: var(--fg); }
     .job-actions .cancel-job { color: #ff8f88; }
+    .match-hint { color: var(--faint); font-size: 10px; margin-top: 2px; }
+    .search-count { padding: 6px 12px 2px; color: var(--muted); font-size: 11px; }
     .session-time { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
     .unread { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 7px var(--blue); }
     .status {
@@ -290,6 +325,7 @@
     .status.NEEDS_ANSWER { background: transparent; border: 1px solid #ee964b; color: #ee964b; }
     .status.ARCHIVED { background: #262d38; color: #9fb0c3; }
     .status.FAST { background: #3d2a14; color: #ffb86b; }
+    .status.HANDOFF { background: #1f2a38; color: #a9c4e4; }
     .status.AGENT { background: #2a2440; color: #c9b6ff; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
@@ -635,12 +671,14 @@
     </div>
     <div id="side-controls">
       <input id="search" type="search" placeholder="Search tasks, projects, or IDs" aria-label="Search sessions">
-      <div id="filters" aria-label="Filter sessions"></div>
+      <div id="tabs" aria-label="Views"></div>
+      <div id="chips" aria-label="Filter this view"></div>
       <div id="jobs-actions" hidden>
         <button id="review-button" class="toolbar-button" type="button">Review</button>
         <button id="adversarial-review-button" class="toolbar-button" type="button">Adversarial</button>
       </div>
     </div>
+    <div id="open-elsewhere" hidden>Open: <span id="open-elsewhere-title"></span> (not in this view) &#xB7; <button id="open-elsewhere-show" type="button">Show</button></div>
     <div id="list"></div>
   </aside>
 
@@ -731,7 +769,6 @@
     var defaults = {
       sideWidth: 340,
       sideCollapsed: false,
-      filter: 'ACTIVE',
       query: '',
       internals: false,
       home: false,
@@ -758,7 +795,10 @@
     var side = document.getElementById('side');
     var splitter = document.getElementById('splitter');
     var list = document.getElementById('list');
-    var filters = document.getElementById('filters');
+    var tabsBar = document.getElementById('tabs');
+    var chipsBar = document.getElementById('chips');
+    var openElsewhere = document.getElementById('open-elsewhere');
+    var openElsewhereTitle = document.getElementById('open-elsewhere-title');
     var search = document.getElementById('search');
     var feed = document.getElementById('feed');
     var feedInner = document.getElementById('feed-inner');
@@ -806,18 +846,16 @@
       STALE: { label: 'Needs attention', help: 'The job process died or stopped its heartbeat before completing.' },
       DONE: { label: 'Finished', help: 'The session reported that the task completed.' },
       STOPPED: { label: 'Stopped', help: 'The job for this session was cancelled on request.' },
-      ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' }
+      ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' },
+      NEEDS_ANSWER: { label: 'Needs answer', help: 'The handoff finished and Codex asked a question.' }
     };
-    var FILTERS = [
-      { id: 'ACTIVE', label: 'Active' },
-      { id: 'JOBS', label: 'Jobs' },
-      { id: 'LIVE', label: 'Running' },
-      { id: 'IDLE', label: 'Waiting' },
-      { id: 'STALE', label: 'Stuck' },
-      { id: 'DONE', label: 'Finished' },
-      { id: 'ARCHIVED', label: 'Archived' },
-      { id: 'ALL', label: 'All' }
-    ];
+    // Tab and chip ids come from TABS; the tab count is the count of the chip named here.
+    var VIEW_LABELS = {
+      NOW: 'Now', HANDOFFS: 'Handoffs', HISTORY: 'History',
+      ALL: 'All', RUNNING: 'Running', WAITING: 'Waiting', ATTENTION: 'Needs attention', ANSWER: 'Needs answer',
+      FINISHED: 'Finished', STOPPED: 'Stopped', ARCHIVED: 'Archived', DISMISSED: 'Dismissed', EVERYTHING: 'Everything'
+    };
+    var TAB_COUNT = { NOW: 'ALL', HANDOFFS: 'ALL', HISTORY: 'EVERYTHING' };
 
     function loadPrefs() {
       try {
@@ -835,10 +873,6 @@
     function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
     function currentSession() { return sessions.find(function (session) { return session.id === selected; }); }
     function isDismissed(id) { return (prefs.dismissed || []).indexOf(id) !== -1; }
-    function projectName(cwd) {
-      var parts = String(cwd || '').split(/[\\/]/).filter(Boolean);
-      return parts.length ? parts[parts.length - 1] : 'Unknown project';
-    }
     function sessionStart(id) {
       var match = String(id || '').match(/rollout-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/);
       return match ? new Date(+match[1], match[2] - 1, +match[3], +match[4], +match[5], +match[6]).getTime() : 0;
@@ -861,6 +895,10 @@
     function firstLine(text, limit) {
       var value = String(text || '').replace(/\s+/g, ' ').trim();
       return value.length > limit ? value.slice(0, limit - 1) + '\u2026' : value;
+    }
+    function projectName(cwd) {
+      var parts = String(cwd || '').split(/[\\/]/).filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : 'Unknown project';
     }
     function formatDuration(ms) {
       var seconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
@@ -1104,9 +1142,6 @@
     function forkCommand(threadId) { return 'codex fork ' + threadId; }
     function archiveCommand(threadId) { return 'codex archive ' + threadId; }
     function unarchiveCommand(threadId) { return 'codex unarchive ' + threadId; }
-    function dismissedHides(session, filter, dismissedIds) {
-      return filter !== 'ALL' && (dismissedIds || []).indexOf(session.id) !== -1;
-    }
     function mergeHistoryResults(results, liveIds) {
       return (results || []).filter(function (entry) {
         return liveIds.indexOf(entry.id) === -1;
@@ -1267,6 +1302,70 @@
       }
       return items;
     }
+    // The top-level row that draws this id: the row itself, or the lead of a child agent.
+    function findRow(rows, id) {
+      return (rows || []).find(function (row) {
+        return row.id === id || row.children.some(function (kid) { return kid.id === id; });
+      }) || null;
+    }
+    // A view that shows the row: the current one, then the row's status chip (same tab first,
+    // Now before History before Handoffs), then the catch-alls. HISTORY/EVERYTHING always matches.
+    function viewContaining(row, tab, chip, dismissedIds) {
+      var tries = [[tab, chip], [tab, row.status], ['NOW', row.status], ['HISTORY', row.status], ['HANDOFFS', row.status],
+        ['NOW', 'ALL'], ['HANDOFFS', 'ALL'], ['HISTORY', 'DISMISSED'], ['HISTORY', 'EVERYTHING']];
+      var hit = tries.find(function (view) { return rowInView(row, view[0], view[1], dismissedIds); });
+      return { tab: hit[0], chip: hit[1] };
+    }
+    // Stored tab + chip win; prefs from before the tabs map over from filter / home.
+    function savedView(prefs) {
+      var saved = prefs && typeof prefs === 'object' ? prefs : {};
+      if (typeof saved.tab === 'string' && Object.prototype.hasOwnProperty.call(TABS, saved.tab) && TABS[saved.tab].indexOf(saved.chip) !== -1) {
+        return { tab: saved.tab, chip: saved.chip };
+      }
+      var legacy = legacyFilterView(saved);
+      return { tab: legacy.tab, chip: legacy.chip };
+    }
+    // null: no match. '': empty query or a title match. Otherwise the name of the field that matched.
+    function rowMatch(row, query) {
+      var needle = String(query || '').trim().toLowerCase();
+      if (!needle) return '';
+      function has(value) { return String(value || '').toLowerCase().indexOf(needle) !== -1; }
+      if (has(row.title)) return '';
+      var session = row.session || {};
+      var job = row.job || {};
+      var fields = [['project', row.project], ['thread id', row.threadId], ['model', session.model || job.model], ['agent', session.agentNickname],
+        ['id', session.id], ['id', job.id], ['job title', job.title], ['kind', job.kindLabel], ['phase', job.phase]];
+      var hit = fields.find(function (field) { return has(field[1]); });
+      if (hit) return hit[0];
+      return (row.children || []).some(function (kid) { return rowMatch(kid, needle) !== null; }) ? 'agent team' : null;
+    }
+    // Row status -> the badge class (and STATUS key) it shows.
+    function rowBadge(status) {
+      return ({ RUNNING: 'LIVE', WAITING: 'IDLE', ATTENTION: 'STALE', ANSWER: 'NEEDS_ANSWER', STOPPED: 'STOPPED', FINISHED: 'DONE', ARCHIVED: 'ARCHIVED' })[status] || 'IDLE';
+    }
+    function rowMetaLine(row) {
+      var session = row.session || {};
+      var job = row.job || {};
+      var tokens = session.tokensUsed ? 'tokens: ' + Number(session.tokensUsed).toLocaleString() : '';
+      return [projectName(row.project), session.model || job.model, job.effort || session.effort, tokens].filter(Boolean).join(' · ');
+    }
+    // The session's wait/stop reason, only while the session (not a job) decides the row status.
+    function rowReason(row) {
+      if (!row.session || (row.job && rowStatus(row.session, null) !== row.status)) return '';
+      return waitReason(row.session);
+    }
+    // Everything the 3-line row leaves out: full path, thread, sandbox, reason, handoff detail.
+    function rowTooltip(row, now) {
+      var session = row.session;
+      var job = row.job;
+      var lines = [row.title, row.project];
+      if (row.threadId) lines.push('thread: ' + row.threadId);
+      if (session && session.sandbox) lines.push('sandbox: ' + session.sandbox);
+      lines.push(rowReason(row));
+      if (job) lines.push('Handoff: ' + (jobDetailLine(job, now) || job.status || job.live || ''));
+      if (row.olderJobs) lines.push(row.olderJobs + (row.olderJobs === 1 ? ' earlier run' : ' earlier runs') + ' on this thread');
+      return lines.filter(Boolean).join('\n');
+    }
     function setConnection(state, label) {
       connection.className = state;
       connectionText.textContent = label;
@@ -1289,274 +1388,143 @@
       internalsButton.textContent = prefs.internals ? 'Internals on' : 'Internals';
     }
 
-    function statusCount(id) {
-      if (id === 'JOBS') return jobs.length;
-      if (id === 'ALL') return sessions.length;
-      var grouped = childSessions(sessions);
-      var pool = sessions.filter(function (s) { return !isDismissed(s.id) && !grouped.isChild(s.id); });
-      return pool.filter(function (s) { return filterIncludes(s, id); }).length;
+    function currentRows() { return buildRows(sessions, jobs); }
+
+    function viewButton(className, label, count, on) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = className + (on ? ' on' : '');
+      button.setAttribute('aria-pressed', on ? 'true' : 'false');
+      button.append(document.createTextNode(label + ' '));
+      var badge = document.createElement('span');
+      badge.className = 'count';
+      badge.textContent = count;
+      button.appendChild(badge);
+      return button;
     }
 
     function renderFilters() {
-      jobsActions.hidden = prefs.filter !== 'JOBS';
-      var signature = JSON.stringify([prefs.filter, FILTERS.map(function (item) { return [item.id, statusCount(item.id)]; })]);
+      jobsActions.hidden = prefs.tab !== 'HANDOFFS';
+      var counts = viewCounts(currentRows(), prefs.dismissed);
+      var signature = JSON.stringify([prefs.tab, prefs.chip, counts]);
       if (signature === lastFilterSignature) return;
       lastFilterSignature = signature;
-      filters.textContent = '';
-      FILTERS.forEach(function (item) {
-        var itemCount = statusCount(item.id);
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.dataset.filter = item.id;
-        button.className = 'filter-button' + (prefs.filter === item.id ? ' on' : '') + (item.id === 'LIVE' && itemCount > 0 ? ' has-sessions' : '');
-        button.setAttribute('aria-pressed', prefs.filter === item.id ? 'true' : 'false');
-        button.append(document.createTextNode(item.label + ' '));
-        var count = document.createElement('span');
-        count.className = 'count';
-        count.textContent = itemCount;
-        button.appendChild(count);
-        button.addEventListener('click', function () { chooseFilter(item.id); });
-        filters.appendChild(button);
+      tabsBar.textContent = '';
+      Object.keys(TABS).forEach(function (tab) {
+        var button = viewButton('tab-button', VIEW_LABELS[tab], '(' + counts[tab][TAB_COUNT[tab]] + ')', prefs.tab === tab);
+        button.dataset.tab = tab;
+        button.addEventListener('click', function () { chooseView(tab, prefs.tab === tab ? prefs.chip : TABS[tab][0]); });
+        tabsBar.appendChild(button);
+      });
+      chipsBar.textContent = '';
+      TABS[prefs.tab].forEach(function (chip) {
+        var count = counts[prefs.tab][chip];
+        var button = viewButton('chip-button' + (chip === 'RUNNING' && count > 0 ? ' has-sessions' : ''), VIEW_LABELS[chip], count, prefs.chip === chip);
+        button.dataset.chip = chip;
+        button.addEventListener('click', function () { chooseView(prefs.tab, chip); });
+        chipsBar.appendChild(button);
       });
     }
 
-    function visibleSessions() {
-      var query = String(prefs.query || '').trim().toLowerCase();
-      var grouped = childSessions(sessions);
-      return sessions.filter(function (session) {
-        if (grouped.isChild(session.id)) return false;
-        if (dismissedHides(session, prefs.filter, prefs.dismissed)) return false;
-        if (!filterIncludes(session, prefs.filter)) return false;
-        if (!query) return true;
-        function matches(s) {
-          return [s.title, s.cwd, s.threadId, s.id, s.model, s.agentNickname]
-            .some(function (value) { return String(value || '').toLowerCase().includes(query); });
-        }
-        // A parent stays visible when one of its child agents matches the search.
-        return matches(session) || (grouped.byParent[session.threadId] || []).some(matches);
-      });
-    }
-
-    function filterIncludes(session, filter) {
-      if (filter === 'ARCHIVED') return !!session.archived;
-      if (session.archived) return filter === 'ALL';
-      return filter === 'ALL' ||
-        (filter === 'ACTIVE' ? session.status !== 'DONE' : session.status === filter);
-    }
-
-    function chooseFilter(filter) {
-      prefs.filter = filter;
+    function chooseView(tab, chip) {
+      prefs.tab = tab;
+      prefs.chip = chip;
       prefs.autoFollow = false;
       savePrefs();
       applyPrefs();
       renderFilters();
       renderList();
-      if (filter === 'JOBS') refreshJobs();
+      if (tab === 'HANDOFFS') refreshJobs();
     }
 
+    // previousStatus: the selected row's status before the update. Handoffs/All stays put
+    // like the old Jobs filter; History/Everything always shows the row anyway.
     function followSelectedStatus(previousStatus) {
-      var session = currentSession();
-      if (!session || !previousStatus || session.status === previousStatus || prefs.filter === 'ALL' || prefs.filter === 'JOBS' || filterIncludes(session, prefs.filter)) return;
-      prefs.filter = session.status;
+      var row = findRow(currentRows(), selected);
+      if (!row || !previousStatus || row.status === previousStatus) return;
+      if ((prefs.tab === 'HANDOFFS' && prefs.chip === 'ALL') || rowInView(row, prefs.tab, prefs.chip, prefs.dismissed)) return;
+      Object.assign(prefs, viewContaining(row, prefs.tab, prefs.chip, prefs.dismissed));
       savePrefs();
     }
 
     function followRunningSession(running) {
       if (prefs.home) return;
       if (!prefs.autoFollow || !running) return;
-      if (!filterIncludes(running, prefs.filter)) prefs.filter = 'LIVE';
+      var row = findRow(currentRows(), running.id);
+      if (row && !rowInView(row, prefs.tab, prefs.chip, prefs.dismissed)) {
+        Object.assign(prefs, viewContaining(row, 'NOW', 'RUNNING', prefs.dismissed));
+      }
       if (running.id !== selected) selectSession(running.id, false);
       else savePrefs();
     }
 
-    function visibleJobs() {
-      var query = String(prefs.query || '').trim().toLowerCase();
-      if (!query) return jobs;
-      return jobs.filter(function (job) {
-        return [job.title, job.workspaceRoot, job.id, job.threadId, job.kindLabel, job.phase]
-          .some(function (value) { return String(value || '').toLowerCase().includes(query); });
-      });
-    }
-
-    function renderJobList() {
-      var shown = visibleJobs();
-      var signature = JSON.stringify([
-        'JOBS',
-        prefs.query,
-        Math.floor(Date.now() / 10000),
-        shown.map(function (job) {
-          return [job.id, job.live, job.updatedAt, job.heartbeatAt, job.title, job.phase, job.diedReason, job.threadId];
-        })
-      ]);
-      if (signature === lastListSignature) return;
-      lastListSignature = signature;
-      list.textContent = '';
-      shown.forEach(function (job) {
-        var row = document.createElement('div');
-        row.className = 'session job';
-        var open = document.createElement('button');
-        open.type = 'button';
-        open.className = 'job-open';
-
-        var top = document.createElement('div');
-        top.className = 'session-top';
-        var badge = document.createElement('span');
-        badge.className = 'status ' + jobBadgeClass(job);
-        badge.textContent = jobStatusLabel(job);
-        top.appendChild(badge);
-        if (job.fast) top.appendChild(fastChip());
-        var time = document.createElement('span');
-        time.className = 'session-time';
-        time.textContent = relativeTime(Date.parse(job.updatedAt || ''));
-        top.appendChild(time);
-
-        var title = document.createElement('div');
-        title.className = 'session-title';
-        title.textContent = job.title || job.kindLabel || 'Untitled Codex job';
-        title.title = job.title || '';
-        var project = document.createElement('div');
-        project.className = 'session-project';
-        project.textContent = job.workspaceRoot || '';
-        project.title = job.workspaceRoot || '';
-        var detail = document.createElement('div');
-        detail.className = 'session-last';
-        var detailText = jobDetailLine(job, Date.now());
-        var matchingSession = sessions.find(function (session) { return session.threadId && session.threadId === job.threadId; });
-        if (matchingSession && matchingSession.tokensUsed) {
-          detailText += (detailText ? ' \u00b7 ' : '') + 'tokens: ' + matchingSession.tokensUsed.toLocaleString();
-        }
-        detail.textContent = detailText;
-
-        open.append(top, title, project, detail);
-        open.addEventListener('click', function () { openJob(job); });
-        row.addEventListener('contextmenu', function (event) {
-          openContextMenu(event, { type: 'job', job: job });
-        });
-        row.appendChild(open);
-
-        var actions = document.createElement('div');
-        actions.className = 'job-actions';
-        if (job.threadId && (job.live === 'dead' || job.live === 'failed')) {
-          var resume = document.createElement('button');
-          resume.type = 'button';
-          resume.textContent = 'RESUME';
-          resume.addEventListener('click', function () { openResumeModal({ threadId: job.threadId, cwd: job.workspaceRoot }, job.title); });
-          actions.appendChild(resume);
-        }
-        if (job.live === 'working' || job.live === 'possibly-stuck') {
-          var cancel = document.createElement('button');
-          cancel.type = 'button';
-          cancel.className = 'cancel-job';
-          cancel.textContent = 'CANCEL';
-          cancel.addEventListener('click', function () { openCancelModal(job); });
-          actions.appendChild(cancel);
-        }
-        if (actions.childNodes.length) row.appendChild(actions);
-        list.appendChild(row);
-      });
-      if (!shown.length) {
-        var empty = document.createElement('div');
-        empty.className = 'empty-list';
-        empty.textContent = jobs.length ? 'No jobs match this search.' : 'No companion jobs yet.';
-        list.appendChild(empty);
-      }
-    }
-
     function renderList() {
-      if (prefs.filter === 'JOBS') {
-        renderJobList();
-        return;
+      var rows = currentRows();
+      var query = String(prefs.query || '').trim();
+      var hints = {};
+      var shown = rows.filter(function (row) {
+        if (!rowInView(row, prefs.tab, prefs.chip, prefs.dismissed)) return false;
+        var hint = rowMatch(row, query);
+        hints[row.id] = hint;
+        return hint !== null;
+      });
+      var openRow = selected ? findRow(rows, selected) : null;
+      var openHidden = !!openRow && !rowInView(openRow, prefs.tab, prefs.chip, prefs.dismissed);
+      var openTitle = openHidden ? sessionTitle(currentSession(), jobs) : '';
+      // Only what a row shows: whole rows carry quietMs, which changes on every broadcast.
+      function rowKey(row) {
+        var session = row.session || {};
+        var job = row.job || {};
+        return [row.id, row.status, row.title, row.project, row.updatedMs, row.olderJobs, session.model, session.tokensUsed,
+          session.agentNickname, job.id, job.live, job.threadId, job.model, job.effort, job.needsDecision, row.children.map(rowKey)];
       }
-      var shown = visibleSessions();
       var signature = JSON.stringify([
-        prefs.filter,
-        prefs.query,
+        prefs.tab,
+        prefs.chip,
+        query,
         selected,
+        openTitle,
         Math.floor(Date.now() / 10000),
-        sessions.map(function (session) {
-          return [session.id, session.status, session.lastGrow, session.title, session.cwd, session.lastEvent, unread.has(session.id), isDismissed(session.id), !!session.archived, session.parentThreadId];
-        }),
-        jobs.map(function (job) { return [job.threadId, job.title]; }),
+        shown.map(rowKey),
+        hints,
+        Array.from(unread),
+        prefs.dismissed,
         historyResults.map(function (entry) { return entry.id; })
       ]);
       if (signature === lastListSignature) return;
       lastListSignature = signature;
+      openElsewhere.hidden = !openHidden;
+      openElsewhereTitle.textContent = openTitle;
+      openElsewhereTitle.title = openTitle;
       list.textContent = '';
-      var grouped = childSessions(sessions);
-      // Draw each session at most once and nest one level only. A parent link
-      // that points back at itself or forms a cycle must never grow the list.
-      var drawn = {};
-      function sessionCard(session, depth, container) {
-        if (drawn[session.id]) return;
-        drawn[session.id] = true;
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'session' + (depth ? ' child' : '') + (session.id === selected ? ' selected' : '') + (isDismissed(session.id) ? ' dismissed' : '');
-        button.setAttribute('aria-pressed', session.id === selected ? 'true' : 'false');
-
-        var top = document.createElement('div');
-        top.className = 'session-top';
-        var badge = document.createElement('span');
-        var badgeStatus = session.archived ? 'ARCHIVED' : session.status;
-        badge.className = 'status ' + badgeStatus;
-        badge.textContent = STATUS[badgeStatus].label;
-        badge.title = waitReason(session) || STATUS[badgeStatus].help;
-        top.appendChild(badge);
-        if (sessionFastJob(session, jobs)) top.appendChild(fastChip());
-        var kids = grouped.byParent[session.threadId] || [];
-        if (depth) top.appendChild(agentChip(session.agentNickname || 'agent'));
-        else if (kids.length) top.appendChild(agentChip('lead'));
-        if (unread.has(session.id)) {
-          var marker = document.createElement('span');
-          marker.className = 'unread';
-          marker.title = 'New activity';
-          top.appendChild(marker);
-        }
-        var time = document.createElement('span');
-        time.className = 'session-time';
-        time.textContent = relativeTime(session.lastGrow);
-        top.appendChild(time);
-
-        var title = document.createElement('div');
-        title.className = 'session-title';
-        title.textContent = sessionTitle(session, jobs);
-        title.title = sessionTitle(session, jobs);
-        var project = document.createElement('div');
-        project.className = 'session-project';
-        project.textContent = sessionMetaLine(session);
-        project.title = sessionMetaLine(session);
-        var last = document.createElement('div');
-        last.className = 'session-last';
-        last.textContent = session.lastEvent || 'No displayable activity yet';
-
-        button.append(top, title, project, last);
-        button.addEventListener('click', function () { selectSession(session.id, true); });
-        button.addEventListener('contextmenu', function (event) {
-          openContextMenu(event, { type: 'session', session: session, dismissed: isDismissed(session.id) });
-        });
-        if (!depth && kids.length) {
-          var group = document.createElement('div');
-          group.className = 'session-group';
-          var caption = document.createElement('div');
-          caption.className = 'group-caption';
-          caption.textContent = 'Agent team · ' + (kids.length + 1);
-          group.append(caption, button);
-          kids.forEach(function (kid) { sessionCard(kid, 1, group); });
-          list.appendChild(group);
-          return;
-        }
-        (container || list).appendChild(button);
+      if (query) {
+        var resultCount = document.createElement('div');
+        resultCount.className = 'search-count';
+        resultCount.textContent = shown.length + (shown.length === 1 ? ' result' : ' results');
+        list.appendChild(resultCount);
       }
-      shown.forEach(function (session) { sessionCard(session, 0); });
+      shown.forEach(function (row) {
+        var element = rowElement(row, 0, hints[row.id]);
+        if (!row.children.length) { list.appendChild(element); return; }
+        var group = document.createElement('div');
+        group.className = 'session-group';
+        var caption = document.createElement('div');
+        caption.className = 'group-caption';
+        caption.textContent = 'Agent team · ' + (row.children.length + 1);
+        group.append(caption, element);
+        row.children.forEach(function (kid) { group.appendChild(rowElement(kid, 1, '')); });
+        list.appendChild(group);
+      });
 
       if (!shown.length) {
         var empty = document.createElement('div');
         empty.className = 'empty-list';
-        empty.textContent = sessions.length ? 'No tasks match this filter.' : 'Waiting for Codex sessions\u2026';
+        empty.textContent = !rows.length ? 'Waiting for Codex sessions…'
+          : query ? 'No tasks match this search.' : 'No tasks match this filter.';
         list.appendChild(empty);
       }
-      var history = String(prefs.query || '').trim()
-        ? mergeHistoryResults(historyResults, shown.map(function (session) { return session.id; }))
+      var history = query
+        ? mergeHistoryResults(historyResults, shown.map(function (row) { return row.id; }))
         : [];
       if (history.length) {
         var caption = document.createElement('div');
@@ -1590,6 +1558,92 @@
           list.appendChild(row);
         });
       }
+    }
+
+    function statusChip(className, text, title) {
+      var chip = document.createElement('span');
+      chip.className = 'status ' + className;
+      chip.textContent = text;
+      chip.title = title;
+      return chip;
+    }
+
+    // One list row: 3 lines (badges / title / project · model · effort · tokens), detail in the tooltip.
+    function rowElement(row, depth, hint) {
+      var session = row.session;
+      var job = row.job;
+      var element = document.createElement('div');
+      element.className = 'session' + (depth ? ' child' : '') + (row.id === selected ? ' selected' : '') + (isDismissed(row.id) ? ' dismissed' : '');
+      var open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'row-open';
+      open.setAttribute('aria-pressed', row.id === selected ? 'true' : 'false');
+      open.title = rowTooltip(row, Date.now());
+
+      var top = document.createElement('div');
+      top.className = 'session-top';
+      var badgeClass = rowBadge(row.status);
+      top.appendChild(statusChip(badgeClass, STATUS[badgeClass].label, rowReason(row) || STATUS[badgeClass].help));
+      if (job) {
+        top.appendChild(statusChip('HANDOFF', 'Handoff', 'Codex handoff job' + (row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : '')));
+      }
+      if (row.fast) top.appendChild(fastChip());
+      if (row.needsAnswer) top.appendChild(statusChip('NEEDS_ANSWER', '?', 'Codex asked: ' + firstLine(job.needsDecision, 200)));
+      if (depth) top.appendChild(agentChip(session.agentNickname || 'agent'));
+      else if (row.children.length) top.appendChild(agentChip('lead'));
+      if (unread.has(row.id)) {
+        var marker = document.createElement('span');
+        marker.className = 'unread';
+        marker.title = 'New activity';
+        top.appendChild(marker);
+      }
+      var time = document.createElement('span');
+      time.className = 'session-time';
+      time.textContent = relativeTime(row.updatedMs);
+      top.appendChild(time);
+
+      var title = document.createElement('div');
+      title.className = 'session-title';
+      title.textContent = row.title;
+      var meta = document.createElement('div');
+      meta.className = 'session-project';
+      meta.textContent = rowMetaLine(row);
+      open.append(top, title, meta);
+      if (hint) {
+        var matched = document.createElement('div');
+        matched.className = 'match-hint';
+        matched.textContent = 'matched: ' + hint;
+        open.appendChild(matched);
+      }
+      open.addEventListener('click', function () {
+        if (session) selectSession(session.id, true);
+        else openJob(job);
+      });
+      element.addEventListener('contextmenu', function (event) {
+        openContextMenu(event, session ? { type: 'session', session: session, dismissed: isDismissed(session.id) } : { type: 'job', job: job });
+      });
+      element.appendChild(open);
+
+      var actions = document.createElement('div');
+      actions.className = 'job-actions';
+      if (job && job.threadId && (job.live === 'dead' || job.live === 'failed')) {
+        var resume = document.createElement('button');
+        resume.type = 'button';
+        resume.textContent = 'Resume';
+        resume.addEventListener('click', function () { openResumeModal({ threadId: job.threadId, cwd: job.workspaceRoot || row.project }, row.title); });
+        actions.appendChild(resume);
+      }
+      // Stays until the task menus carry Cancel job (asks first, like today).
+      if (job && (job.live === 'working' || job.live === 'possibly-stuck')) {
+        var cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'cancel-job';
+        cancel.textContent = 'Cancel';
+        cancel.addEventListener('click', function () { openCancelModal(job); });
+        actions.appendChild(cancel);
+      }
+      if (actions.childNodes.length) element.appendChild(actions);
+      return element;
     }
 
     function renderHeader() {
@@ -1784,7 +1838,7 @@
 
     function renderHome() {
       var data = homeCards(sessions, jobs, Date.now());
-      // same shape as renderJobList: stable card fields plus a 10s bucket so relative times still refresh
+      // stable card fields plus a 10s bucket so relative times still refresh
       var signature = JSON.stringify([
         Math.floor(Date.now() / 10000),
         data.attention.concat(data.active, data.finished).map(function (card) {
@@ -1902,11 +1956,12 @@
         var response = await fetch('/jobs');
         var data = await response.json();
         if (!response.ok) return;
+        var previousRow = findRow(currentRows(), selected);
         jobs = data.jobs || [];
-        lastListSignature = '';
-        lastFilterSignature = '';
+        // A handoff finishing changes its row's status just like a session update does.
+        followSelectedStatus(previousRow ? previousRow.status : null);
         renderFilters();
-        if (prefs.filter === 'JOBS') renderList();
+        renderList();
         renderHeader();
         if (prefs.home) renderFeed();
       } catch (_) {}
@@ -2068,7 +2123,7 @@
         return {
           endpoint: '/task',
           body: taskFormBody({ cwd: cwd(), prompt: prompt.value, effort: effort.value, model: model.value, write: write.input.checked, fast: fast.input.checked, sandbox: sandbox.value }),
-          onSuccess: function () { chooseFilter('JOBS'); }
+          onSuccess: function () { chooseView('HANDOFFS', 'ALL'); }
         };
       };
       prompt.focus();
@@ -2100,7 +2155,7 @@
         if (model.value.trim()) body.model = model.value.trim();
         if (fast.input.checked) body.fast = true;
         if (kind.value === 'adversarial-review' && focus.value.trim()) body.focus = focus.value.trim();
-        return { endpoint: '/review', body: body, onSuccess: function () { chooseFilter('JOBS'); } };
+        return { endpoint: '/review', body: body, onSuccess: function () { chooseView('HANDOFFS', 'ALL'); } };
       };
       kind.focus();
     }
@@ -2129,7 +2184,7 @@
             prompt: prompt.value.trim(), effort: effort.value, model: model.value.trim(),
             write: write.input.checked, fast: fast.input.checked, sandbox: sandbox.value
           }),
-          onSuccess: function () { chooseFilter('JOBS'); }
+          onSuccess: function () { chooseView('HANDOFFS', 'ALL'); }
         };
       };
       prompt.focus();
@@ -2275,13 +2330,19 @@
       if (session) openResumeModal(session, session.title);
     });
 
+    document.getElementById('open-elsewhere-show').addEventListener('click', function () {
+      var row = findRow(currentRows(), selected);
+      if (!row) return;
+      var view = viewContaining(row, prefs.tab, prefs.chip, prefs.dismissed);
+      chooseView(view.tab, view.chip);
+    });
+
     search.addEventListener('input', function () {
       prefs.query = search.value;
       savePrefs();
       window.clearTimeout(historySearchTimer);
       lastListSignature = '';
       renderList();
-      if (prefs.filter === 'JOBS') return;
       var query = String(prefs.query || '').trim();
       if (!query) {
         historyResults = [];
@@ -2522,8 +2583,8 @@
     events.onmessage = function (message) {
       var data = JSON.parse(message.data);
       if (data.type === 'sessions') {
-        var previousSelectedSession = currentSession();
-        var previousSelectedStatus = previousSelectedSession ? previousSelectedSession.status : null;
+        var previousSelectedRow = findRow(currentRows(), selected);
+        var previousSelectedStatus = previousSelectedRow ? previousSelectedRow.status : null;
         data.sessions.forEach(function (session) {
           var oldStatus = previousStatus[session.id];
           if (seeded && session.id !== selected && oldStatus !== session.status) unread.add(session.id);
@@ -2581,6 +2642,9 @@
       } catch (_) {}
     };
 
+    // Prefs saved before the tabs carry filter/home instead of tab/chip. TABS exists only from here on.
+    Object.assign(prefs, savedView(prefs));
+    delete prefs.filter;
     applyPrefs();
     renderFilters();
     renderList();
@@ -2588,7 +2652,8 @@
     renderFeed();
     refreshJobs();
     window.setInterval(function () { renderList(); renderHeader(); if (prefs.home) renderFeed(); }, 10000);
-    window.setInterval(function () { if (prefs.filter === 'JOBS' || prefs.home) refreshJobs(); }, 5000);
+    // Rows merge job state into every tab, so job liveness is polled everywhere.
+    window.setInterval(refreshJobs, 5000);
   </script>
 </body>
 </html>

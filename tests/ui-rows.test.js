@@ -8,10 +8,18 @@ const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 // The whole pure-helper block, as tests/stuck-session.test.js extracts it.
 const block = script.match(/function firstLine[\s\S]*?(?=\n    function setConnection)/)[0];
-// Today's filter rule, to prove the new views keep it for session-only data.
-const legacy = script.match(/function filterIncludes[\s\S]*?\n    \}/)[0];
+// The old 8-filter rules (filterIncludes + dismissedHides), frozen here when the
+// sidebar moved to tabs, to prove the new views keep them for session-only data.
+function filterIncludes(session, filter) {
+  if (filter === "ARCHIVED") return !!session.archived;
+  if (session.archived) return filter === "ALL";
+  return filter === "ALL" || (filter === "ACTIVE" ? session.status !== "DONE" : session.status === filter);
+}
+function dismissedHides(session, filter, dismissedIds) {
+  return filter !== "ALL" && (dismissedIds || []).indexOf(session.id) !== -1;
+}
 
-function ctx() { const c = {}; vm.runInNewContext(block + "\n" + legacy, c); return c; }
+function ctx() { const c = {}; vm.runInNewContext(block, c); return c; }
 function plain(value) { return JSON.parse(JSON.stringify(value)); }
 const ids = (items) => plain(items.map((entry) => entry.id));
 
@@ -133,7 +141,7 @@ test("child agents nest under the lead; counts skip children, dismissed and arch
 });
 
 test("session-only rows land where today's filters put them", () => {
-  const { buildRows, rowInView, filterIncludes, dismissedHides } = ctx();
+  const { buildRows, rowInView } = ctx();
   const mapping = [
     ["ACTIVE", "NOW", "ALL"], ["LIVE", "NOW", "RUNNING"], ["IDLE", "NOW", "WAITING"], ["STALE", "NOW", "ATTENTION"],
     ["DONE", "HISTORY", "FINISHED"], ["STOPPED", "HISTORY", "STOPPED"], ["ARCHIVED", "HISTORY", "ARCHIVED"], ["ALL", "HISTORY", "EVERYTHING"]
@@ -204,4 +212,107 @@ test("menuItems: grouped items with today's conditions", () => {
   assert.ok(!ids(menuItems(row({ id: "s", threadId: "t", status: "STALE", archived: true }), win)).includes("resume-session"));
   assert.ok(!ids(menuItems(row({ id: "s", threadId: "t", status: "STALE" }, [{ id: "j", threadId: "t", live: "possibly-stuck" }]), win)).some((id) => id.startsWith("resume")));
   assert.ok(!ids(menuItems(row({ id: "s", threadId: "t", status: "IDLE" }), win)).some((id) => id.startsWith("resume")));
+});
+
+test("viewContaining keeps the current view, then the row's own status chip, then a catch-all", () => {
+  const { buildRows, viewContaining } = ctx();
+  const one = (session, jobs) => buildRows(session ? [session] : [], jobs || [])[0];
+  const view = (row, tab, chip, dismissed) => plain(viewContaining(row, tab, chip, dismissed || []));
+  const running = one({ id: "s", threadId: "t", status: "LIVE" });
+  assert.deepEqual(view(running, "NOW", "ALL"), { tab: "NOW", chip: "ALL" }, "already visible: no move");
+  assert.deepEqual(view(one({ id: "s", threadId: "t", status: "IDLE" }), "NOW", "RUNNING"), { tab: "NOW", chip: "WAITING" });
+  // Same tab first: a handoff that finishes while Handoffs/Running is open stays in Handoffs.
+  const handoffDone = one({ id: "s", threadId: "t", status: "DONE" }, [{ id: "j", threadId: "t", live: "completed" }]);
+  assert.deepEqual(view(handoffDone, "HANDOFFS", "RUNNING"), { tab: "HANDOFFS", chip: "FINISHED" });
+  // Now has no Finished chip: History before Handoffs (old filter DONE = History/Finished).
+  assert.deepEqual(view(handoffDone, "NOW", "RUNNING"), { tab: "HISTORY", chip: "FINISHED" });
+  assert.deepEqual(view(one({ id: "s", threadId: "t", status: "DONE" }), "NOW", "WAITING"), { tab: "HISTORY", chip: "FINISHED" });
+  assert.deepEqual(view(one({ id: "s", threadId: "t", status: "STOPPED" }), "HISTORY", "FINISHED"), { tab: "HISTORY", chip: "STOPPED" });
+  assert.deepEqual(view(one({ id: "s", threadId: "t", status: "DONE", archived: true }), "NOW", "ALL"), { tab: "HISTORY", chip: "ARCHIVED" });
+  assert.deepEqual(view(running, "NOW", "RUNNING", ["s"]), { tab: "HISTORY", chip: "DISMISSED" });
+  assert.deepEqual(view(running, "BOGUS", "ALL"), { tab: "NOW", chip: "RUNNING" }, "garbage current view falls through");
+  assert.deepEqual(view(one(null, [{ id: "j", live: "failed" }]), "HISTORY", "FINISHED"), { tab: "NOW", chip: "ATTENTION" });
+});
+
+test("findRow finds a top-level row by its own id or a child agent's id", () => {
+  const { buildRows, findRow } = ctx();
+  const rows = buildRows([
+    { id: "lead", threadId: "L", status: "IDLE", lastGrow: T0 + 5 },
+    { id: "kid", threadId: "K", parentThreadId: "L", status: "LIVE", lastGrow: T0 + 9 },
+    { id: "solo", threadId: "S", status: "DONE", lastGrow: T0 }
+  ], [{ id: "j", live: "failed", updatedAt: iso(1) }]);
+  assert.equal(findRow(rows, "solo").id, "solo");
+  assert.equal(findRow(rows, "kid").id, "lead", "a child agent is shown under its lead");
+  assert.equal(findRow(rows, "job:j").id, "job:j");
+  assert.equal(findRow(rows, "missing"), null);
+  assert.equal(findRow(rows, null), null);
+  assert.equal(findRow(null, "solo"), null);
+});
+
+test("savedView: stored tab and chip win, otherwise the old filter or home maps over", () => {
+  const { savedView } = ctx();
+  const v = (prefs) => plain(savedView(prefs));
+  assert.deepEqual(v({ tab: "HANDOFFS", chip: "FINISHED", filter: "LIVE" }), { tab: "HANDOFFS", chip: "FINISHED" });
+  assert.deepEqual(v({ tab: "NOW", chip: "FINISHED", filter: "JOBS" }), { tab: "HANDOFFS", chip: "ALL" }, "chip outside its tab is junk");
+  assert.deepEqual(v({ filter: "DONE", home: false }), { tab: "HISTORY", chip: "FINISHED" });
+  assert.deepEqual(v({ filter: "ALL" }), { tab: "HISTORY", chip: "EVERYTHING" });
+  assert.deepEqual(v({ filter: "STALE", home: true }), { tab: "NOW", chip: "ALL" });
+  for (const junk of [null, undefined, "NOW", {}, { tab: "__proto__", chip: "ALL" }, { tab: "NOW", chip: "toString" }, { tab: ["NOW"], chip: "ALL" }]) {
+    assert.deepEqual(v(junk), { tab: "NOW", chip: "ALL" }, JSON.stringify(junk));
+  }
+});
+
+test("rowMatch: title matches need no hint, other fields name what matched", () => {
+  const { buildRows, rowMatch } = ctx();
+  const rows = buildRows([
+    { id: "rollout-a", threadId: "019a-thread", status: "LIVE", title: "Fix the retry loop", cwd: "D:\\GIT\\alpha-repo", model: "gpt-5", lastGrow: T0 + 9 },
+    { id: "lead", threadId: "L", status: "IDLE", title: "Lead run", cwd: "D:\\b", lastGrow: T0 + 5 },
+    { id: "kid", threadId: "K", parentThreadId: "L", status: "LIVE", agentNickname: "Kierkegaard", lastGrow: T0 + 1 }
+  ], [{ id: "job-77", threadId: "TJ", live: "failed", title: "Queued review", kindLabel: "Adversarial review", updatedAt: iso(3) }]);
+  assert.deepEqual(plain(rows.map((r) => r.id)), ["rollout-a", "lead", "job:job-77"]);
+  const [first, lead, job] = rows;
+  assert.equal(rowMatch(first, ""), "");
+  assert.equal(rowMatch(first, "  "), "");
+  assert.equal(rowMatch(first, "RETRY"), "", "case-insensitive title hit");
+  assert.equal(rowMatch(first, "alpha"), "project");
+  assert.equal(rowMatch(first, "019A"), "thread id");
+  assert.equal(rowMatch(first, "gpt-5"), "model");
+  assert.equal(rowMatch(first, "rollout-a"), "id");
+  assert.equal(rowMatch(first, "nothing like it"), null);
+  assert.equal(rowMatch(job, "adversarial"), "kind");
+  assert.equal(rowMatch(job, "job-77"), "id");
+  assert.equal(rowMatch(lead, "kierkegaard"), "agent team", "a lead stays visible when a child agent matches");
+});
+
+test("row badge, meta line and tooltip", () => {
+  const { buildRows, rowBadge, rowMetaLine, rowTooltip } = ctx();
+  const want = { RUNNING: "LIVE", WAITING: "IDLE", ATTENTION: "STALE", ANSWER: "NEEDS_ANSWER", STOPPED: "STOPPED", FINISHED: "DONE", ARCHIVED: "ARCHIVED" };
+  for (const [status, cls] of Object.entries(want)) assert.equal(rowBadge(status), cls, status);
+  assert.equal(rowBadge("nonsense"), "IDLE");
+
+  const [merged] = buildRows(
+    [{ id: "s", threadId: "t-9", status: "IDLE", cwd: "D:\\GIT\\proj", model: "gpt-5", tokensUsed: 500, sandbox: "workspace-write", quietMs: 60000, lastKind: "cmd", lastText: "npm test", lastGrow: T0 }],
+    [
+      { id: "j2", threadId: "t-9", live: "dead", effort: "high", diedReason: "process gone, resumable", updatedAt: iso(20) },
+      { id: "j1", threadId: "t-9", live: "completed", updatedAt: iso(10) }
+    ]
+  );
+  assert.equal(rowMetaLine(merged), "proj · gpt-5 · high · tokens: 500");
+  const tip = rowTooltip(merged, T0 + 60000);
+  for (const part of ["D:\\GIT\\proj", "thread: t-9", "sandbox: workspace-write", "process gone, resumable", "1 earlier run on this thread"]) {
+    assert.ok(tip.includes(part), part + " in " + JSON.stringify(tip));
+  }
+  // The dead job decides the status (Needs attention), so the session's "Waiting ..." reason stays out.
+  assert.doesNotMatch(tip, /Waiting/);
+  const { rowReason } = ctx();
+  assert.equal(rowReason(merged), "");
+  const [idleOnly] = buildRows([{ id: "i", threadId: "ti", status: "IDLE", quietMs: 60000, lastKind: "cmd", lastText: "npm test" }], []);
+  assert.match(rowReason(idleOnly), /^Waiting 1m 0s .*npm test/);
+  assert.match(rowTooltip(idleOnly, T0), /Waiting 1m 0s/);
+  const [idleWithDoneJob] = buildRows([{ id: "i", threadId: "ti", status: "DONE" }], [{ id: "j", threadId: "ti", live: "completed" }]);
+  assert.equal(rowReason(idleWithDoneJob), "", "no reason for a finished row");
+  const [jobOnly] = buildRows([], [{ id: "q", live: "working", workspaceRoot: "/srv/api", model: "sol", effort: "xhigh", phase: "queued", updatedAt: iso(0) }]);
+  assert.equal(rowMetaLine(jobOnly), "api · sol · xhigh");
+  assert.match(rowTooltip(jobOnly, T0), /queued/);
+  assert.doesNotMatch(rowTooltip(jobOnly, T0), /thread:|earlier run/);
 });

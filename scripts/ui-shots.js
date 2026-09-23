@@ -56,6 +56,25 @@ async (page) => {
     }
   }
 
+  async function clickSel(selector, { timeout = 3000 } = {}) {
+    try {
+      const loc = page.locator(selector).first();
+      await loc.waitFor({ state: 'visible', timeout });
+      await loc.click();
+      return true;
+    } catch {
+      skipped.push('click ' + selector + ' not found/visible');
+      log('skip - ' + selector + ' not found/visible');
+      return false;
+    }
+  }
+
+  // Sidebar views: tabs and chips carry data-tab / data-chip (ids from TABS in viewer-ui.html).
+  async function view(tab, chip) {
+    const ok = await clickSel('#tabs [data-tab="' + tab + '"]');
+    return ok && (!chip || await clickSel('#chips [data-chip="' + chip + '"]'));
+  }
+
   async function pressEscape() {
     try { await page.keyboard.press('Escape'); } catch {}
   }
@@ -94,18 +113,21 @@ async (page) => {
   // ---- 1. default view ----
   await shot('01-default');
 
-  // ---- 2. each tab/chip in #filters (id -> visible label, per FILTERS in viewer-ui.html) ----
-  const chips = { ACTIVE: 'Active', JOBS: 'Jobs', LIVE: 'Running', IDLE: 'Waiting', STALE: 'Stuck', DONE: 'Finished', ARCHIVED: 'Archived', ALL: 'All' };
-  for (const [id, label] of Object.entries(chips)) {
-    const ok = await clickText(label, { exact: false });
-    if (ok) {
-      await page.waitForTimeout(200);
-      await shot('02-chip-' + id);
-    } else {
-      skipped.push('chip not found: ' + id);
+  // ---- 2. every tab and every chip inside it ----
+  const tabs = {
+    NOW: ['ALL', 'RUNNING', 'WAITING', 'ATTENTION', 'ANSWER'],
+    HANDOFFS: ['ALL', 'RUNNING', 'ATTENTION', 'ANSWER', 'FINISHED', 'STOPPED'],
+    HISTORY: ['FINISHED', 'STOPPED', 'ARCHIVED', 'DISMISSED', 'EVERYTHING']
+  };
+  for (const [tab, chips] of Object.entries(tabs)) {
+    for (const chip of chips) {
+      if (await view(tab, chip)) {
+        await page.waitForTimeout(200);
+        await shot('02-' + tab + '-' + chip);
+      }
     }
   }
-  await clickText('Active', { exact: false });
+  await view('NOW', 'ALL');
 
   // ---- 3. Now overview ----
   if (await clickId('home-button')) {
@@ -122,13 +144,13 @@ async (page) => {
   }
 
   // ---- 5. Finished handoff (result card lands in Task 8; baseline just shows the feed) ----
-  // Fixture 4 is DONE, so it drops out of the default ACTIVE filter - widen it first.
-  await clickText('All', { exact: false });
+  // Fixture 4 is finished, so it is not in Now/All - widen to History/Everything first.
+  await view('HISTORY', 'EVERYTHING');
   if (await clickText('Fixture 4 -')) {
     await page.waitForTimeout(200);
     await shot('05-finished-handoff');
   }
-  await clickText('Active', { exact: false });
+  await view('NOW', 'ALL');
 
   // ---- 6. the ... menu ----
   if (await clickId('actions-button')) {
@@ -141,6 +163,9 @@ async (page) => {
   try {
     const row = page.getByText('Fixture 1 -', { exact: false }).first();
     await row.waitFor({ state: 'visible', timeout: 3000 });
+    // Scroll first: the list's scroll event closes the context menu, and it can land after the click.
+    await row.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
     await row.click({ button: 'right' });
     await page.waitForTimeout(200);
     await shot('07-context-menu');
@@ -155,7 +180,7 @@ async (page) => {
     await shot('08-start-dialog-task');
     await pressEscape();
   }
-  if (await clickText('Jobs')) {
+  if (await view('HANDOFFS', 'ALL')) {
     await page.waitForTimeout(200);
     if (await clickId('review-button')) {
       await page.waitForTimeout(200);
@@ -168,10 +193,13 @@ async (page) => {
       await pressEscape();
     }
   } else {
-    skipped.push('Jobs filter not found - could not reach review start dialogs');
+    skipped.push('Handoffs tab not found - could not reach review start dialogs');
   }
 
   // ---- 9. result dialog ----
+  // Since Task 4 Fixture 5 is a merged session + job row, so this click opens its session
+  // (ruling R9). Task 6 should switch this step to "Show full result" in the ... menu.
+  // Shot 14 covers the dialog through a job-only row meanwhile.
   if (await clickId('home-button')) {
     await page.waitForTimeout(200);
     if (await clickText('Fixture 5 -')) {
@@ -190,14 +218,38 @@ async (page) => {
     await search.fill('retry');
     await page.waitForTimeout(200);
     await shot('10-search-retry');
+    // Matches the project path, not the title: rows show a "matched: project" hint.
+    await search.fill('workspace');
+    await page.waitForTimeout(400);
+    await shot('10-search-match-hint');
     await search.fill('');
   } catch (err) {
     skipped.push('search box: ' + err.message);
   }
 
-  // ---- mobile: 390x844 (the side list starts closed - open the drawer first) ----
+  // ---- 13. open task outside the current view: "Open: ... (not in this view) · Show" ----
   await pressEscape(); // close the result dialog from step 9
-  await clickText('Active', { exact: false }); // undo the Jobs filter step 8 left behind
+  await view('NOW', 'ALL');
+  if (await clickText('Fixture 1 -')) {
+    await view('HISTORY', 'FINISHED');
+    await page.waitForTimeout(200);
+    await shot('13-open-outside-view');
+    if (await clickId('open-elsewhere-show')) {
+      await page.waitForTimeout(200);
+      await shot('13-open-outside-view-show');
+    }
+  }
+
+  // ---- 14. a job-only row (queued, no session yet) opens the job result dialog ----
+  await view('HANDOFFS', 'RUNNING');
+  if (await clickText('Fixture 7 -')) {
+    await page.waitForTimeout(300);
+    await shot('14-job-only-row-dialog');
+    await pressEscape();
+  }
+
+  // ---- mobile: 390x844 (the side list starts closed - open the drawer first) ----
+  await view('NOW', 'ALL'); // undo the Handoffs view the steps above left behind
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
   if (await clickId('show-side')) {

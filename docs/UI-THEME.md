@@ -16,7 +16,7 @@ Use Segoe UI Variable, Segoe UI, or the platform system font for the interface. 
 
 ## Status colors
 
-Status color has one meaning everywhere: session cards, filters, and the selected-task header.
+Status color has one meaning everywhere: list rows, filter chips, and the selected-task header.
 
 | Status | Color | Behavior |
 |---|---|---|
@@ -31,7 +31,7 @@ Do not animate an entire row or badge. Only the small Running spinner moves.
 ## Geometry and spacing
 
 - Header icon and follow controls are 32 px high.
-- Feed toolbar and status-filter controls are 28 px high.
+- Feed toolbar controls and the sidebar tabs are 28 px high. Filter chips are 24 px pills.
 - Controls within one row share the same vertical position.
 - Corners use a 6 or 7 px radius; status badges remain pill-shaped.
 - The session list starts at 340 px, can be resized from 240 px to 55% of the viewport, and remembers the chosen width.
@@ -42,12 +42,13 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 
 ## Navigation behavior
 
-- Filters are a fixed vertical list. Their order and position do not change when counts update.
-- Choosing a filter pauses Follow newest. A background update must not override an explicit filter choice.
-- Follow newest is resumed only through its button. When resumed, it selects the newest Running task and shows the Running filter.
-- If the selected task itself changes status, its filter follows that new status so the selected card remains visible.
-- All remains All when the selected task changes status.
-- Sidebar width, collapsed state, filter, search, feed view, selected task, auto-follow, and auto-scroll persist in the browser.
+- One list of rows: a Codex session and the handoff jobs on its thread share one row. Rows show 3 lines: badges, title, project · model · effort · tokens. Full path, thread, sandbox, reason and job detail are in the row tooltip.
+- Tabs Now, Handoffs, History sit in one fixed row. Each tab has filter chips with counts (Now: All, Running, Waiting, Needs attention, Needs answer; Handoffs: All, Running, Needs attention, Needs answer, Finished, Stopped; History: Finished, Stopped, Archived, Dismissed, Everything). Order and position never change when counts update.
+- Choosing a tab or chip pauses Follow newest. A background update must not override an explicit choice.
+- Follow newest is resumed only through its button. When resumed, it selects the newest Running task and shows Now/Running unless the current view already shows it.
+- If the selected task itself changes status, the view moves to that status's chip (same tab first) so the selected row remains visible. History/Everything and Handoffs/All stay put.
+- When the open task is not in the current view, a thin bar above the list says "Open: <title> (not in this view) · Show"; Show switches to a view that contains it.
+- Sidebar width, collapsed state, tab, chip, search, feed view, selected task, auto-follow, and auto-scroll persist in the browser. Old saved filters map to a tab and chip on first load.
 
 ## Feed behavior
 
@@ -60,6 +61,6 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 ## Motion and accessibility
 
 - Hover, selection, border, and color transitions use 140–180 ms.
-- Buttons, filters, sessions, and the resize separator must remain keyboard accessible.
+- Buttons, tabs, chips, rows, and the resize separator must remain keyboard accessible.
 - Focus uses a visible blue 2 px outline.
 - Dangerous process controls stay inside the task-actions menu and require confirmation.

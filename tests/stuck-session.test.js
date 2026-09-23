@@ -92,32 +92,32 @@ test("copy command builders produce exact codex CLI invocations", () => {
   assert.equal(ctx.archiveCommand("abc-123"), "codex archive abc-123");
 });
 
-test("dismissed sessions hide in every filter except All", () => {
+test("dismissed tasks hide in every view except History/Everything and History/Dismissed", () => {
   const ctx = helperContext();
-  assert.equal(ctx.dismissedHides({ id: "a" }, "STALE", ["a"]), true);
-  assert.equal(ctx.dismissedHides({ id: "a" }, "ACTIVE", ["a"]), true);
-  assert.equal(ctx.dismissedHides({ id: "a" }, "ALL", ["a"]), false);
-  assert.equal(ctx.dismissedHides({ id: "b" }, "STALE", ["a"]), false);
-  assert.equal(ctx.dismissedHides({ id: "a" }, "STALE", undefined), false);
+  const [row] = ctx.buildRows([{ id: "a", threadId: "t", status: "STALE" }], []);
+  assert.equal(ctx.rowInView(row, "NOW", "ATTENTION", ["a"]), false);
+  assert.equal(ctx.rowInView(row, "NOW", "ALL", ["a"]), false);
+  assert.equal(ctx.rowInView(row, "HISTORY", "EVERYTHING", ["a"]), true);
+  assert.equal(ctx.rowInView(row, "HISTORY", "DISMISSED", ["a"]), true);
+  assert.equal(ctx.rowInView(row, "NOW", "ATTENTION", ["b"]), true);
+  assert.equal(ctx.rowInView(row, "NOW", "ATTENTION", undefined), true);
 });
-
-const navigationSlice = script.match(/function filterIncludes[\s\S]*?\n    }/)[0];
 
 test("unarchive command builder", () => {
   const ctx = helperContext();
   assert.equal(ctx.unarchiveCommand("abc-123"), "codex unarchive abc-123");
 });
 
-test("archived sessions only appear in Archived and All filters", () => {
-  const ctx = {};
-  vm.runInNewContext(navigationSlice, ctx);
-  assert.equal(ctx.filterIncludes({ archived: true, status: "STALE" }, "ARCHIVED"), true);
-  assert.equal(ctx.filterIncludes({ archived: true, status: "STALE" }, "STALE"), false);
-  assert.equal(ctx.filterIncludes({ archived: true, status: "STALE" }, "ACTIVE"), false);
-  assert.equal(ctx.filterIncludes({ archived: true, status: "STALE" }, "ALL"), true);
-  assert.equal(ctx.filterIncludes({ archived: false, status: "STALE" }, "ARCHIVED"), false);
-  assert.equal(ctx.filterIncludes({ status: "LIVE" }, "ACTIVE"), true);
-  assert.equal(ctx.filterIncludes({ status: "DONE" }, "ACTIVE"), false);
+test("archived sessions only appear in History/Archived and History/Everything", () => {
+  const ctx = helperContext();
+  const row = (session) => ctx.buildRows([Object.assign({ id: "s", threadId: "t" }, session)], [])[0];
+  assert.equal(ctx.rowInView(row({ archived: true, status: "STALE" }), "HISTORY", "ARCHIVED", []), true);
+  assert.equal(ctx.rowInView(row({ archived: true, status: "STALE" }), "NOW", "ATTENTION", []), false);
+  assert.equal(ctx.rowInView(row({ archived: true, status: "STALE" }), "NOW", "ALL", []), false);
+  assert.equal(ctx.rowInView(row({ archived: true, status: "STALE" }), "HISTORY", "EVERYTHING", []), true);
+  assert.equal(ctx.rowInView(row({ archived: false, status: "STALE" }), "HISTORY", "ARCHIVED", []), false);
+  assert.equal(ctx.rowInView(row({ status: "LIVE" }), "NOW", "ALL", []), true);
+  assert.equal(ctx.rowInView(row({ status: "DONE" }), "NOW", "ALL", []), false);
 });
 
 test("waitReason stays silent for archived sessions", () => {
