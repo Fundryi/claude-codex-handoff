@@ -26,6 +26,7 @@ function ageLabel(iso, now) {
   if (!iso) return "";
   const minutes = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
   if (!Number.isFinite(minutes)) return "";
+  if (minutes === 0) return "<1m";
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60}m`;
 }
 

@@ -103,11 +103,14 @@ test("a job handed back when the follow budget expired is reported", async () =>
       phase: "investigating",
       title: "Codex Rescue",
       startedAt: iso(3 * 60_000)
-    }
+    },
+    { id: "task-fresh", status: "running", startedAt: iso(10_000) }
   ];
   const report = buildPendingJobsReport(jobs, NOW);
   assert.match(report, /task-handback/);
   assert.match(report, /running 3m/);
+  // Under 30 seconds rounds to zero minutes; "0m" read as if the job never started.
+  assert.match(report, /task-fresh  running <1m/);
 });
 
 // Fold-in fix: Date.parse on an unparseable/missing-but-truthy timestamp is NaN,

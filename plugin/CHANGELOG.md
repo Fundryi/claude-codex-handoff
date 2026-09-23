@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.15.2
+
+- **Failed checks are reported as failed.** The return format now tells Codex to mark each failed command under "Checks run". If a command in a chain fails, the commands after it did not run, and Codex must not state a result from them. Before, a chained check that stopped early could come back as a finding.
+- **Fresh jobs show "<1m".** The prompt hook rounds ages to whole minutes. A job younger than 30 seconds showed "0m", which read as if it had not started.
+
 ## 2.15.1
 
 - **Jobs started with `--cwd` reach you.** On hosts where Claude cannot change folder, such as CloudCLI, a job started with `task --cwd <folder>` was stored under the other folder and never reported. The companion now leaves a pointer in the folder Claude runs in. The prompt hook delivers the result there once. `/codex:status <id>`, `/codex:result <id>` and `/codex:cancel <id>` find the job without `--cwd`. Bare `/codex:status` still lists only the current folder. Pointers to jobs that no longer exist are removed, and the hook does the same work however many pointers point into one folder. A `--cwd` on the first line of a handoff now counts too, Windows paths included, and a folder that does not exist gets a clear error.
