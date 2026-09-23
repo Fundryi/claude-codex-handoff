@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.15.0
+
+- **The feed shows who sent each message.** Every message has a sender and a receiver, such as "Claude -> Codex" or "Codex -> You", in one color per actor: You, Claude, Plugin, Codex, Codex work and System. A small legend above the feed explains the colors.
+- **Claude and you are told apart.** The server now passes on each session's originator. In a session Claude started, a prompt is Claude's handoff; anywhere else it is yours. An answer that starts with "Answer from the user:" shows as your words, relayed. One that starts with "Answer from Claude (automatic" shows as Claude's own answer.
+- **The task header says who started it.** "Started by: Claude (handoff)" or "Started by: you (Codex CLI)". Sessions with no originator show no line.
+- **The plugin's return format is split off.** The footer the plugin adds to every handoff prompt now sits in its own collapsed Plugin part, so the prompt reads as what Claude asked.
+- **Codex questions stand out.** A reply with a question under Needs decision gets an "asks you" tag and a "Question for you" callout.
+- **Codex work is one collapsed log per turn.** Thinking, commands, output, patches and tools fold into one "Codex work" row under their turn. While a task runs, the feed ends with "Codex is working" and the latest step.
+- **Injected context is always there, and always collapsed.** The Show internals switch is gone. Permissions, AGENTS.md, environment and hook text fold into one quiet System row. A handoff prompt that opens with a tag such as `<goal>` is no longer mistaken for injected context, so it keeps its title too.
+- **The Start button is gone**, with its dialog and the `/task` and `/review` endpoints. Runs start from Claude or a Codex CLI. Resume, answer and cancel work as before.
+
 ## 2.14.0
 
 - **One list instead of two.** Sessions and handoff jobs used to live in separate views with 8 overlapping filters. They are now one list with three tabs: Now, Handoffs, History. Each tab has small filter chips with counts, and every old filter still has a home there.
