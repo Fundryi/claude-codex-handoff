@@ -293,7 +293,6 @@
       font-weight: 700;
     }
     .job-actions button:hover { background: var(--hover); color: var(--fg); }
-    .job-actions .cancel-job { color: #ff8f88; }
     .match-hint { color: var(--faint); font-size: 10px; margin-top: 2px; }
     .search-count { padding: 6px 12px 2px; color: var(--muted); font-size: 11px; }
     .session-time { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
@@ -400,7 +399,9 @@
       position: absolute;
       right: 14px;
       top: 48px;
-      width: 190px;
+      width: 210px;
+      max-height: calc(100vh - 70px);
+      overflow-y: auto;
       padding: 5px;
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -410,7 +411,9 @@
     }
     #context-menu {
       position: fixed;
-      width: 200px;
+      width: 210px;
+      max-height: calc(100vh - 16px);
+      overflow-y: auto;
       padding: 5px;
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -429,8 +432,17 @@
       font-size: 12px;
     }
     #action-menu button:hover, #context-menu button:hover { background: var(--hover); }
-    #context-menu button.danger { color: #ff8f88; }
-    #stop-button { color: #ff8f88; }
+    #action-menu button.danger, #context-menu button.danger { color: #ff8f88; }
+    .menu-group {
+      padding: 7px 9px 3px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+    .menu-group:first-child { padding-top: 3px; }
+    #job-modal-runs-field { margin-bottom: 10px; }
     #process-panel {
       margin-top: 9px;
       padding-top: 9px;
@@ -688,7 +700,7 @@
       <div id="header-top">
         <button id="show-side" class="icon-button" type="button" title="Show session list" aria-label="Show session list">&#x2630;</button>
         <div id="task-copy">
-          <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-fast" class="status FAST" title="Priority processing (fast tier)" hidden>FAST</span><span id="task-title">Select a task</span></div>
+          <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-handoff" class="status HANDOFF" hidden>Handoff</span><span id="task-fast" class="status FAST" title="Priority processing (fast tier)" hidden>FAST</span><span id="task-title">Select a task</span></div>
           <div id="task-meta"><span class="meta-item">Running tasks are selected automatically</span></div>
         </div>
         <div id="header-actions">
@@ -697,15 +709,7 @@
           <button id="actions-button" class="icon-button" type="button" title="Task actions" aria-label="Task actions" aria-expanded="false">&#x22EF;</button>
         </div>
       </div>
-      <div id="action-menu" hidden>
-        <button id="copy-resume" type="button" title="codex resume — reopen this conversation interactively">Copy resume command</button>
-        <button id="copy-continue" type="button" title="codex exec resume — continue this task headlessly where it left off">Copy continue command</button>
-        <button id="copy-fork" type="button" title="codex fork — experiment on a copy; the original session stays untouched">Copy fork command</button>
-        <button id="copy-archive" type="button" title="codex archive — move this session out of the list permanently (paste in your terminal)">Copy archive command</button>
-        <button id="copy-unarchive" type="button" title="codex unarchive — move this session back into the active list (paste in your terminal)">Copy unarchive command</button>
-        <button id="dismiss-button" type="button" title="Hide this task from all filters except All. Viewer-only, undoable.">Dismiss task</button>
-        <button id="stop-button" type="button">Stop task process&#x2026;</button>
-      </div>
+      <div id="action-menu" role="menu" hidden></div>
       <div id="process-panel" hidden></div>
     </header>
 
@@ -735,6 +739,7 @@
   <div id="job-modal" hidden>
     <div id="job-modal-box" role="dialog" aria-modal="true" aria-labelledby="job-modal-title">
       <h2 id="job-modal-title">Job result</h2>
+      <label id="job-modal-runs-field" class="control-field" hidden><span>Run on this thread</span><select id="job-modal-runs"></select></label>
       <div id="job-modal-meta"></div>
       <pre id="job-modal-result"></pre>
       <div id="job-modal-actions">
@@ -744,7 +749,7 @@
     </div>
   </div>
 
-  <div id="context-menu" hidden></div>
+  <div id="context-menu" role="menu" hidden></div>
 
   <div id="control-modal" hidden>
     <div id="control-modal-box" role="dialog" aria-modal="true" aria-labelledby="control-modal-title">
@@ -805,11 +810,11 @@
     var taskTitle = document.getElementById('task-title');
     var taskStatus = document.getElementById('task-status');
     var taskFast = document.getElementById('task-fast');
+    var taskHandoff = document.getElementById('task-handoff');
     var taskMeta = document.getElementById('task-meta');
     var actionMenu = document.getElementById('action-menu');
     var contextMenu = document.getElementById('context-menu');
     var actionsButton = document.getElementById('actions-button');
-    var stopButton = document.getElementById('stop-button');
     var processPanel = document.getElementById('process-panel');
     var stopModal = document.getElementById('stop-modal');
     var stopModalBody = document.getElementById('stop-modal-body');
@@ -821,6 +826,9 @@
     var jobModalResult = document.getElementById('job-modal-result');
     var jobModalClose = document.getElementById('job-modal-close');
     var jobModalResume = document.getElementById('job-modal-resume');
+    var jobModalRuns = document.getElementById('job-modal-runs');
+    var jobModalRunsField = document.getElementById('job-modal-runs-field');
+    var jobModalToken = 0;
     var controlModal = document.getElementById('control-modal');
     var controlModalTitle = document.getElementById('control-modal-title');
     var controlModalForm = document.getElementById('control-modal-form');
@@ -956,10 +964,6 @@
       if (job.agents && job.agents.length) parts.push('agents: ' + job.agents.join(', '));
       return parts.join(' \u00b7 ');
     }
-    function sessionFastJob(session, jobs) {
-      if (!session || !session.threadId) return null;
-      return (jobs || []).find(function (job) { return !!job.fast && job.threadId === session.threadId; }) || null;
-    }
     // Interactive sessions rarely carry a title now (the prompt sits behind
     // injected context), so borrow the companion job's title for the same thread,
     // then the child agent's nickname.
@@ -1029,33 +1033,6 @@
         else if (row.status === 'FINISHED') finished.push(card);
       });
       return { answer: answer, attention: attention, running: running, finished: finished.slice(0, 5) };
-    }
-    function contextMenuItems(item) {
-      var items = [];
-      if (item.type === 'session') {
-        var session = item.session;
-        if (session.threadId && !session.archived) {
-          items.push({ id: 'copy-resume', label: 'Copy resume command' });
-          items.push({ id: 'copy-continue', label: 'Copy continue command' });
-          items.push({ id: 'copy-fork', label: 'Copy fork command' });
-          items.push({ id: 'copy-archive', label: 'Copy archive command' });
-        }
-        if (session.threadId && session.archived) items.push({ id: 'copy-unarchive', label: 'Copy unarchive command' });
-        items.push({ id: 'dismiss', label: item.dismissed ? 'Restore task' : 'Dismiss task' });
-        if (session.status !== 'DONE' && session.status !== 'STOPPED' && !session.archived) {
-          items.push({ id: 'stop', label: 'Stop task process…', danger: true });
-        }
-      } else if (item.type === 'job') {
-        var job = item.job;
-        if (job.threadId) {
-          items.push({ id: 'copy-resume', label: 'Copy resume command' });
-          items.push({ id: 'copy-continue', label: 'Copy continue command' });
-          items.push({ id: 'copy-fork', label: 'Copy fork command' });
-        }
-        if (job.threadId && (job.live === 'dead' || job.live === 'failed')) items.push({ id: 'resume-job', label: 'Resume job' });
-        if (job.live === 'working' || job.live === 'possibly-stuck') items.push({ id: 'cancel-job', label: 'Cancel job', danger: true });
-      }
-      return items;
     }
     function taskFormBody(f) {
       const b = { cwd: String(f.cwd || '').trim(), prompt: String(f.prompt || '').trim() };
@@ -1245,10 +1222,9 @@
         if (danger) item.danger = true;
         items.push(item);
       }
-      if (job && job.threadId && (live === 'dead' || live === 'failed')) {
-        add('Resume', 'resume-job', 'Resume job', 'Continue this handoff on its thread (asks first)');
-      } else if (!job && session && session.status === 'STALE' && session.threadId && !archived) {
-        add('Resume', 'resume-session', 'Resume', 'Continue this session on its thread (asks first)');
+      if (resumeTarget(row)) {
+        if (job) add('Resume', 'resume-job', 'Resume job', 'Continue this handoff on its thread (asks first)');
+        else add('Resume', 'resume-session', 'Resume', 'Continue this session on its thread (asks first)');
       }
       if (job && (live === 'completed' || live === 'failed' || live === 'cancelled')) {
         add('Job', 'show-result', 'Show full result', 'Open the handoff result');
@@ -1256,7 +1232,7 @@
       if (job && (live === 'working' || live === 'possibly-stuck')) {
         add('Job', 'cancel-job', 'Cancel job…', 'Cancel this handoff job (asks first)', true);
       }
-      add('Session', 'dismiss', opts.dismissed ? 'Restore task' : 'Dismiss task', 'Hide this task from all filters except All. Viewer-only, undoable.');
+      add('Session', 'dismiss', opts.dismissed ? 'Restore task' : 'Dismiss task', 'Hide this task from every view except History > Dismissed and Everything. Viewer-only, undoable.');
       if (row.threadId && !archived) {
         add('Terminal commands', 'copy-resume', 'Copy resume command', 'codex resume — reopen this conversation interactively');
         add('Terminal commands', 'copy-continue', 'Copy continue command', 'codex exec resume — continue this task headlessly where it left off');
@@ -1273,6 +1249,48 @@
         }
       }
       return items;
+    }
+    // Where Resume continues, or null when the row is not resumable: a dead or failed handoff
+    // with a thread, or a STALE session with no handoff job (a possibly-stuck job may still run).
+    function resumeTarget(row) {
+      var job = row.job;
+      var session = row.session;
+      var live = job ? job.live || job.status : '';
+      if (job) return job.threadId && (live === 'dead' || live === 'failed') ? { threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project } : null;
+      if (session && session.status === 'STALE' && session.threadId && !session.archived) return { threadId: session.threadId, cwd: session.cwd };
+      return null;
+    }
+    // Header line 3: the session's wait reason, then why the handoff needs attention.
+    function headerReason(row, now) {
+      var job = row.job;
+      var live = job ? job.live || job.status : '';
+      var parts = [rowReason(row)];
+      if (live === 'dead') parts.push('Handoff process died' + (job.diedReason ? ': ' + job.diedReason : ''));
+      if (live === 'failed') parts.push('Handoff failed' + (job.diedReason ? ': ' + job.diedReason : ''));
+      if (live === 'possibly-stuck') parts.push('Handoff may be stuck' + (job.heartbeatAt ? ': no heartbeat for ' + formatDuration(now - Date.parse(job.heartbeatAt)) : ''));
+      return parts.filter(Boolean).join(' · ');
+    }
+    // The row that draws this id, child agents included.
+    function rowById(rows, id) {
+      var top = findRow(rows, id);
+      if (!top || top.id === id) return top;
+      return top.children.find(function (kid) { return kid.id === id; }) || null;
+    }
+    // Every run on the job's thread, newest first (the job alone when it has no thread).
+    function threadRuns(jobs, job) {
+      if (!job.threadId) return [job];
+      return (jobs || []).filter(function (entry) { return entry.threadId === job.threadId; })
+        .map(function (entry, index) { return { job: entry, index: index, ms: Date.parse(entry.updatedAt || entry.createdAt || '') || 0 }; })
+        .sort(function (a, b) { return b.ms - a.ms || a.index - b.index; })
+        .map(function (entry) { return entry.job; });
+    }
+    // Dismissed row ids worth keeping: sessions still tracked, and job-only rows ('job:<id>') whose
+    // job still exists. Before the first job list arrives every job id is kept.
+    function keptDismissed(ids, sessions, jobs, jobsLoaded) {
+      return (ids || []).filter(function (id) {
+        if (String(id).indexOf('job:') === 0) return !jobsLoaded || (jobs || []).some(function (job) { return 'job:' + job.id === id; });
+        return (sessions || []).some(function (session) { return session.id === id; });
+      });
     }
     // A tab's count is what clicking it shows: its first chip (counts from viewCounts).
     function tabCounts(counts) {
@@ -1616,62 +1634,69 @@
         if (session) selectSession(session.id, true);
         else openJob(job);
       });
-      element.addEventListener('contextmenu', function (event) {
-        openContextMenu(event, session ? { type: 'session', session: session, dismissed: isDismissed(session.id) } : { type: 'job', job: job });
-      });
+      element.addEventListener('contextmenu', function (event) { openContextMenu(event, row); });
       element.appendChild(open);
 
-      var actions = document.createElement('div');
-      actions.className = 'job-actions';
-      if (job && job.threadId && (job.live === 'dead' || job.live === 'failed')) {
+      // Inline Resume for a dead or failed handoff; Cancel job lives in the task menus.
+      var target = job ? resumeTarget(row) : null;
+      if (target) {
+        var actions = document.createElement('div');
+        actions.className = 'job-actions';
         var resume = document.createElement('button');
         resume.type = 'button';
         resume.textContent = 'Resume';
-        resume.addEventListener('click', function () { openResumeModal({ threadId: job.threadId, cwd: job.workspaceRoot || row.project }, row.title); });
+        resume.addEventListener('click', function () { openResumeModal(target, row.title); });
         actions.appendChild(resume);
+        element.appendChild(actions);
       }
-      // Stays until the task menus carry Cancel job (asks first, like today).
-      if (job && (job.live === 'working' || job.live === 'possibly-stuck')) {
-        var cancel = document.createElement('button');
-        cancel.type = 'button';
-        cancel.className = 'cancel-job';
-        cancel.textContent = 'Cancel';
-        cancel.addEventListener('click', function () { openCancelModal(job); });
-        actions.appendChild(cancel);
-      }
-      if (actions.childNodes.length) element.appendChild(actions);
       return element;
     }
 
-    function renderHeader() {
+    // The open task's row (child agents included). A session the list does not draw
+    // (a grandchild agent) still gets a row of its own.
+    function selectedRow() {
       var session = currentSession();
+      if (!session) return null;
+      return rowById(currentRows(), session.id) || buildRows([session], jobs)[0];
+    }
+
+    function closeActionMenu() {
+      actionMenu.hidden = true;
+      actionsButton.setAttribute('aria-expanded', 'false');
+    }
+
+    // Line 1: status, Handoff, FAST, title. Line 2: meta (click copies the thread id), time.
+    // Line 3: the reason line, only when there is one.
+    function renderHeader() {
       var overview = showOverview();
+      var row = overview ? null : selectedRow();
       taskMeta.textContent = '';
       autoOpenToggle.hidden = !overview;
-      if (overview) {
+      actionsButton.hidden = !row;
+      if (!row) {
+        closeActionMenu();
         taskStatus.hidden = true;
+        taskHandoff.hidden = true;
         taskFast.hidden = true;
         taskTitle.textContent = 'Now';
-        stopButton.hidden = true;
+        taskTitle.title = '';
         resumeSessionButton.hidden = true;
-        document.getElementById('dismiss-button').hidden = true;
-        ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive', 'copy-unarchive'].forEach(function (id) {
-          document.getElementById(id).hidden = true;
-        });
         return;
       }
-      // session is always truthy here: showOverview() is true (and already returned above)
-      // whenever currentSession() is falsy, so the overview covers the "no task open" case.
+      var session = row.session;
+      var now = Date.now();
+      var badgeClass = rowBadge(row.status);
+      var reason = headerReason(row, now);
       taskStatus.hidden = false;
-      var headerStatus = session.archived ? 'ARCHIVED' : session.status;
-      taskStatus.className = 'status ' + headerStatus;
-      taskStatus.textContent = STATUS[headerStatus].label;
-      taskStatus.title = waitReason(session) || STATUS[headerStatus].help;
-      taskFast.hidden = !sessionFastJob(session, jobs);
-      taskTitle.textContent = sessionTitle(session, jobs);
-      taskTitle.title = sessionTitle(session, jobs);
-      var pluginSession = jobs.some(function (job) { return job.threadId && job.threadId === session.threadId; });
-      resumeSessionButton.hidden = session.status !== 'STALE' || !session.threadId || !!session.archived || pluginSession;
+      taskStatus.className = 'status ' + badgeClass;
+      taskStatus.textContent = STATUS[badgeClass].label;
+      taskStatus.title = reason || STATUS[badgeClass].help;
+      taskHandoff.hidden = !row.job;
+      taskHandoff.title = row.job ? 'Codex handoff job' + (row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : '') : '';
+      taskFast.hidden = !row.fast;
+      taskTitle.textContent = row.title;
+      taskTitle.title = row.title;
+      resumeSessionButton.hidden = !resumeTarget(row);
 
       var metadata = document.createElement(session.threadId ? 'button' : 'span');
       if (session.threadId) metadata.type = 'button';
@@ -1680,8 +1705,8 @@
       metadata.title = session.threadId ? 'Copy thread ID: ' + session.threadId : sessionMetaLine(session);
       if (session.threadId) metadata.addEventListener('click', function () { copyText(session.threadId, metadata, 'Thread copied'); });
       taskMeta.appendChild(metadata);
-      var values = [{ text: relativeTime(session.lastGrow), title: 'Last activity' }];
-      if (isDismissed(session.id)) values.push({ text: 'Dismissed', title: 'Hidden from all filters except All' });
+      var values = [{ text: relativeTime(row.updatedMs), title: 'Last activity' }];
+      if (isDismissed(row.id)) values.push({ text: 'Dismissed', title: 'Hidden from every view except History > Dismissed and Everything' });
       values.forEach(function (item) {
         var span = document.createElement('span');
         span.className = 'meta-item';
@@ -1689,23 +1714,14 @@
         span.title = item.title;
         taskMeta.appendChild(span);
       });
-      var reason = waitReason(session);
       if (reason) {
         var reasonLine = document.createElement('span');
         reasonLine.id = 'wait-reason';
-        reasonLine.className = 'meta-item ' + session.status;
+        reasonLine.className = 'meta-item ' + badgeClass;
         reasonLine.textContent = reason;
         reasonLine.title = reason;
         taskMeta.appendChild(reasonLine);
       }
-      stopButton.hidden = session.status === 'DONE' || session.status === 'STOPPED' || !!session.archived;
-      var dismissButton = document.getElementById('dismiss-button');
-      dismissButton.hidden = false;
-      dismissButton.textContent = isDismissed(session.id) ? 'Restore task' : 'Dismiss task';
-      ['copy-resume', 'copy-continue', 'copy-fork', 'copy-archive'].forEach(function (id) {
-        document.getElementById(id).hidden = !session.threadId || !!session.archived;
-      });
-      document.getElementById('copy-unarchive').hidden = !session.threadId || !session.archived;
     }
 
     function isInternal(event) {
@@ -1796,13 +1812,7 @@
         el.appendChild(question);
       }
       el.addEventListener('click', function () { openHomeCard(card); });
-      el.addEventListener('contextmenu', function (event) {
-        var row = findRow(currentRows(), card.id);
-        if (!row) return;
-        openContextMenu(event, row.session
-          ? { type: 'session', session: row.session, dismissed: isDismissed(row.id) }
-          : { type: 'job', job: row.job });
-      });
+      el.addEventListener('contextmenu', function (event) { openContextMenu(event, findRow(currentRows(), card.id)); });
       return el;
     }
 
@@ -1922,8 +1932,7 @@
       prefs.selected = id;
       unread.delete(id);
       processPanel.hidden = true;
-      actionMenu.hidden = true;
-      actionsButton.setAttribute('aria-expanded', 'false');
+      closeActionMenu();
       savePrefs();
       applyPrefs();
       renderList();
@@ -1958,7 +1967,28 @@
       } catch (_) {}
     }
 
+    // Run picker: every job on the thread, newest first, so earlier runs stay reachable.
+    function fillRunPicker(job) {
+      var runs = threadRuns(jobs.some(function (entry) { return entry.id === job.id; }) ? jobs : jobs.concat([job]), job);
+      jobModalRunsField.hidden = runs.length < 2;
+      jobModalRuns.textContent = '';
+      runs.forEach(function (run, index) {
+        var option = document.createElement('option');
+        option.value = run.id;
+        var when = relativeTime(Date.parse(run.updatedAt || run.createdAt || '') || 0);
+        option.textContent = [index === 0 ? 'Latest run' : 'Run ' + (runs.length - index), run.title || run.kindLabel || 'Codex job', jobStatusLabel(run), when].filter(Boolean).join(' · ');
+        jobModalRuns.appendChild(option);
+      });
+      jobModalRuns.value = job.id;
+      jobModalRuns.onchange = function () {
+        var picked = runs.find(function (run) { return run.id === jobModalRuns.value; });
+        if (picked) openJob(picked);
+      };
+    }
+
     async function openJob(job) {
+      var token = ++jobModalToken;
+      fillRunPicker(job);
       jobModalTitle.textContent = job.title || job.kindLabel || 'Job result';
       jobModalMeta.textContent = '';
       jobModalMeta.appendChild(modalRow('Summary', job.summary || ''));
@@ -1971,11 +2001,13 @@
         jobModal.hidden = true;
         openResumeModal({ threadId: job.threadId, cwd: job.workspaceRoot }, job.title);
       } : null;
+      var wasHidden = jobModal.hidden;
       jobModal.hidden = false;
-      jobModalClose.focus();
+      if (wasHidden) jobModalClose.focus();
       try {
         var response = await fetch('/job?dir=' + encodeURIComponent(job.stateDir) + '&id=' + encodeURIComponent(job.id));
         var detail = await response.json();
+        if (token !== jobModalToken) return; // another run was picked meanwhile
         if (!response.ok) throw new Error(detail.error || 'Job not found');
         jobModalTitle.textContent = detail.title || job.title || 'Job result';
         jobModalMeta.textContent = '';
@@ -1986,6 +2018,7 @@
           || [detail.errorMessage, detail.stderrTail].filter(Boolean).join('\n\n')
           || 'No rendered result is available.';
       } catch (error) {
+        if (token !== jobModalToken) return;
         jobModalResult.textContent = 'Could not load job result: ' + error.message;
       }
     }
@@ -2310,15 +2343,16 @@
       if (event.key === 'Escape' && !stopModal.hidden) { stopModal.hidden = true; pendingKillPid = null; }
       if (event.key === 'Escape' && !jobModal.hidden) jobModal.hidden = true;
       if (event.key === 'Escape' && !controlModal.hidden) closeControlModal();
-      if (event.key === 'Escape') closeContextMenu();
+      if (event.key === 'Escape') { closeContextMenu(); closeActionMenu(); }
     });
 
     document.getElementById('new-task-button').addEventListener('click', openTaskModal);
     document.getElementById('review-button').addEventListener('click', function () { openReviewModal('review'); });
     document.getElementById('adversarial-review-button').addEventListener('click', function () { openReviewModal('adversarial-review'); });
     resumeSessionButton.addEventListener('click', function () {
-      var session = currentSession();
-      if (session) openResumeModal(session, session.title);
+      var row = selectedRow();
+      var target = row && resumeTarget(row);
+      if (target) openResumeModal(target, row.title);
     });
 
     document.getElementById('open-elsewhere-show').addEventListener('click', function () {
@@ -2421,29 +2455,21 @@
     });
 
     actionsButton.addEventListener('click', function () {
-      actionMenu.hidden = !actionMenu.hidden;
-      actionsButton.setAttribute('aria-expanded', actionMenu.hidden ? 'false' : 'true');
+      if (!actionMenu.hidden) { closeActionMenu(); return; }
+      var row = selectedRow();
+      // Copy items keep the menu open so their "copied" label shows, as today.
+      if (!row || !fillMenu(actionMenu, row, function (id) { if (id.indexOf('copy-') !== 0) closeActionMenu(); })) return;
+      actionMenu.hidden = false;
+      actionsButton.setAttribute('aria-expanded', 'true');
     });
     document.addEventListener('click', function (event) {
       closeContextMenu();
       if (actionMenu.hidden || actionMenu.contains(event.target) || actionsButton.contains(event.target)) return;
-      actionMenu.hidden = true;
-      actionsButton.setAttribute('aria-expanded', 'false');
-    });
-    [
-      { id: 'copy-resume', build: resumeCommand, done: 'Resume command copied' },
-      { id: 'copy-continue', build: continueCommand, done: 'Continue command copied' },
-      { id: 'copy-fork', build: forkCommand, done: 'Fork command copied' },
-      { id: 'copy-archive', build: archiveCommand, done: 'Archive command copied' },
-      { id: 'copy-unarchive', build: unarchiveCommand, done: 'Unarchive command copied' }
-    ].forEach(function (action) {
-      document.getElementById(action.id).addEventListener('click', function () {
-        var session = currentSession();
-        if (session && session.threadId) copyText(action.build(session.threadId), this, action.done);
-      });
+      closeActionMenu();
     });
 
-    var CONTEXT_COPY = {
+    // The one copy-command table, shared by both menus.
+    var COPY_COMMANDS = {
       'copy-resume': { build: resumeCommand, done: 'Resume command copied' },
       'copy-continue': { build: continueCommand, done: 'Continue command copied' },
       'copy-fork': { build: forkCommand, done: 'Fork command copied' },
@@ -2458,42 +2484,69 @@
       savePrefs();
       lastListSignature = '';
       lastFilterSignature = '';
+      lastHomeSignature = '';
       renderFilters();
       renderList();
       renderHeader();
+      if (showOverview()) renderFeed();
     }
 
     function closeContextMenu() { contextMenu.hidden = true; }
 
-    function runContextAction(id, item, button) {
-      var copy = CONTEXT_COPY[id];
+    // One handler table for the ... menu and the right-click menu (ids from menuItems).
+    function runMenuAction(id, row, button) {
+      var copy = COPY_COMMANDS[id];
       if (copy) {
-        var threadId = item.type === 'session' ? item.session.threadId : item.job.threadId;
-        if (threadId) copyText(copy.build(threadId), button, copy.done);
+        if (row.threadId) copyText(copy.build(row.threadId), button, copy.done);
         return;
       }
-      if (id === 'dismiss') { toggleDismissed(item.session.id); return; }
-      if (id === 'stop') { selectSession(item.session.id, true); stopButton.click(); return; }
-      if (id === 'resume-job') { openResumeModal({ threadId: item.job.threadId, cwd: item.job.workspaceRoot }, item.job.title); return; }
-      if (id === 'cancel-job') { openCancelModal(item.job); return; }
+      if (id === 'dismiss') { toggleDismissed(row.id); return; }
+      if (id === 'resume-job' || id === 'resume-session') {
+        var target = resumeTarget(row);
+        if (target) openResumeModal(target, row.title);
+        return;
+      }
+      if (id === 'cancel-job') { openCancelModal(row.job); return; }
+      if (id === 'show-result') { openJob(row.job); return; }
+      if (id === 'show-processes' || id === 'stop') {
+        if (row.session.id !== selected) selectSession(row.session.id, true);
+        showProcesses(id === 'stop');
+      }
     }
 
-    function openContextMenu(event, item) {
-      var items = contextMenuItems(item);
-      if (!items.length) return;
-      event.preventDefault();
-      contextMenu.textContent = '';
+    // Grouped menu items as DOM (labels via textContent). onPick(id) runs before the action.
+    // Returns the number of items.
+    function fillMenu(container, row, onPick) {
+      var items = menuItems(row, { dismissed: isDismissed(row.id) });
+      container.textContent = '';
+      var group = null;
       items.forEach(function (entry) {
+        if (entry.group !== group) {
+          group = entry.group;
+          var label = document.createElement('div');
+          label.className = 'menu-group';
+          label.textContent = group;
+          container.appendChild(label);
+        }
         var button = document.createElement('button');
         button.type = 'button';
+        button.setAttribute('role', 'menuitem');
+        button.dataset.action = entry.id;
         button.textContent = entry.label;
+        button.title = entry.title;
         if (entry.danger) button.className = 'danger';
         button.addEventListener('click', function () {
-          closeContextMenu();
-          runContextAction(entry.id, item, button);
+          onPick(entry.id);
+          runMenuAction(entry.id, row, button);
         });
-        contextMenu.appendChild(button);
+        container.appendChild(button);
       });
+      return items.length;
+    }
+
+    function openContextMenu(event, row) {
+      if (!row || !fillMenu(contextMenu, row, closeContextMenu)) return;
+      event.preventDefault();
       contextMenu.hidden = false;
       var pad = 8;
       contextMenu.style.left = Math.max(pad, Math.min(event.clientX, window.innerWidth - contextMenu.offsetWidth - pad)) + 'px';
@@ -2506,18 +2559,12 @@
       if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeContextMenu();
     }, true);
 
-    document.getElementById('dismiss-button').addEventListener('click', function () {
-      if (!selected) return;
-      actionMenu.hidden = true;
-      actionsButton.setAttribute('aria-expanded', 'false');
-      toggleDismissed(selected);
-    });
-
-    stopButton.addEventListener('click', async function () {
-      actionMenu.hidden = true;
-      actionsButton.setAttribute('aria-expanded', 'false');
+    // The process panel under the header, for the open task (STOP on a row opens the Stop dialog).
+    // stopBest also opens the Stop dialog for a process that started with the task (it asks first).
+    async function showProcesses(stopBest) {
+      closeActionMenu();
       processPanel.hidden = false;
-      processPanel.textContent = 'Looking for matching Codex processes\u2026';
+      processPanel.textContent = 'Looking for matching Codex processes…';
       var processes = [];
       try { processes = await (await fetch('/procs')).json(); } catch (_) {}
       processPanel.textContent = '';
@@ -2549,7 +2596,9 @@
         row.append(kill, description);
         processPanel.appendChild(row);
       });
-    });
+      // Only a process started with the task is offered straight away; otherwise the user picks.
+      if (stopBest && closeMatch) openStopModal(processes[0]);
+    }
 
     window.addEventListener('resize', function () {
       applyPrefs();
@@ -2571,11 +2620,9 @@
         });
         sessions = data.sessions;
         seeded = true;
-        // forget dismissals for sessions that fell out of the tracked list
+        // forget dismissals for sessions and job-only rows that fell out of the tracked lists
         if (sessions.length && (prefs.dismissed || []).length) {
-          var kept = prefs.dismissed.filter(function (id) {
-            return sessions.some(function (session) { return session.id === id; });
-          });
+          var kept = keptDismissed(prefs.dismissed, sessions, jobs, jobsLoaded);
           if (kept.length !== prefs.dismissed.length) { prefs.dismissed = kept; savePrefs(); }
         }
         if (selected && !sessions.some(function (session) { return session.id === selected; })) selected = null;

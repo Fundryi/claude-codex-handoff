@@ -4,42 +4,57 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
+// The ... menu and the right-click menu share one builder: menuItems(row, context).
 const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const slice = script.match(/function contextMenuItems[\s\S]*?\n    \}/)[0];
+const block = script.match(/function firstLine[\s\S]*?(?=\n    function setConnection)/)[0];
 
-function ctx() { const c = {}; vm.runInNewContext(slice, c); return c; }
-
+function ctx() { const c = {}; vm.runInNewContext(block, c); return c; }
 function plain(value) { return JSON.parse(JSON.stringify(value)); }
-
 const ids = (items) => plain(items.map((entry) => entry.id));
+function menu(session, jobs, context) {
+  const { buildRows, menuItems } = ctx();
+  return menuItems(buildRows(session ? [session] : [], jobs || [])[0], context || { dismissed: false });
+}
 
 test("live session with thread gets copy commands, dismiss, and stop", () => {
-  const { contextMenuItems } = ctx();
-  const items = contextMenuItems({ type: "session", session: { threadId: "t1", status: "LIVE" }, dismissed: false });
-  assert.deepEqual(ids(items), ["copy-resume", "copy-continue", "copy-fork", "copy-archive", "dismiss", "stop"]);
+  const items = menu({ id: "s", threadId: "t1", status: "LIVE" });
+  assert.deepEqual(ids(items), ["dismiss", "copy-resume", "copy-continue", "copy-fork", "copy-archive", "show-processes", "stop"]);
   assert.equal(items[items.length - 1].danger, true);
+  // Stop is pointless on a task that already ended or was stopped.
+  for (const status of ["DONE", "STOPPED"]) assert.ok(!ids(menu({ id: "s", threadId: "t1", status })).includes("stop"), status);
 });
 
-test("finished session without thread only gets dismiss", () => {
-  const { contextMenuItems } = ctx();
-  assert.deepEqual(ids(contextMenuItems({ type: "session", session: { status: "DONE" }, dismissed: true })), ["dismiss"]);
-  assert.equal(contextMenuItems({ type: "session", session: { status: "DONE" }, dismissed: true })[0].label, "Restore task");
+test("finished session without thread only gets dismiss and diagnostics", () => {
+  const items = menu({ id: "s", status: "DONE" }, [], { dismissed: true });
+  assert.deepEqual(ids(items), ["dismiss", "show-processes"]);
+  assert.equal(items[0].label, "Restore task");
 });
 
 test("archived session gets unarchive and dismiss only", () => {
-  const { contextMenuItems } = ctx();
-  assert.deepEqual(
-    ids(contextMenuItems({ type: "session", session: { threadId: "t1", status: "DONE", archived: true }, dismissed: false })),
-    ["copy-unarchive", "dismiss"]
-  );
+  assert.deepEqual(ids(menu({ id: "s", threadId: "t1", status: "DONE", archived: true })), ["dismiss", "copy-unarchive"]);
 });
 
 test("dead job with thread gets copies and resume; running job gets cancel", () => {
-  const { contextMenuItems } = ctx();
-  assert.deepEqual(
-    ids(contextMenuItems({ type: "job", job: { threadId: "t1", live: "dead" } })),
-    ["copy-resume", "copy-continue", "copy-fork", "resume-job"]
-  );
-  assert.deepEqual(ids(contextMenuItems({ type: "job", job: { live: "working" } })), ["cancel-job"]);
+  assert.deepEqual(ids(menu(null, [{ id: "j", threadId: "t1", live: "dead" }])), ["resume-job", "dismiss", "copy-resume", "copy-continue", "copy-fork"]);
+  const working = menu(null, [{ id: "j", live: "working" }]);
+  assert.deepEqual(ids(working), ["cancel-job", "dismiss"]);
+  assert.equal(working[0].danger, true);
+  assert.equal(working[0].label, "Cancel job…");
+});
+
+test("a job-only row dismisses by its job: id", () => {
+  const { buildRows } = ctx();
+  const row = buildRows([], [{ id: "j", live: "completed" }])[0];
+  assert.equal(row.id, "job:j");
+  assert.equal(menu(null, [{ id: "j", live: "completed" }], { dismissed: true }).find((i) => i.id === "dismiss").label, "Restore task");
+});
+
+test("menu items keep today's tooltips", () => {
+  const items = menu({ id: "s", threadId: "t1", status: "LIVE" });
+  const titles = Object.fromEntries(items.map((i) => [i.id, i.title]));
+  assert.match(titles["copy-resume"], /^codex resume /);
+  assert.match(titles["copy-continue"], /^codex exec resume /);
+  assert.match(titles["copy-archive"], /^codex archive /);
+  assert.match(titles.dismiss, /Viewer-only, undoable/);
 });

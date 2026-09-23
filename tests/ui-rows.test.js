@@ -324,3 +324,66 @@ test("row badge, meta line and tooltip", () => {
   assert.match(rowTooltip(jobOnly, T0), /queued/);
   assert.doesNotMatch(rowTooltip(jobOnly, T0), /thread:|earlier run/);
 });
+
+test("header Resume: shown for a dead or failed job and a STALE session without a job, hidden otherwise", () => {
+  const { buildRows, resumeTarget } = ctx();
+  const one = (session, jobs) => buildRows(session ? [session] : [], jobs || [])[0];
+  // Fixture 8 shape: the session went STALE because its handoff process died.
+  const dead = one({ id: "s", threadId: "t", status: "STALE", cwd: "D:\s" }, [{ id: "j", threadId: "t", live: "dead", workspaceRoot: "D:\w" }]);
+  assert.deepEqual(plain(resumeTarget(dead)), { threadId: "t", cwd: "D:\w" });
+  assert.deepEqual(plain(resumeTarget(one(null, [{ id: "j", threadId: "t", status: "failed", cwd: "D:\c" }]))), { threadId: "t", cwd: "D:\c" }, "job status counts when live is missing");
+  assert.deepEqual(plain(resumeTarget(one({ id: "s", threadId: "t", status: "STALE", cwd: "D:\s" }))), { threadId: "t", cwd: "D:\s" });
+  const hidden = {
+    "possibly-stuck job (may still run)": one({ id: "s", threadId: "t", status: "STALE" }, [{ id: "j", threadId: "t", live: "possibly-stuck" }]),
+    "working job": one({ id: "s", threadId: "t", status: "LIVE" }, [{ id: "j", threadId: "t", live: "working" }]),
+    "finished job on a stale-looking session": one({ id: "s", threadId: "t", status: "IDLE" }, [{ id: "j", threadId: "t", live: "completed" }]),
+    "dead job without thread": one(null, [{ id: "j", live: "dead" }]),
+    "archived STALE session": one({ id: "s", threadId: "t", status: "STALE", archived: true }),
+    "STALE session without thread": one({ id: "s", status: "STALE" }),
+    "waiting session": one({ id: "s", threadId: "t", status: "IDLE" }),
+    "running session": one({ id: "s", threadId: "t", status: "LIVE" })
+  };
+  for (const [name, row] of Object.entries(hidden)) assert.equal(resumeTarget(row), null, name);
+});
+
+test("header reason line: wait reason, died reason, stuck detail, nothing when healthy", () => {
+  const { buildRows, headerReason } = ctx();
+  const one = (session, jobs) => buildRows(session ? [session] : [], jobs || [])[0];
+  const now = T0 + 5 * 60000;
+  assert.match(headerReason(one({ id: "s", status: "IDLE", quietMs: 60000, lastKind: "cmd", lastText: "npm test" }), now), /^Waiting 1m 0s .*npm test/);
+  assert.equal(headerReason(one({ id: "s", threadId: "t", status: "IDLE" }, [{ id: "j", threadId: "t", live: "dead", diedReason: "process-vanished" }]), now),
+    "Handoff process died: process-vanished");
+  assert.equal(headerReason(one(null, [{ id: "j", live: "failed" }]), now), "Handoff failed");
+  // A STALE session keeps today's wait reason in front of the job detail.
+  assert.equal(headerReason(one({ id: "s", threadId: "t", status: "STALE", quietMs: 300000, lastKind: "cmd", lastText: "npm test" }, [{ id: "j", threadId: "t", live: "possibly-stuck", heartbeatAt: iso(0) }]), now),
+    "Waiting 5m 0s — last activity: running command \"npm test\" · Handoff may be stuck: no heartbeat for 5m 0s");
+  assert.equal(headerReason(one({ id: "s", threadId: "t", status: "LIVE" }, [{ id: "j", threadId: "t", live: "working" }]), now), "");
+  assert.equal(headerReason(one({ id: "s", status: "DONE" }), now), "");
+});
+
+test("rowById finds child agents too; threadRuns lists a thread's runs newest first", () => {
+  const { buildRows, rowById, threadRuns } = ctx();
+  const rows = buildRows([
+    { id: "lead", threadId: "tl", status: "LIVE", lastGrow: T0 },
+    { id: "kid", threadId: "tk", parentThreadId: "tl", status: "IDLE", lastGrow: T0 }
+  ], []);
+  assert.equal(rowById(rows, "lead").id, "lead");
+  assert.equal(rowById(rows, "kid").id, "kid");
+  assert.equal(rowById(rows, "nope"), null);
+  const jobs = [
+    { id: "a", threadId: "t6", createdAt: iso(100) },
+    { id: "c", threadId: "t6", updatedAt: iso(300) },
+    { id: "x", threadId: "other", updatedAt: iso(900) },
+    { id: "b", threadId: "t6", updatedAt: iso(200) }
+  ];
+  assert.deepEqual(ids(threadRuns(jobs, jobs[0])), ["c", "b", "a"]);
+  assert.deepEqual(ids(threadRuns(jobs, { id: "loose" })), ["loose"], "no thread: just the job itself");
+});
+
+test("dismissed ids: sessions and job-only rows stay while they exist; job ids wait for the first job list", () => {
+  const { keptDismissed } = ctx();
+  const sessions = [{ id: "s1" }];
+  const jobs = [{ id: "j1" }];
+  assert.deepEqual(plain(keptDismissed(["s1", "gone", "job:j1", "job:old"], sessions, jobs, true)), ["s1", "job:j1"]);
+  assert.deepEqual(plain(keptDismissed(["s1", "gone", "job:j1", "job:old"], sessions, [], false)), ["s1", "job:j1", "job:old"], "jobs not loaded yet: keep every job id");
+});

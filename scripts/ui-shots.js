@@ -167,11 +167,11 @@ async (page) => {
   }
   await view('NOW', 'ALL');
 
-  // ---- 6. the ... menu ----
+  // ---- 6. the grouped ... menu (Fixture 4 is still open: Job, Session, Terminal commands, Diagnostics) ----
   if (await clickId('actions-button')) {
     await page.waitForTimeout(200);
     await shot('06-actions-menu');
-    await pressEscape();
+    await pressEscape(); // Escape closes the ... menu (ruling R2)
   }
 
   // ---- 7. context menu on a row ----
@@ -184,6 +184,14 @@ async (page) => {
     await row.click({ button: 'right' });
     await page.waitForTimeout(200);
     await shot('07-context-menu');
+    await pressEscape();
+    // A possibly-stuck handoff: Cancel job lives in the menus now, not inline on the row.
+    const stuck = page.getByText('Fixture 9 -', { exact: false }).first();
+    await stuck.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    await stuck.click({ button: 'right' });
+    await page.waitForTimeout(200);
+    await shot('07-context-menu-cancel-job');
     await pressEscape();
   } catch (err) {
     skipped.push('context menu: ' + err.message);
@@ -211,19 +219,50 @@ async (page) => {
     skipped.push('Handoffs tab not found - could not reach review start dialogs');
   }
 
-  // ---- 9. result dialog ----
-  // Since Task 4 Fixture 5 is a merged session + job row, so this click opens its session
-  // (ruling R9). Task 6 should switch this step to "Show full result" in the ... menu.
-  // Shot 14 covers the dialog through a job-only row meanwhile.
-  await view('NOW', 'ALL'); // land on Now/All first so re-clicking the tab opens the overview
-  if (await clickSel('#tabs [data-tab="NOW"]')) {
+  // ---- 9. result dialog: open Fixture 5, then ... > Job > Show full result ----
+  async function showFullResult(title) {
+    await view('HISTORY', 'EVERYTHING');
+    if (!await clickText(title)) return false;
     await page.waitForTimeout(200);
-    if (await clickText('Fixture 5 -')) {
+    if (!await clickId('actions-button')) return false;
+    await page.waitForTimeout(150);
+    if (!await clickSel('#action-menu [data-action="show-result"]')) return false;
+    await page.waitForTimeout(400);
+    return true;
+  }
+  if (await showFullResult('Fixture 5 -')) {
+    await shot('09-result-dialog');
+    await pressEscape();
+  }
+
+  // ---- 9b. run picker: Fixture 6 has 3 runs on one thread ----
+  if (await showFullResult('Fixture 6 -')) {
+    await shot('09-run-picker');
+    try {
+      const runs = page.locator('#job-modal-runs');
+      const values = await runs.locator('option').evaluateAll((options) => options.map((o) => o.value));
+      await runs.selectOption(values[values.length - 1]);
+      await page.waitForTimeout(400);
+      await shot('09-run-picker-oldest-run');
+    } catch (err) {
+      skipped.push('run picker: ' + err.message);
+    }
+    await pressEscape();
+  }
+
+  // ---- 9c. header: reason line (Fixture 9, possibly stuck) and Resume (Fixture 8, dead job) ----
+  await view('NOW', 'ALL');
+  if (await clickText('Fixture 9 -')) {
+    await page.waitForTimeout(200);
+    await shot('09-header-reason-line');
+  }
+  if (await clickText('Fixture 8 -')) {
+    await page.waitForTimeout(200);
+    await shot('09-header-resume');
+    if (await clickId('resume-session-button')) {
       await page.waitForTimeout(200);
-      await shot('09-result-dialog');
+      await shot('09-header-resume-dialog');
       await pressEscape();
-    } else {
-      skipped.push('result dialog: no finished job card found for Fixture 5');
     }
   }
 
@@ -275,6 +314,13 @@ async (page) => {
       await page.waitForTimeout(200);
       await shot('12-mobile-task-view');
     }
+  }
+
+  // ---- 12b. the grouped ... menu at mobile width ----
+  if (await clickId('actions-button')) {
+    await page.waitForTimeout(200);
+    await shot('12-mobile-actions-menu');
+    await pressEscape();
   }
 
   // ---- 15. Now overview at mobile width, Auto-open toggle stays visible ----

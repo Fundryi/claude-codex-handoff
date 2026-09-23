@@ -99,8 +99,7 @@ test("threadJobStatuses classifies liveness, newest job per thread wins", () => 
 test("UI knows the STOPPED status", () => {
   assert.match(html, /STOPPED:\s*\{\s*label:\s*'Stopped'/);
   assert.match(html, /\.status\.STOPPED\s*\{/);
-  // stop button is pointless on an already-stopped task
-  assert.match(html, /stopButton\.hidden = session\.status === 'DONE' \|\| session\.status === 'STOPPED'/);
+  // No Stop on an already-stopped task: menuItems covers it (ui-context-menu.test.js).
 });
 
 test("UI help text explains job-liveness-aware statuses", () => {
