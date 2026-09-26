@@ -35,6 +35,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state root (plugin CLI + viewer) |
 | `CODEX_VIEWER_PORT` | `8377` | Viewer HTTP port; also where the companion POSTs job completions (`/notify`) |
 | `CODEX_VIEWER_HOST` | `127.0.0.1` | Viewer bind address (`--host` overrides; `0.0.0.0` = LAN, no token) |
+| `CODEX_VIEWER_ALLOWED_HOSTS` | (none) | Comma list of reverse-proxy names trusted by `controlHosts`; when set, the default bind becomes `0.0.0.0` |
 | `CODEX_VIEWER_AUTOSTART` | `1` | Set to `0` to disable SessionStart viewer autostart |
 
 ## Commands

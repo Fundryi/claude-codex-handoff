@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.15.6";
+const APP_VERSION = "2.15.7";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 const PID_FILE = path.join(os.tmpdir(), "codex-live-viewer-" + PORT + ".pid");
 function parseFlags(argv) {
@@ -40,7 +40,8 @@ function parseFlags(argv) {
   return flags;
 }
 const FLAGS = parseFlags(process.argv.slice(2));
-const HOST = FLAGS.host || process.env.CODEX_VIEWER_HOST || "127.0.0.1";
+// A proxy name usually means the proxy runs on another machine, so it opens the bind too.
+const HOST = FLAGS.host || process.env.CODEX_VIEWER_HOST || (process.env.CODEX_VIEWER_ALLOWED_HOSTS ? "0.0.0.0" : "127.0.0.1");
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const TOKEN_FILE = path.join(CODEX_HOME, "live-viewer-token");
 
@@ -824,12 +825,12 @@ const server = http.createServer((req, res) => {
     res.end(LOGO);
   } else if (req.url === "/shutdown") {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("bye");
     setTimeout(() => process.exit(0), 100);
   } else if (req.url === "/procs") {
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     codexProcs(list => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(list));
@@ -837,7 +838,7 @@ const server = http.createServer((req, res) => {
   } else if (req.url.startsWith("/kill?pid=")) {
     if (process.platform !== "win32") { res.writeHead(501); return res.end("kill is Windows-only for now"); }
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     const pid = parseInt(req.url.slice("/kill?pid=".length), 10);
     if (!Number.isInteger(pid) || pid <= 0) { res.writeHead(400); return res.end("bad pid"); }
     // re-verify the pid is still a codex process before killing anything
@@ -850,7 +851,7 @@ const server = http.createServer((req, res) => {
     });
   } else if (req.url.startsWith("/open?id=")) {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     const id = decodeURIComponent(req.url.slice("/open?id=".length));
     const entry = [...searchIndex.values()].find(e => e.id === id);
     res.writeHead(entry ? 200 : 404, { "Content-Type": "application/json" });
@@ -896,7 +897,7 @@ const server = http.createServer((req, res) => {
     res.write(": connected\n\n");
     req.on("close", () => notificationClients.delete(res));
   } else if (req.url === "/jobs") {
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     const now = Date.now();
     const jobs = listCompanionJobs().map(j => {
       const alive = pidAlive(j.pid);
@@ -905,7 +906,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(JSON.stringify({ jobs }));
   } else if (req.url.startsWith("/job?")) {
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     const u = new URL(req.url, "http://local");
     const file = companionJobFile(u.searchParams.get("dir") || "", u.searchParams.get("id") || "");
     let body = null;
@@ -914,7 +915,7 @@ const server = http.createServer((req, res) => {
     res.end(body || JSON.stringify({ ok: false, error: "job not found" }));
   } else if (req.url === "/resume") {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     readJsonBody(req, body => {
       if (!body || !body.threadId || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "threadId and existing cwd required" });
       const liveJob = listCompanionJobs().find(j => j.threadId === body.threadId && pidAlive(j.pid));
@@ -927,7 +928,7 @@ const server = http.createServer((req, res) => {
     });
   } else if (req.url === "/cancel") {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
-    if (!trustedControlOrigin(req)) { res.writeHead(403); return res.end("untrusted origin"); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     readJsonBody(req, body => {
       if (!body || !body.jobId || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "jobId and existing cwd required" });
       runCompanion(["cancel", String(body.jobId), "--cwd", body.cwd, "--json"], {}, (err, parsed, errText) => {
@@ -963,7 +964,19 @@ function controlHosts() {
       }
     }
   }
+  // Names a reverse proxy serves the viewer under: a bare name, name:port, or the full URL.
+  for (const entry of String(process.env.CODEX_VIEWER_ALLOWED_HOSTS || "").split(",")) {
+    const name = entry.trim().toLowerCase();
+    if (!name) continue;
+    try { hosts.add(name.includes("://") ? new URL(name).host : name); } catch {}
+  }
   return hosts;
+}
+
+function refuseUntrusted(req, res) {
+  res.writeHead(403, { "Content-Type": "text/plain" });
+  res.end("untrusted origin. If a proxy serves the viewer at " + String(req.headers.host || "").slice(0, 200) +
+    ", add that name to CODEX_VIEWER_ALLOWED_HOSTS and restart the viewer.");
 }
 
 function trustedControlOrigin(req) {
@@ -1010,6 +1023,10 @@ function serve() {
     setInterval(tick, POLL_MS);
     setTimeout(buildSearchIndex, 50);
     setInterval(buildSearchIndex, 30000);
+    // A proxy cuts a stream that stays silent (nginx: 60 s). A comment line keeps both streams open.
+    setInterval(() => {
+      for (const res of [...sseClients, ...notificationClients]) { try { res.write(": ping\n\n"); } catch {} }
+    }, 25000);
   });
   server.on("error", err => {
     if (err.code !== "EADDRINUSE") throw err;
@@ -1203,7 +1220,7 @@ else {
   console.log("  kill     force-quit the viewer, even a hung one");
   console.log("  serve    run in the foreground (default; what npm start does)");
   console.log("Flags:");
-  console.log("  --host <addr>         bind address (default 127.0.0.1; 0.0.0.0 = LAN)");
+  console.log("  --host <addr>         bind address (default 127.0.0.1, or 0.0.0.0 when CODEX_VIEWER_ALLOWED_HOSTS is set; 0.0.0.0 = LAN)");
   console.log("  --tunnel              expose via Cloudflare quick tunnel (needs cloudflared)");
   console.log("  --tunnel-token <t>    named Cloudflare tunnel (custom domain); implies --tunnel");
   console.log("  --token <t>           fixed tunnel access token (default: auto-generated)");

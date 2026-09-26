@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.15.7
+
+- **The viewer works behind a reverse proxy.** Set `CODEX_VIEWER_ALLOWED_HOSTS` to the name the proxy serves it under, for example in the `env` block of `~/.claude/settings.json`. Before, every control request through a proxy was refused as "untrusted origin", so jobs never showed. The name can be bare, carry a port, or be the full URL. Setting it also makes the viewer listen on all addresses, unless `CODEX_VIEWER_HOST` says otherwise.
+- **Live updates stay open behind a proxy.** The viewer sends a keep-alive line on both event streams every 25 seconds. Before, nginx closed a quiet stream after 60 seconds.
+- **A refused control says why.** The header shows "Controls blocked at this address". Hover over it to see the name to add. The refusal text names it too.
+
 ## 2.15.6
 
 - **`/codex:handoff` is the main command.** It hands a task to Codex. `/codex:rescue` keeps working as the same command under its original name, and a test keeps the two identical.

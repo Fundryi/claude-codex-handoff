@@ -2855,9 +2855,22 @@
       } catch (_) {}
     }
 
+    var controlsBlocked = false;
     async function refreshJobs() {
       try {
         var response = await fetch('/jobs');
+        // Behind a proxy whose name the viewer does not know, every control is refused. Say so.
+        if (response.status === 403) {
+          controlsBlocked = true;
+          setConnection('disconnected', 'Controls blocked at this address');
+          connection.title = await response.text();
+          return;
+        }
+        if (controlsBlocked) {
+          controlsBlocked = false;
+          connection.title = '';
+          setConnection('connected', 'Live updates connected');
+        }
         var data = await response.json();
         if (!response.ok) return;
         var previousRow = findRow(currentRows(), selected);
@@ -3665,7 +3678,7 @@
     });
 
     var events = new EventSource('/events');
-    events.onopen = function () { setConnection('connected', 'Live updates connected'); };
+    events.onopen = function () { if (!controlsBlocked) setConnection('connected', 'Live updates connected'); };
     events.onerror = function () { setConnection('disconnected', 'Reconnecting\u2026'); };
     events.onmessage = function (message) {
       var data = JSON.parse(message.data);

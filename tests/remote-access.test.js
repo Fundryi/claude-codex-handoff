@@ -133,12 +133,26 @@ test("origin: forged cf-connecting-ip without --tunnel does not bypass allowlist
 
 test("controlHosts: loopback always, LAN interfaces only when bound beyond loopback", () => {
   const os = { networkInterfaces: () => ({ eth0: [{ family: "IPv4", address: "10.0.0.5", internal: false }] }) };
-  const lan = extract("controlHosts", { os, PORT: 8377, HOST: "0.0.0.0" }).controlHosts();
+  const process = { env: {} };
+  const lan = extract("controlHosts", { os, process, PORT: 8377, HOST: "0.0.0.0" }).controlHosts();
   assert.equal(lan.has("localhost:8377"), true);
   assert.equal(lan.has("127.0.0.1:8377"), true);
   assert.equal(lan.has("10.0.0.5:8377"), true);
-  const loop = extract("controlHosts", { os, PORT: 8377, HOST: "127.0.0.1" }).controlHosts();
+  const loop = extract("controlHosts", { os, process, PORT: 8377, HOST: "127.0.0.1" }).controlHosts();
   assert.equal(loop.has("10.0.0.5:8377"), false);
+});
+
+test("controlHosts: CODEX_VIEWER_ALLOWED_HOSTS adds proxy names as the browser sends them", () => {
+  const os = { networkInterfaces: () => ({}) };
+  const process = { env: { CODEX_VIEWER_ALLOWED_HOSTS: " Viewer.Example.com , https://b.example/, c.example:8443,," } };
+  const hosts = extract("controlHosts", { os, process, URL, PORT: 8377, HOST: "127.0.0.1" }).controlHosts();
+  assert.equal(hosts.has("viewer.example.com"), true);
+  assert.equal(hosts.has("b.example"), true);
+  assert.equal(hosts.has("c.example:8443"), true);
+  assert.equal(hosts.has(""), false);
+  const ctx = originCtx({ hosts: [...hosts] });
+  assert.equal(ctx.trustedControlOrigin({ headers: { origin: "https://viewer.example.com", host: "viewer.example.com" } }), true);
+  assert.equal(ctx.trustedControlOrigin({ headers: { origin: "https://evil.example", host: "viewer.example.com" } }), false);
 });
 
 test("parseTunnelUrl: finds trycloudflare URL in cloudflared stderr chatter", () => {
