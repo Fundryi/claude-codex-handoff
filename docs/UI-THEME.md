@@ -45,9 +45,11 @@ Actor color says who sent a feed message. It has one meaning everywhere: feed ca
 | Codex (lead) | Light teal `#9ae0d4`, ring avatar | 12.80 / 11.98 | `>_` | In a child agent's session: the lead agent's prompts ("Codex (lead) → Codex"). Named in the Codex legend tooltip |
 | Codex work | Teal rail, ring dot in the legend | same | `>_` | Thinking, commands, output, patches and tool calls |
 | System | Slate `#8c9bab`, dashed | 6.76 / 6.33 | `i` | Injected context (permissions, AGENTS.md, environment, skills) and hook text |
-| Workflow script | Orchid `#e08ae6` (`--claude-wf`), ring avatar | 8.19 / 7.67 | flow icon | Claude tab only: the prompt a Claude workflow script gave an agent ("Workflow script → Claude agent") |
-| Claude agent | Orchid, filled avatar | 8.19 / 7.67 | flow icon | Claude tab only: the replies of an agent a Claude workflow started ("Claude agent → Workflow script") |
-| Agent work | Orchid rail, ring dot in the legend | same | flow icon | Claude tab only: that agent's tool calls, output and thinking |
+| Workflow script | Clay `#d97757`, ring avatar | 6.16 / 5.76 | flow icon | Claude tab only: the prompt a Claude workflow script gave an agent ("Workflow script → Claude agent") |
+| Claude agent | Clay, filled avatar | 6.16 / 5.76 | flow icon | Claude tab only: the replies of an agent a Claude workflow started ("Claude agent → Workflow script") |
+| Agent work | Clay rail, ring dot in the legend | same | flow icon | Claude tab only: that agent's tool calls, output and thinking |
+
+The three Claude tab actors share Claude's clay. The avatar shape (ring or filled), the label and the "sender → receiver" line tell them apart.
 
 A question for the human (the Needs decision callout in a Codex reply, and the Result card's question) uses the You pink, because it is addressed to you. In a handoff the reply goes to Claude, so the tag reads "asks you (via Claude)" and the callout "Question for you (via Claude)". In a child agent's session the question is for the lead agent: tag "asks the lead agent" and callout "Question for the lead agent", both in the light teal of Codex (lead).
 
@@ -55,14 +57,17 @@ Who sent a message comes from `messageActor(event, session)`: Codex work kinds a
 
 ## Claude workflow mark
 
-Owner rule: a Claude Code workflow (a Workflow tool run) must never look like Codex work. Codex work is teal with the `>_` icon; a Codex handoff that Claude started carries Claude's clay and `✳` (the Handoff badge, "Started by: Claude (handoff)"). A Claude workflow has its own mark instead:
+Owner rule: Claude things are Claude orange. A Codex handoff that Claude started and a Claude Code workflow (a Workflow tool run) both use Claude's clay `#d97757` (`--claude`, 6.16 on `#0b0f14`, 5.76 on `#111720`). There is one Claude color; there is no second accent. Codex work stays teal with the `>_` icon.
 
-- Label "Claude workflow".
-- The flow icon: one node fanning out to three (an inline SVG, `flowIcon()`), never `>_` and never `✳`.
-- The orchid accent `#e08ae6` (`--claude-wf`, 8.19 on `#0b0f14`, 7.67 on `#111720`). It is not the Codex teal (`#45c4b0`, `#9ae0d4`), not Claude's clay / the Handoff badge (`#d97757`), not the agent-team violet (`#7c6bd6`, `#b7a9ff`, `#c9b6ff`), not You pink, not Plugin lime, and not a status color. Changing it is one token.
-- Like Handoff, the mark has no pill, so it never reads as a status.
+A Claude workflow and a Codex handoff differ by icon and label, not by color:
 
-The mark sits on every Claude surface: the Claude tab label, the header counter, every run row (status chip, then the mark), the task header badge, phase headings and agent rows in the run view (orchid rail), the feed avatars and rails (Workflow script, Claude agent, Agent work), and the Claude legend. Status still uses the status colors only.
+- A Codex handoff: the `✳` glyph and the label "Handoff" (the Handoff badge, "Started by: Claude (handoff)").
+- A Claude workflow: the flow icon (one node fanning out to three, an inline SVG, `flowIcon()`, never `>_` and never `✳`) and the label "Claude workflow".
+- Like Handoff, the workflow mark has no pill, so it never reads as a status.
+
+The clay is redder and darker than the Needs attention amber (`#ee964b`, `#f0a254`). Status still uses the status colors only: a Claude run's status chip, the agent state dots and the progress bars never use the clay.
+
+The workflow mark sits on every Claude workflow surface: the Claude tab label, the header counter, every run row (status chip, then the mark), the task header badge, phase headings and agent rows in the run view (clay rail), the feed avatars and rails (Workflow script, Claude agent, Agent work), and the Claude legend.
 
 ## Geometry and spacing
 
@@ -81,9 +86,10 @@ Compact spacing is the only layout. There is no separate Comfortable density.
 - The viewer does not start new Codex runs. Runs start from Claude (`/codex:handoff`) or a Codex CLI; the viewer resumes, answers and cancels them.
 - One list of rows: a Codex session and the handoff jobs on its thread share one row. Rows show 3 lines: badges, title, project · model · effort · tokens. Full path, thread, sandbox, reason and job detail are in the row tooltip.
 - Tabs Now, Handoffs, History, Claude sit in one fixed row; the four fit a 240 px sidebar. Each tab has filter chips with counts (Now: All, Running, Waiting, Needs attention, Needs answer; Handoffs: All, Running, Needs attention, Needs answer, Finished, Stopped; History: Finished, Stopped, Archived, Dismissed, Everything; Claude: All, Running, Needs attention, Finished). Order and position never change when counts update.
-- The Claude tab lists Claude Code workflows only, from `~/.claude/projects` (read only, last 24 hours, newest 20 runs). No Codex row is ever in it, and no Claude run is ever in Now, Handoffs or History. A run row: status chip and the Claude workflow mark, then the workflow name, then project · session · "9 started, 6 done" · duration (never "6/71": the planned total is not on disk). Opening a run shows its agents grouped by phase ("Scout 6/6", done/started) with a state dot each (Running spinner, done green, failed amber, ended gray "no end record"), "last write 3s ago", and while running the tool name and context tokens. Opening an agent shows its transcript in the feed, live.
+- The Claude tab lists Claude Code workflows only, from `~/.claude/projects` (read only, last 24 hours, newest 20 runs). No Codex row is ever in it, and no Claude run is ever in Now, Handoffs or History. A run row: status chip and the Claude workflow mark, then the workflow name, then project · session · "9 started, 6 done" · duration (never "6/71": the planned total is not on disk). Opening a run shows the run view. The header says what the run is: name, description, project, session, start time and duration. A summary box at the top gives "6 done of 9 started", the running, failed and ended counts, and the totals from the finish record. Under it are a progress bar (done green, failed amber) and a "Running now:" button for each running agent. Then the agents follow, grouped by phase ("Scout 6/6", done/started, with a small progress bar). Each agent row has a state dot (Running spinner, done green, failed amber, ended gray "no end record") and "last write 3s ago". While the agent runs, the row also shows the tool name and context tokens and has a faint blue tint.
+- Clicking an agent opens its transcript in a side panel on the right of the main pane; the run view stays visible on the left, with its own scroll, and the open agent's row is highlighted. The panel has its own scroll and Jump to latest, and updates live. Its header shows the agent's status, label, phase, agent ID, last write, and while running the tool and context tokens, and a close button. Escape or the close button closes the panel and puts focus back on the agent's row; opening puts focus on the close button. Clicking another agent switches the panel. With no agent open the panel says "No agent open · Click an agent to see its transcript here". The open run and agent persist, so a reload opens the same panel. When the main pane is 640 px wide or less (a phone, or a small window with the sidebar open), the panel slides over the run view, full width, with a "‹ Back to run" button.
 - Claude run status uses the existing colors: Running (blue), Quiet and Failed (Needs attention amber; Quiet = no write for 5 min and no finish record, a flag only), Finished (green), Stopped (the Stopped gray, for a killed run).
-- The header counter ("Claude: 2 running · 1 needs attention", with the flow icon, orchid outline) shows from every tab while a Claude workflow runs or needs attention; clicking it opens the Claude tab (Running, or Needs attention when nothing runs). A Codex row changing status never moves the view out of the Claude tab.
+- The header counter ("Claude: 2 running · 1 needs attention", with the flow icon, clay outline) shows from every tab while a Claude workflow runs or needs attention; clicking it opens the Claude tab (Running, or Needs attention when nothing runs). A Codex row changing status never moves the view out of the Claude tab.
 - Choosing a tab or chip pauses auto-open (also closes the Now overview if it was open). A background update must not override an explicit choice.
 - Auto-open is resumed only through its toggle, in the Now overview header ("Auto-open new runs: On/Off"). Turning it on leaves the overview, opens the newest Running task, and shows Now/Running unless the current view already shows it.
 - If the selected task itself changes status, the view moves to that status's chip (same tab first) so the selected row remains visible. History/Everything and Handoffs/All stay put.
@@ -109,7 +115,7 @@ Compact spacing is the only layout. There is no separate Comfortable density.
   - Each run of injected context and hook text folds into one dashed System row ("3 injected blocks · permissions, AGENTS.md, environment context"); expanding it lists each block with its size.
   - Turn events are thin centered rules: Turn started, ✓ Turn complete (Finished green), Turn aborted (red).
   - While the task is Running, the feed ends with "Codex is working · <latest step>" (running <command>, editing <files>, thinking, ...). A Claude agent's transcript ends with "Claude agent is working · <latest step>" instead, in the same Running blue.
-  - A work block takes its actor's color: "Codex work" on the teal rail, a Claude agent's "Agent work" on the orchid rail.
+  - A work block takes its actor's color: "Codex work" on the teal rail, a Claude agent's "Agent work" on the clay rail.
 - The legend ("Who's who") sits in the 43 px bar above the feed, where the internals toggle used to be: one colored dot per actor, with a tooltip each. At 760 px and below the "Who's who" label hides and the row scrolls sideways; it never adds height.
 - The header's meta line starts with "Started by: Claude (handoff)" or "Started by: you (Codex CLI)", from the session's originator (`codex_cli_rs` Codex CLI, `codex_vscode` VS Code, Codex Desktop; any other value as written). A child agent shows "Started by: Codex (lead agent)". Unknown originator: no line. At 760 px and below the meta line shows the project name instead of the full path; the tooltip keeps the full line.
 - Messages, thinking steps, and the result card render a safe Markdown subset: headings, paragraphs, bold, italic, inline code, fenced code blocks, bullet and numbered lists, and block quotes. Links show as text plus the URL, never as a clickable link. Everything is built as DOM nodes with `textContent`; untrusted output never becomes `innerHTML`.

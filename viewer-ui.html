@@ -28,9 +28,6 @@
       --codex: #45c4b0;
       --system: #8c9bab;
       --codex-lead: #9ae0d4; /* a lead agent writing to its child: Codex family, lighter, ring avatar */
-      /* Claude workflow accent: orchid. Not Codex teal, not Claude clay (Handoff), not agent-team violet,
-         not a status color. Every Claude workflow surface uses it, so it never reads as Codex work. */
-      --claude-wf: #e08ae6;
       --sidebar-width: 340px;
       font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
       font-size: 13px;
@@ -342,29 +339,60 @@
     .status.HANDOFF { background: transparent; color: var(--claude); padding: 2px 1px; }
     .status.HANDOFF::before { content: '\2733\FE0E'; margin-right: 4px; font-size: 10px; }
     .status.AGENT { background: #2a2440; color: #c9b6ff; }
-    /* The Claude workflow mark: orchid, flow icon, no pill (like Handoff), so it never reads as a status
-       and never as Codex work. Its own tab, counter, rows, header badge, rails and avatars. */
-    .status.CLAUDE_WF { background: transparent; color: var(--claude-wf); padding: 2px 1px; gap: 4px; }
-    .claude-mark svg, .status.CLAUDE_WF svg, .tab-button svg, #claude-counter svg { width: 11px; height: 11px; vertical-align: -1px; color: var(--claude-wf); flex: none; }
+    /* The Claude workflow mark: Claude's clay, the flow icon, no pill (like Handoff), so it never reads as a
+       status and never as Codex work. The flow icon and the label tell it apart from a Handoff (clay, ✳). */
+    .status.CLAUDE_WF { background: transparent; color: var(--claude); padding: 2px 1px; gap: 4px; }
+    .claude-mark svg, .status.CLAUDE_WF svg, .tab-button svg, #claude-counter svg { width: 11px; height: 11px; vertical-align: -1px; color: var(--claude); flex: none; }
     .tab-button svg { margin-right: 4px; }
-    .session.claude-run { border-left-color: color-mix(in srgb, var(--claude-wf) 45%, transparent); }
+    .session.claude-run { border-left-color: color-mix(in srgb, var(--claude) 45%, transparent); }
     .session.claude-run.selected { border-left-color: var(--blue); }
-    .home-card.claude-card { border-left: 3px solid var(--claude-wf); }
-    #claude-counter { height: 32px; border: 1px solid color-mix(in srgb, var(--claude-wf) 45%, var(--border)); border-radius: 7px; background: transparent; color: var(--claude-wf); padding: 0 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+    .home-card.claude-card { border-left: 3px solid var(--claude); }
+    #claude-counter { height: 32px; border: 1px solid color-mix(in srgb, var(--claude) 45%, var(--border)); border-radius: 7px; background: transparent; color: var(--claude); padding: 0 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
     #claude-counter:hover { background: var(--hover); }
     body.claude-tab .codex-only, body:not(.claude-tab) .claude-only { display: none !important; }
-    .claude-phase { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 4px; padding: 2px 0 2px 10px; border-left: 2px solid var(--claude-wf); color: var(--claude-wf); font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+    /* Claude tab body: the run view (#claude-overview, own scroll) on the left, the open agent's transcript
+       (#feed-wrap, own scroll and Jump to latest) as a panel on the right. No run open: the run view only. */
+    #main-body { flex: 1; min-height: 0; display: flex; position: relative; overflow: hidden; container-type: inline-size; }
+    #main-body > #feed-wrap { flex: 1 1 60%; min-width: 0; }
+    #claude-overview { flex: 1 1 40%; min-width: 280px; overflow: auto; padding: 11px clamp(14px, 2vw, 24px) 40px; }
+    body.claude-tab:not(.claude-run-open) #feed-wrap { display: none; }
+    body.claude-tab.claude-run-open #feed-wrap { border-left: 1px solid var(--border); background: #0d1218; }
+    #claude-panel-head { flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px 8px 15px; border-bottom: 1px solid var(--border); background: var(--panel); }
+    #claude-panel-copy { flex: 1; min-width: 0; }
+    #claude-panel-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    #claude-panel-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 650; }
+    #claude-panel-meta { display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 5px; color: var(--muted); font-size: 11px; }
+    #claude-panel-close { flex: none; width: auto; min-width: 32px; padding: 0 8px; color: var(--muted); font-size: 15px; }
+    #claude-panel-close:hover { color: var(--fg); }
+    #claude-panel-close .close-back { display: none; font-size: 12px; }
+    body:not(.claude-panel-open) #claude-panel-head { display: none; }
+    .claude-panel-empty { display: grid; place-items: center; min-height: 60%; color: var(--muted); text-align: center; font-size: 12px; padding: 40px 20px; }
+    .claude-panel-empty strong { display: block; color: var(--fg); font-size: 13px; margin-bottom: 4px; }
+    .claude-summary { margin: 0 0 6px; padding: 9px 11px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+    .claude-summary-line { display: flex; flex-wrap: wrap; gap: 3px 12px; color: var(--muted); font-size: 11px; }
+    .claude-summary-line b { color: var(--fg); font-weight: 650; }
+    .claude-running { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+    .claude-running button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid #36577c; border-radius: 999px; padding: 1px 8px; background: #132235; color: #c2ddff; cursor: pointer; font: 11px "Cascadia Code", Consolas, monospace; }
+    .claude-running button:hover { background: #172f4d; }
+    /* Progress: done green, failed amber (status colors), the rest of the started agents gray. */
+    .claude-bar { display: flex; height: 4px; margin-top: 8px; border-radius: 2px; background: var(--hover); overflow: hidden; }
+    .claude-bar span { display: block; height: 100%; }
+    .claude-bar .bar-done { background: var(--green); }
+    .claude-bar .bar-failed { background: #ee964b; }
+    .claude-phase { display: flex; align-items: center; gap: 8px; margin: 16px 0 4px; padding: 2px 0 2px 10px; border-left: 2px solid var(--claude); color: var(--claude); font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
     .claude-phase .phase-count { color: var(--muted); font-weight: 600; letter-spacing: 0; text-transform: none; }
-    .claude-agent { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; border: 0; border-left: 2px solid color-mix(in srgb, var(--claude-wf) 40%, transparent); border-radius: 0 6px 6px 0; padding: 5px 10px; background: transparent; color: var(--fg); text-align: left; cursor: pointer; font-size: 12px; transition: background-color .14s ease; }
+    .claude-phase .claude-bar { flex: 1; max-width: 120px; margin: 0 0 0 auto; height: 3px; }
+    .claude-agent { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; border: 0; border-left: 2px solid color-mix(in srgb, var(--claude) 40%, transparent); border-radius: 0 6px 6px 0; padding: 5px 10px; background: transparent; color: var(--fg); text-align: left; cursor: pointer; font-size: 12px; }
+    .claude-agent.running { background: color-mix(in srgb, var(--blue) 7%, transparent); }
     .claude-agent:hover { background: var(--hover); }
+    .claude-agent.open { background: var(--selected); border-left-color: var(--blue); }
     .claude-agent .agent-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .claude-agent .agent-meta { flex: none; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .claude-agent .agent-meta { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 11px; white-space: nowrap; }
     .state-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #7b8794; }
     .state-dot.done { background: var(--green); }
     .state-dot.failed { background: #ee964b; }
     .state-dot.running { width: 9px; height: 9px; background: transparent; border: 2px solid var(--blue); border-top-color: transparent; animation: spin .8s linear infinite; }
     .claude-note { margin: 18px 0 0; color: var(--faint); font-size: 11px; }
-    .claude-totals { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
 
@@ -665,9 +693,9 @@
     .actor-system { --actor: var(--system); }
     .actor-codex-lead { --actor: var(--codex-lead); }
     .actor-codex-lead .avatar { background: transparent; color: var(--codex-lead); box-shadow: inset 0 0 0 1.5px var(--codex-lead); }
-    /* Claude workflow actors: the orchid accent and the flow icon. Ring = the script's prompt, filled = the agent. */
-    .actor-workflow-script, .actor-claude-agent, .actor-claude-work { --actor: var(--claude-wf); }
-    .actor-workflow-script .avatar { background: transparent; color: var(--claude-wf); box-shadow: inset 0 0 0 1.5px var(--claude-wf); }
+    /* Claude workflow actors: Claude's clay and the flow icon. Ring = the script's prompt, filled = the agent. */
+    .actor-workflow-script, .actor-claude-agent, .actor-claude-work { --actor: var(--claude); }
+    .actor-workflow-script .avatar { background: transparent; color: var(--claude); box-shadow: inset 0 0 0 1.5px var(--claude); }
     .avatar svg { width: 12px; height: 12px; }
     .avatar.small svg { width: 10px; height: 10px; }
     .msg-tag.neutral { --actor: var(--system); }
@@ -781,6 +809,7 @@
     .marker.done { color: var(--green); }
     .marker.err { color: var(--red); }
     .working { display: flex; align-items: center; gap: 8px; margin: 12px 0 0 9px; color: #80bdff; font-size: 11px; min-width: 0; }
+    .working-label { flex: none; }
     .working-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
     .working::before {
       content: '';
@@ -854,6 +883,7 @@
     }
     .load-earlier:hover { background: var(--hover); color: var(--fg); }
     @media (max-width: 760px) {
+      .claude-desc { display: none; } /* the title tooltip keeps it; on a phone the agent panel needs the room */
       #side {
         position: fixed;
         inset: 0 auto 0 0;
@@ -886,7 +916,22 @@
       #legend { gap: 12px; }
       .result-section.question { padding: 0; border: 0; background: none; }
       .result-card-body .answer-box { position: sticky; bottom: -12px; margin: 10px -14px -12px; padding: 10px 14px 12px; background: var(--panel); border-top: 1px solid var(--border); }
+      #claude-overview { padding-left: 12px; padding-right: 12px; }
+      #claude-panel-head { padding-left: 10px; padding-right: 10px; }
     }
+    /* The main pane is too narrow for two columns (a phone, or a small window with the sidebar open):
+       the agent panel slides over the run view, full width, with a "Back to run" button. The hidden
+       run view keeps its scroll place but leaves the tab order. */
+    @container (max-width: 640px) {
+      #claude-overview { min-width: 0; }
+      body.claude-tab:not(.claude-panel-open) #feed-wrap { display: none; }
+      body.claude-tab.claude-panel-open #feed-wrap { position: absolute; inset: 0; z-index: 6; border-left: 0; animation: claude-panel-in .18s ease; }
+      body.claude-tab.claude-panel-open #claude-overview { visibility: hidden; transition: visibility 0s .18s; }
+      #claude-panel-close .close-back { display: inline; }
+      #claude-panel-close .close-x { display: none; }
+    }
+    @keyframes claude-panel-in { from { transform: translateX(100%); } }
+    @media (prefers-reduced-motion: reduce) { #feed-wrap { animation: none !important; } }
   </style>
 </head>
 <body>
@@ -949,9 +994,19 @@
 
     <section id="result-card" class="codex-only" aria-label="Handoff result" hidden></section>
 
-    <div id="feed-wrap">
-      <div id="feed"><div id="feed-inner"></div></div>
-      <button id="jump-latest" type="button" hidden>Jump to latest</button>
+    <div id="main-body">
+      <section id="claude-overview" class="claude-only" aria-label="Claude workflow run"></section>
+      <div id="feed-wrap">
+        <div id="claude-panel-head" class="claude-only">
+          <div id="claude-panel-copy">
+            <div id="claude-panel-title-row"><span id="claude-panel-status" class="status STOPPED"></span><span id="claude-panel-title" class="mono"></span></div>
+            <div id="claude-panel-meta"></div>
+          </div>
+          <button id="claude-panel-close" class="icon-button" type="button" title="Close the transcript (Esc)" aria-label="Close the agent transcript"><span class="close-back">&#x2039; Back to run</span><span class="close-x" aria-hidden="true">&#xD7;</span></button>
+        </div>
+        <div id="feed"><div id="feed-inner"></div></div>
+        <button id="jump-latest" type="button" hidden>Jump to latest</button>
+      </div>
     </div>
   </main>
 
@@ -1008,7 +1063,7 @@
       selected: null,
       dismissed: [],
       claudeRun: null, // the open Claude workflow run id (Claude tab)
-      claudeAgent: null // the open agent id inside it: its transcript shows in the feed
+      claudeAgent: null // the open agent id inside it: its transcript shows in the side panel
     };
     var prefs = loadPrefs();
     var sessions = [];
@@ -1042,7 +1097,8 @@
     // polled from /claude/agent (transcripts never ride /events).
     var claudeRuns = [];
     var claudeLoaded = false;
-    var lastClaudeListSignature = '', lastClaudeFeedSignature = '';
+    // The run view and the agent panel rebuild on their own signatures, so one never redraws the other.
+    var lastClaudeListSignature = '', lastClaudeFeedSignature = '', lastClaudeOverviewSignature = '';
     var claudeFeed = newClaudeFeed('');
     var claudePollTimer = 0;
     var CLAUDE_SESSION = { source: 'claude' }; // the pseudo-session the feed code sees for a Claude transcript
@@ -1065,6 +1121,11 @@
     var taskHandoff = document.getElementById('task-handoff');
     var taskClaude = document.getElementById('task-claude');
     var claudeCounter = document.getElementById('claude-counter');
+    var claudeOverview = document.getElementById('claude-overview');
+    var claudePanelStatus = document.getElementById('claude-panel-status');
+    var claudePanelTitle = document.getElementById('claude-panel-title');
+    var claudePanelMeta = document.getElementById('claude-panel-meta');
+    var claudePanelClose = document.getElementById('claude-panel-close');
     var taskMeta = document.getElementById('task-meta');
     var actionMenu = document.getElementById('action-menu');
     var contextMenu = document.getElementById('context-menu');
@@ -2593,7 +2654,7 @@
       you: { name: 'You', glyph: 'Y' },
       relay: { name: 'You', glyph: 'Y' },
       claude: { name: 'Claude', glyph: '✳︎' },
-      // Claude workflow actors: orchid and the flow icon, never the Codex >_ or the handoff ✳.
+      // Claude workflow actors: Claude's clay and the flow icon, never the Codex >_ or the handoff ✳.
       'workflow-script': { name: 'Workflow script', icon: 'flow' },
       'claude-agent': { name: 'Claude agent', icon: 'flow' },
       'claude-work': { name: 'Agent work', icon: 'flow' },
@@ -2831,7 +2892,7 @@
     }
 
     // Consecutive work: one collapsed activity block on the actor's rail (Codex work: teal,
-    // a Claude agent's work: orchid).
+    // a Claude agent's work: Claude's clay).
     function createWorkBlock(block, open, actor) {
       actor = actor || 'work';
       var details = document.createElement('details');
@@ -2959,7 +3020,8 @@
       var claude = prefs.tab === 'CLAUDE';
       if (claude) {
         lastHomeSignature = ''; // the Now overview rebuilds on the way back
-        if (!prefs.claudeAgent) { renderClaudeOverview(); return; }
+        renderClaudeBody();
+        if (!prefs.claudeAgent) return;
       } else {
         lastClaudeFeedSignature = '';
         lastClaudeOverviewScope = null;
@@ -3043,7 +3105,7 @@
           var working = document.createElement('div');
           working.className = 'working';
           working.setAttribute('role', 'status');
-          working.append(document.createTextNode(claude ? 'Claude agent is working' : 'Codex is working'), textSpan('working-text', '· ' + workingLine(rawEvents)));
+          working.append(textSpan('working-label', claude ? 'Claude agent is working' : 'Codex is working'), textSpan('working-text', '· ' + workingLine(rawEvents)));
           fragment.appendChild(working);
         }
         if (claude && claudeFeed.error) {
@@ -3078,8 +3140,8 @@
       if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
     }
 
-    // -- Claude workflows: the Claude tab's list, header, run view and agent transcript. Every Claude
-    // surface carries the mark (orchid, flow icon, "Claude workflow"), so it never looks like Codex work.
+    // -- Claude workflows: the Claude tab's list, header, run view and agent panel. Every Claude
+    // surface carries the mark (Claude's clay, flow icon, "Claude workflow"), so it never looks like Codex work.
     function claudeRunById(id) { return claudeRuns.find(function (run) { return run.id === id; }) || null; }
     function newClaudeFeed(key) {
       return { key: key, events: [], offset: 0, tool: '', contextTokens: 0, state: '', error: '', loaded: false, busy: false, final: false, stopped: false };
@@ -3163,26 +3225,39 @@
       renderFeed();
       if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
     }
+    // Opens (or with null closes) an agent's transcript in the side panel. The run view stays as it is.
     function selectClaudeAgent(id) {
       prefs.claudeAgent = id;
-      lastClaudeOverviewScope = null; // back to the run: its view opens at the top
       savePrefs();
       closeActionMenu();
       syncClaudePoll();
       renderHeader();
       renderFeed();
     }
+    function openClaudeAgent(id) {
+      selectClaudeAgent(id);
+      var row = claudeOverview.querySelector('.claude-agent.open'); // opened from a "Running now" button far up
+      if (row) row.scrollIntoView({ block: 'nearest' });
+      claudePanelClose.focus({ preventScroll: true });
+    }
+    function closeClaudePanel() {
+      var id = prefs.claudeAgent;
+      selectClaudeAgent(null);
+      var row = claudeOverview.querySelector('.claude-agent[data-key="agent:' + CSS.escape(id) + '"]');
+      if (row) row.focus(); // scrolls only when the row is out of view
+    }
+    claudePanelClose.addEventListener('click', closeClaudePanel);
 
     function claudeMetaItem(text, title) {
       var span = textSpan('meta-item', text);
       span.title = title || text;
       return span;
     }
-    // Header: the Claude workflow badge always; then the run or the agent that is open.
+    // Header: the Claude workflow badge always; then the open run (its agent shows in the side panel).
     function renderClaudeHeader() {
       var run = claudeRunById(prefs.claudeRun);
-      var agentId = prefs.claudeRun ? prefs.claudeAgent : null;
       var now = Date.now();
+      renderClaudePanelHead(run);
       taskMeta.textContent = '';
       taskHandoff.hidden = true;
       taskFast.hidden = true;
@@ -3190,7 +3265,7 @@
       autoOpenToggle.hidden = true;
       taskClaude.hidden = false;
       actionsButton.hidden = !run;
-      if (!run && !agentId) {
+      if (!run) {
         closeActionMenu();
         taskStatus.hidden = true;
         taskTitle.textContent = 'Claude workflows';
@@ -3200,42 +3275,20 @@
         return;
       }
       taskStatus.hidden = false;
-      if (agentId) {
-        var agent = run ? (run.agents || []).find(function (entry) { return entry.id === agentId; }) : null;
-        var agentView = claudeAgentView(claudeFeed.state || (agent && agent.state) || 'ended');
-        taskStatus.className = 'status ' + agentView.badge;
-        taskStatus.textContent = agentView.label;
-        taskStatus.title = agentView.help;
-        taskTitle.textContent = agent ? agent.label : agentId;
-        taskTitle.title = taskTitle.textContent;
-        var back = document.createElement('button');
-        back.type = 'button';
-        back.className = 'meta-item meta-button';
-        back.textContent = '‹ Run: ' + (run ? run.name : prefs.claudeRun);
-        back.title = 'Back to the run: all its agents by phase';
-        back.addEventListener('click', function () { selectClaudeAgent(null); });
-        taskMeta.appendChild(back);
-        if (agent) taskMeta.appendChild(claudeMetaItem('Phase: ' + agent.phase));
-        taskMeta.appendChild(claudeMetaItem('agent ' + agentId, 'Agent ID'));
-        if (agent && agent.lastWriteMs) taskMeta.appendChild(claudeMetaItem('last write ' + relativeTime(agent.lastWriteMs), 'Last write to its transcript'));
-        if (claudeFeed.tool) taskMeta.appendChild(claudeMetaItem(claudeFeed.tool, 'Tool it is running now'));
-        if (claudeFeed.contextTokens) taskMeta.appendChild(claudeMetaItem('Context ' + compactCount(claudeFeed.contextTokens) + ' tokens', claudeFeed.contextTokens.toLocaleString() + ' tokens in its context'));
-        return;
-      }
       var view = claudeStatusView(run.status);
       taskStatus.className = 'status ' + view.badge;
       taskStatus.textContent = view.label;
       taskStatus.title = view.help;
       taskTitle.textContent = run.name || run.id;
       taskTitle.title = [run.name, run.description].filter(Boolean).join('\n');
-      if (run.description) taskMeta.appendChild(claudeMetaItem(run.description));
+      if (run.description) taskMeta.appendChild(claudeMetaItem(run.description)).classList.add('claude-desc');
       taskMeta.appendChild(claudeMetaItem(run.project, 'Project'));
       taskMeta.appendChild(claudeMetaItem('session ' + run.session, 'Claude Code session that started the workflow'));
-      taskMeta.appendChild(claudeMetaItem(claudeRunLine(run), 'Agents seen in the run journal'));
+      var started = run.startedMs ? new Date(run.startedMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
       var duration = claudeRunDuration(run, now);
-      if (duration) taskMeta.appendChild(claudeMetaItem(formatDuration(duration), run.status === 'RUNNING' ? 'Running for' : 'Duration'));
-      if (run.totals) {
-        taskMeta.appendChild(claudeMetaItem([compactCount(run.totals.tokens) + ' tokens', (run.totals.toolCalls || 0).toLocaleString() + ' tool calls', run.totals.model].filter(Boolean).join(' · '), 'From the finish record'));
+      if (started || duration) {
+        taskMeta.appendChild(claudeMetaItem([started ? 'started ' + started : '', duration ? (run.status === 'RUNNING' ? 'running ' : 'took ') + formatDuration(duration) : ''].filter(Boolean).join(' · '),
+          run.startedMs ? 'Started ' + new Date(run.startedMs).toLocaleString() : 'Duration'));
       }
       var reason = run.error ? 'Details unavailable: this run’s files are in a format this viewer does not know.'
         : run.status === 'QUIET' ? 'Quiet for ' + formatDuration(now - run.updatedMs) + ', no finish record. May be paused, rate-limited or ended. Use /workflows in a terminal or Remote Control to check.'
@@ -3249,13 +3302,16 @@
     }
 
     // One agent in the run view: state dot, label, last write, and while running its tool and context.
+    // The open agent's row is highlighted (its transcript is in the side panel); running rows get a faint blue.
     function claudeAgentRow(agent) {
       var view = claudeAgentView(agent.state);
+      var open = agent.id === prefs.claudeAgent;
       var button = document.createElement('button');
       button.type = 'button';
-      button.className = 'claude-agent';
+      button.className = 'claude-agent ' + agent.state + (open ? ' open' : '');
+      button.setAttribute('aria-pressed', open ? 'true' : 'false');
       button.dataset.key = 'agent:' + agent.id; // renderClaudeOverview puts focus back by this key
-      button.title = [agent.label, view.label + ': ' + view.help, 'agent ' + agent.id, 'Click to open its transcript'].join('\n');
+      button.title = [agent.label, view.label + ': ' + view.help, 'agent ' + agent.id, 'Click to open its transcript in the side panel'].join('\n');
       var dot = document.createElement('span');
       dot.className = 'state-dot ' + agent.state;
       dot.title = view.label + ': ' + view.help;
@@ -3264,27 +3320,136 @@
       if (agent.state === 'running' && agent.contextTokens) meta.push(compactCount(agent.contextTokens) + ' context');
       meta.push(agent.lastWriteMs ? 'last write ' + relativeTime(agent.lastWriteMs) : view.label);
       button.append(dot, textSpan('agent-label mono', agent.label || agent.id), textSpan('agent-meta', meta.join(' · ')));
-      button.addEventListener('click', function () { selectClaudeAgent(agent.id); });
+      button.addEventListener('click', function () { openClaudeAgent(agent.id); });
       return button;
     }
 
-    // The feed with no agent open: the open run's agents by phase, or every run as a card.
+    // The agent panel's header. Text only: the close button is static HTML, so focus on it survives
+    // the 1.5 s transcript poll (which calls renderHeader).
+    function renderClaudePanelHead(run) {
+      var agentId = prefs.claudeAgent;
+      if (!agentId) return;
+      var agent = run ? (run.agents || []).find(function (entry) { return entry.id === agentId; }) : null;
+      var view = claudeAgentView(claudeFeed.state || (agent && agent.state) || 'ended');
+      claudePanelStatus.className = 'status ' + view.badge;
+      claudePanelStatus.textContent = view.label;
+      claudePanelStatus.title = view.help;
+      claudePanelTitle.textContent = agent ? agent.label : agentId;
+      claudePanelTitle.title = claudePanelTitle.textContent;
+      claudePanelMeta.textContent = '';
+      if (agent) claudePanelMeta.appendChild(claudeMetaItem('Phase: ' + agent.phase));
+      claudePanelMeta.appendChild(claudeMetaItem('agent ' + agentId, 'Agent ID'));
+      if (agent && agent.lastWriteMs) claudePanelMeta.appendChild(claudeMetaItem('last write ' + relativeTime(agent.lastWriteMs), 'Last write to its transcript'));
+      if (claudeFeed.tool) claudePanelMeta.appendChild(claudeMetaItem(claudeFeed.tool, 'Tool it is running now'));
+      if (claudeFeed.contextTokens) claudePanelMeta.appendChild(claudeMetaItem('Context ' + compactCount(claudeFeed.contextTokens) + ' tokens', claudeFeed.contextTokens.toLocaleString() + ' tokens in its context'));
+    }
+
+    // A thin progress bar: done green, failed amber, the rest of the started agents gray.
+    function claudeBar(done, failed, started) {
+      var bar = document.createElement('div');
+      bar.className = 'claude-bar';
+      bar.setAttribute('aria-hidden', 'true');
+      [['bar-done', done], ['bar-failed', failed]].forEach(function (part) {
+        if (!part[1] || !started) return;
+        var span = document.createElement('span');
+        span.className = part[0];
+        span.style.width = (100 * part[1] / started) + '%';
+        bar.appendChild(span);
+      });
+      return bar;
+    }
+    // Top of the run view: progress over the whole run, totals once finished, and the running agents.
+    function claudeRunSummary(run) {
+      var c = run.counts || {};
+      var box = document.createElement('div');
+      box.className = 'claude-summary';
+      var line = document.createElement('div');
+      line.className = 'claude-summary-line';
+      var progress = document.createElement('span');
+      progress.title = 'Agents seen in the run journal. Queued agents and the planned total are not on disk.';
+      var done = document.createElement('b');
+      done.textContent = (c.done || 0) + ' done';
+      progress.append(done, document.createTextNode(' of ' + (c.started || 0) + ' started'));
+      line.appendChild(progress);
+      if (c.running) line.appendChild(textSpan('', c.running + ' running'));
+      if (c.failed) line.appendChild(textSpan('', c.failed + ' failed'));
+      if (c.ended) line.appendChild(claudeMetaItem(c.ended + ' ended', 'No end record: the run ended or went quiet'));
+      if (run.totals) {
+        line.appendChild(claudeMetaItem([compactCount(run.totals.tokens) + ' tokens', (run.totals.toolCalls || 0).toLocaleString() + ' tool calls', run.totals.model].filter(Boolean).join(' · '), 'From the finish record'));
+      }
+      box.append(line, claudeBar(c.done || 0, c.failed || 0, c.started || 0));
+      var running = (run.agents || []).filter(function (agent) { return agent.state === 'running'; });
+      if (running.length) {
+        var row = document.createElement('div');
+        row.className = 'claude-running';
+        row.appendChild(textSpan('', 'Running now:'));
+        running.forEach(function (agent) {
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.dataset.key = 'running:' + agent.id; // focus survives the live rebuild
+          button.textContent = agent.label || agent.id;
+          button.title = 'Open the transcript of ' + (agent.label || agent.id) + (agent.tool ? '\nRunning now: ' + agent.tool : '');
+          button.addEventListener('click', function () { openClaudeAgent(agent.id); });
+          row.appendChild(button);
+        });
+        box.appendChild(row);
+      }
+      return box;
+    }
+
+    // The Claude tab's body: which parts show (body classes), the run view, and the panel's empty state.
+    // The transcript itself is renderFeed's; this never rebuilds it.
+    function renderClaudeBody() {
+      var runOpen = !!claudeRunById(prefs.claudeRun);
+      var panelWasOpen = document.body.classList.contains('claude-panel-open');
+      document.body.classList.toggle('claude-run-open', runOpen);
+      document.body.classList.toggle('claude-panel-open', runOpen && !!prefs.claudeAgent);
+      // A panel that just appeared (after a reload the run loads late) starts at the latest line,
+      // and the open agent's row is scrolled into view.
+      if (!panelWasOpen && runOpen && prefs.claudeAgent) requestAnimationFrame(function () {
+        scrollToLatest();
+        var row = claudeOverview.querySelector('.claude-agent.open');
+        if (row) row.scrollIntoView({ block: 'nearest' });
+      });
+      renderClaudeOverview();
+      if (!runOpen || prefs.claudeAgent) return;
+      var signature = 'empty:' + prefs.claudeRun;
+      if (signature === lastClaudeFeedSignature) return;
+      lastClaudeFeedSignature = signature;
+      feedInner.textContent = '';
+      jumpLatest.hidden = true;
+      var empty = document.createElement('div');
+      empty.className = 'claude-panel-empty';
+      var box = document.createElement('div');
+      var strong = document.createElement('strong');
+      strong.textContent = 'No agent open';
+      box.append(strong, textSpan('', 'Click an agent to see its transcript here. It updates live while the agent runs.'));
+      empty.appendChild(box);
+      feedInner.appendChild(empty);
+    }
+
+    // The run view (left, own scroll): every run as a card when none is open, or the open run's
+    // summary and its agents by phase. Rebuilt only when its own signature changes.
     var lastClaudeOverviewScope = null;
     function renderClaudeOverview() {
       var run = claudeRunById(prefs.claudeRun);
       var scope = run ? run.id : '';
-      var signature = JSON.stringify([scope, claudeLoaded, Math.floor(Date.now() / 10000), run || claudeRuns.map(function (entry) {
+      // An open run counts only what the run view shows, coarsely: each agent write would otherwise
+      // rebuild the rows the user is about to click. The 10 s tick refreshes the relative times.
+      var signature = JSON.stringify([scope, prefs.claudeAgent, claudeLoaded, Math.floor(Date.now() / 10000), run ? [run.status, run.counts, run.totals, run.phases, run.agentsHidden,
+        (run.agents || []).map(function (agent) {
+          return [agent.id, agent.state, agent.label, agent.phase, agent.tool, Math.floor((agent.lastWriteMs || 0) / 10000), Math.floor((agent.contextTokens || 0) / 1000)];
+        })] : claudeRuns.map(function (entry) {
         return [entry.id, entry.status, entry.name, entry.project, entry.counts, Math.floor(entry.updatedMs / 10000), entry.durationMs];
       })]);
-      if (signature === lastClaudeFeedSignature) return;
-      lastClaudeFeedSignature = signature;
+      if (signature === lastClaudeOverviewSignature) return;
+      lastClaudeOverviewSignature = signature;
       // Keyboard focus on a card or agent row survives the live rebuild, as in renderFeed.
-      var focusHost = feedInner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
+      var focusHost = claudeOverview.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
       var focusKey = focusHost ? focusHost.dataset.key : null;
-      feedInner.textContent = '';
-      jumpLatest.hidden = true;
+      claudeOverview.textContent = '';
       var wrap = document.createElement('div');
-      wrap.id = 'home-view';
+      wrap.className = 'claude-view';
       if (!run) {
         if (claudeRuns.length) {
           wrap.appendChild(textDiv('home-heading', 'Claude workflows (' + claudeRuns.length + ')'));
@@ -3301,14 +3466,12 @@
           wrap.appendChild(empty);
         }
       } else {
-        if (run.totals) {
-          wrap.appendChild(textDiv('claude-totals', [claudeStatusView(run.status).label, compactCount(run.totals.tokens) + ' tokens',
-            (run.totals.toolCalls || 0).toLocaleString() + ' tool calls', run.totals.model, formatDuration(claudeRunDuration(run, Date.now()))].filter(Boolean).join(' · ')));
-        }
+        wrap.appendChild(claudeRunSummary(run));
         claudePhaseGroups(run).forEach(function (group) {
           var heading = document.createElement('div');
           heading.className = 'claude-phase';
-          heading.append(textSpan('', group.title), textSpan('phase-count', group.done + '/' + group.started + (group.failed ? ' · ' + group.failed + ' failed' : '')));
+          heading.append(textSpan('', group.title), textSpan('phase-count', group.done + '/' + group.started + (group.failed ? ' · ' + group.failed + ' failed' : '')),
+            claudeBar(group.done, group.failed, group.started));
           heading.title = group.done + ' done of ' + group.started + ' started';
           wrap.appendChild(heading);
           group.agents.forEach(function (agent) { wrap.appendChild(claudeAgentRow(agent)); });
@@ -3316,9 +3479,9 @@
         if (run.agentsHidden) wrap.appendChild(textDiv('claude-note', '+ ' + run.agentsHidden + ' more agents not shown'));
         wrap.appendChild(textDiv('claude-note', 'Queued agents, log() lines and the planned total are not on disk, so they are not shown.'));
       }
-      feedInner.appendChild(wrap);
+      claudeOverview.appendChild(wrap);
       if (focusKey) wrap.querySelectorAll('[data-key]').forEach(function (el) { if (el.dataset.key === focusKey) el.focus({ preventScroll: true }); });
-      if (scope !== lastClaudeOverviewScope) feed.scrollTop = 0; // a new run opens at the top; live updates keep the place
+      if (scope !== lastClaudeOverviewScope) claudeOverview.scrollTop = 0; // a new run opens at the top; live updates keep the place
       lastClaudeOverviewScope = scope;
     }
 
@@ -3943,6 +4106,8 @@
         // Nothing else was open: on mobile, Escape closes the drawer instead.
         if (!closedSomething && document.body.classList.contains('mobile-side-open')) {
           document.body.classList.remove('mobile-side-open');
+        } else if (!closedSomething && prefs.tab === 'CLAUDE' && prefs.claudeAgent && !isEditableElement(document.activeElement)) {
+          closeClaudePanel(); // then the Claude agent panel
         }
         return;
       }
@@ -4307,7 +4472,7 @@
         if (prefs.tab === 'CLAUDE') {
           renderList();
           renderHeader();
-          if (!prefs.claudeAgent) renderFeed();
+          renderClaudeBody(); // the run view and the panel layout; the open transcript follows its own poll
         }
       }
       if (data.type === 'snapshot') {
@@ -4348,7 +4513,7 @@
     renderFeed();
     syncClaudePoll();
     refreshJobs();
-    window.setInterval(function () { renderList(); renderHeader(); if (feedOverview()) renderFeed(); }, 10000);
+    window.setInterval(function () { renderList(); renderHeader(); if (prefs.tab === 'CLAUDE') renderClaudeBody(); else if (feedOverview()) renderFeed(); }, 10000);
     // Rows merge job state into every tab, so job liveness is polled everywhere.
     window.setInterval(refreshJobs, 5000);
   </script>
