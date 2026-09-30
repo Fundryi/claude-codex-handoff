@@ -32,6 +32,7 @@ import {
   getConfig,
   listJobs,
   loadState,
+  patchJobFile,
   resolveJobFile,
   resolveStateDir,
   setConfig,
@@ -1275,7 +1276,7 @@ async function handleCancel(argv) {
   // Safe stop first: flag the job; its worker owns the app-server connection
   // and interrupts its own turn natively (turn_aborted lands in the rollout).
   const cancelRequestedAt = nowIso();
-  writeJobFile(workspaceRoot, job.id, { ...existing, cancelRequested: true, cancelRequestedAt });
+  patchJobFile(workspaceRoot, job.id, { cancelRequested: true, cancelRequestedAt });
   upsertJob(workspaceRoot, { id: job.id, cancelRequested: true, cancelRequestedAt });
   appendLogLine(job.logFile, "Cancel requested - waiting for the Codex turn to stop safely.");
 
