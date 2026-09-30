@@ -16,7 +16,6 @@ import {
     getCodexAvailability,
     getSessionRuntimeStatus,
     importExternalAgentSession,
-    interruptAppServerTurn,
     parseStructuredOutput,
     readOutputSchema,
     runAppServerReview,
@@ -242,7 +241,7 @@ async function buildSetupReport(cwd, actionsTaken = []) {
     npm: npmStatus,
     codex: codexStatus,
     auth: authStatus,
-    sessionRuntime: getSessionRuntimeStatus(process.env, workspaceRoot),
+    sessionRuntime: getSessionRuntimeStatus(),
     reviewGateEnabled: Boolean(config.stopReviewGate),
     actionsTaken,
     nextSteps
@@ -386,7 +385,6 @@ async function executeReviewRun(request) {
       target: reviewTarget,
       model: request.model,
       fast: request.fast,
-      detached: true,
       onProgress: request.onProgress,
       shouldCancel: request.shouldCancel
     });
@@ -437,7 +435,6 @@ async function executeReviewRun(request) {
     model: request.model,
     effort: request.effort,
     fast: request.fast,
-    detached: true,
     sandbox: companionSandbox(),
     outputSchema: readOutputSchema(REVIEW_SCHEMA),
     onProgress: request.onProgress,
@@ -526,7 +523,6 @@ async function executeTaskRun(request) {
     model: request.model,
     effort: request.effort,
     fast: request.fast,
-    detached: true,
     sandbox: companionSandbox(),
     onProgress: request.onProgress,
     shouldCancel: request.shouldCancel,
@@ -1275,8 +1271,6 @@ async function handleCancel(argv) {
   const reference = positionals[0] ?? "";
   const { workspaceRoot, job } = resolveCancelableJob(cwd, reference, { env: process.env });
   const existing = readStoredJob(workspaceRoot, job.id) ?? {};
-  const threadId = existing.threadId ?? job.threadId ?? null;
-  const turnId = existing.turnId ?? job.turnId ?? null;
 
   // Safe stop first: flag the job; its worker owns the app-server connection
   // and interrupts its own turn natively (turn_aborted lands in the rollout).
@@ -1297,18 +1291,7 @@ async function handleCancel(argv) {
     return;
   }
 
-  // Force stop: external interrupt covers broker-hosted turns, then kill the tree.
-  // The job's own workspace: a --cwd job found through a pointer lives elsewhere.
-  const interrupt = await interruptAppServerTurn(workspaceRoot, { threadId, turnId });
-  if (interrupt.attempted) {
-    appendLogLine(
-      job.logFile,
-      interrupt.interrupted
-        ? `Requested Codex turn interrupt for ${turnId} on ${threadId}.`
-        : `Codex turn interrupt failed${interrupt.detail ? `: ${interrupt.detail}` : "."}`
-    );
-  }
-
+  // Force stop: the worker owns its app-server, so killing its tree ends the turn.
   terminateProcessTree(job.pid ?? Number.NaN);
   appendLogLine(job.logFile, "Cancelled by user (forced).");
 
@@ -1340,9 +1323,7 @@ async function handleCancel(argv) {
     jobId: job.id,
     status: "cancelled",
     title: job.title,
-    stopMode: "forced",
-    turnInterruptAttempted: interrupt.attempted,
-    turnInterrupted: interrupt.interrupted
+    stopMode: "forced"
   };
 
   outputCommandResult(payload, renderCancelReport(nextJob), options.json);

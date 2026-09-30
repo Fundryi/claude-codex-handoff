@@ -8,19 +8,13 @@
  * @typedef {import("./app-server-protocol").InitializeCapabilities} InitializeCapabilities
  */
 import fs from "node:fs";
-import net from "node:net";
 import process from "node:process";
 import { spawn } from "node:child_process";
 import readline from "node:readline";
-import { parseBrokerEndpoint } from "./broker-endpoint.mjs";
-import { ensureBrokerSession, loadBrokerSession, waitForBrokerEndpoint } from "./broker-lifecycle.mjs";
 import { terminateProcessTree } from "./process.mjs";
 
 const PLUGIN_MANIFEST_URL = new URL("../../.claude-plugin/plugin.json", import.meta.url);
 const PLUGIN_MANIFEST = JSON.parse(fs.readFileSync(PLUGIN_MANIFEST_URL, "utf8"));
-
-export const BROKER_ENDPOINT_ENV = "CODEX_COMPANION_APP_SERVER_ENDPOINT";
-export const BROKER_BUSY_RPC_CODE = -32001;
 
 export function buildAppServerArgs(configOverrides = []) {
   const args = ["app-server"];
@@ -75,7 +69,6 @@ class AppServerClientBase {
     this.exitError = null;
     /** @type {AppServerNotificationHandler | null} */
     this.notificationHandler = null;
-    this.lineBuffer = "";
     this.transport = "unknown";
 
     this.exitPromise = new Promise((resolve) => {
@@ -112,17 +105,6 @@ class AppServerClientBase {
       return;
     }
     this.sendMessage({ method, params });
-  }
-
-  handleChunk(chunk) {
-    this.lineBuffer += chunk;
-    let newlineIndex = this.lineBuffer.indexOf("\n");
-    while (newlineIndex !== -1) {
-      const line = this.lineBuffer.slice(0, newlineIndex);
-      this.lineBuffer = this.lineBuffer.slice(newlineIndex + 1);
-      this.handleLine(line);
-      newlineIndex = this.lineBuffer.indexOf("\n");
-    }
   }
 
   handleLine(line) {
@@ -305,88 +287,14 @@ class SpawnedCodexAppServerClient extends AppServerClientBase {
   }
 }
 
-class BrokerCodexAppServerClient extends AppServerClientBase {
-  constructor(cwd, options = {}) {
-    super(cwd, options);
-    this.transport = "broker";
-    this.endpoint = options.brokerEndpoint;
-  }
-
-  async initialize() {
-    await new Promise((resolve, reject) => {
-      const target = parseBrokerEndpoint(this.endpoint);
-      this.socket = net.createConnection({ path: target.path });
-      this.socket.setEncoding("utf8");
-      this.socket.on("connect", resolve);
-      this.socket.on("data", (chunk) => {
-        this.handleChunk(chunk);
-      });
-      this.socket.on("error", (error) => {
-        if (!this.exitResolved) {
-          reject(error);
-        }
-        this.handleExit(error);
-      });
-      this.socket.on("close", () => {
-        this.handleExit(this.exitError);
-      });
-    });
-
-    await this.request("initialize", {
-      clientInfo: this.options.clientInfo ?? DEFAULT_CLIENT_INFO,
-      capabilities: this.options.capabilities ?? DEFAULT_CAPABILITIES
-    });
-    this.notify("initialized", {});
-  }
-
-  async close() {
-    if (this.closed) {
-      await this.exitPromise;
-      return;
-    }
-
-    this.closed = true;
-    if (this.socket) {
-      this.socket.end();
-    }
-    await this.exitPromise;
-  }
-
-  sendMessage(message) {
-    const line = `${JSON.stringify(message)}\n`;
-    const socket = this.socket;
-    if (!socket) {
-      throw new Error("codex app-server broker connection is not connected.");
-    }
-    socket.write(line);
-  }
-}
-
+// Every connection spawns its own codex app-server; there is no shared broker.
 export class CodexAppServerClient {
   static async connect(cwd, options = {}) {
-    let brokerEndpoint = null;
-    if (!options.disableBroker) {
-      brokerEndpoint = options.brokerEndpoint ?? options.env?.[BROKER_ENDPOINT_ENV] ?? process.env[BROKER_ENDPOINT_ENV] ?? null;
-      if (!brokerEndpoint && options.reuseExistingBroker) {
-        // broker.json can outlive its broker; probe before trusting it so a
-        // stale endpoint fails over instead of erroring with connect ENOENT
-        const stored = loadBrokerSession(cwd)?.endpoint ?? null;
-        if (stored && (await waitForBrokerEndpoint(stored, 150).catch(() => false))) {
-          brokerEndpoint = stored;
-        }
-      }
-      if (!brokerEndpoint && !options.reuseExistingBroker) {
-        const brokerSession = await ensureBrokerSession(cwd, { env: options.env });
-        brokerEndpoint = brokerSession?.endpoint ?? null;
-      }
-    }
-    const client = brokerEndpoint
-      ? new BrokerCodexAppServerClient(cwd, { ...options, brokerEndpoint })
-      : new SpawnedCodexAppServerClient(cwd, options);
+    const client = new SpawnedCodexAppServerClient(cwd, options);
     // A failed initialize never hands the client to a caller, so close it here or a
     // still-running codex child keeps its stdin pipe (and this process) alive.
     // handleExit first: close() waits on exitPromise, which never settles when the
-    // transport never opened (a malformed broker endpoint throws before the socket).
+    // transport never opened (initialize threw before the child could exit).
     try {
       await client.initialize();
     } catch (error) {

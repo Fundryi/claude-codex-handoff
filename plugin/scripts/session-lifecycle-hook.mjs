@@ -9,12 +9,9 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { terminateProcessTree } from "./lib/process.mjs";
-import { BROKER_ENDPOINT_ENV } from "./lib/app-server.mjs";
 import {
   clearBrokerSession,
-  LOG_FILE_ENV,
   loadBrokerSession,
-  PID_FILE_ENV,
   sendBrokerShutdown,
   teardownBrokerSession
 } from "./lib/broker-lifecycle.mjs";
@@ -191,35 +188,26 @@ async function handleSessionStart(input) {
   if (notice) console.log(notice);
 }
 
+// ponytail: transition cleanup for pre-2.17 brokers, delete in the release after 2.17.0
+// (with lib/broker-lifecycle.mjs, lib/broker-endpoint.mjs and the SessionEnd hook entry).
+// Stops a shared broker an older plugin version left running. Job workers are
+// detached and own their app-server, so a SessionEnd must not touch them; under
+// CloudCLI a SessionEnd fires on every superseded turn.
 async function handleSessionEnd(input) {
   const cwd = input.cwd || process.cwd();
-  const brokerSession =
-    loadBrokerSession(cwd) ??
-    (process.env[BROKER_ENDPOINT_ENV]
-      ? {
-          endpoint: process.env[BROKER_ENDPOINT_ENV],
-          pidFile: process.env[PID_FILE_ENV] ?? null,
-          logFile: process.env[LOG_FILE_ENV] ?? null
-        }
-      : null);
-  const brokerEndpoint = brokerSession?.endpoint ?? null;
-  const pidFile = brokerSession?.pidFile ?? null;
-  const logFile = brokerSession?.logFile ?? null;
-  const sessionDir = brokerSession?.sessionDir ?? null;
-  const pid = brokerSession?.pid ?? null;
-
-  if (brokerEndpoint) {
-    await sendBrokerShutdown(brokerEndpoint);
+  const broker = loadBrokerSession(cwd);
+  if (!broker) {
+    return;
   }
-
-  // Job workers are detached and own their app-server, so a SessionEnd must not
-  // touch them. Under CloudCLI a SessionEnd fires on every superseded turn.
+  if (broker.endpoint) {
+    await sendBrokerShutdown(broker.endpoint);
+  }
   teardownBrokerSession({
-    endpoint: brokerEndpoint,
-    pidFile,
-    logFile,
-    sessionDir,
-    pid,
+    endpoint: broker.endpoint ?? null,
+    pidFile: broker.pidFile ?? null,
+    logFile: broker.logFile ?? null,
+    sessionDir: broker.sessionDir ?? null,
+    pid: broker.pid ?? null,
     killProcess: terminateProcessTree
   });
   clearBrokerSession(cwd);

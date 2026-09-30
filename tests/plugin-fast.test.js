@@ -21,8 +21,8 @@ test("fastTier defaults to priority, env-overridable", async () => {
   delete process.env.CODEX_PLUGIN_FAST_TIER;
 });
 
-test("fastConnectOptions builds broker-bypassing overrides", async () => {
+test("fastConnectOptions builds the service-tier override", async () => {
   const { fastConnectOptions } = await import(mjs("codex.mjs"));
   assert.deepEqual(fastConnectOptions(false), {});
-  assert.deepEqual(fastConnectOptions(true), { disableBroker: true, configOverrides: ["service_tier=priority"] });
+  assert.deepEqual(fastConnectOptions(true), { configOverrides: ["service_tier=priority"] });
 });

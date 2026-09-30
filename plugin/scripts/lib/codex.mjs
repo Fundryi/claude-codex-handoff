@@ -38,8 +38,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { readJsonFile } from "./fs.mjs";
-import { BROKER_BUSY_RPC_CODE, BROKER_ENDPOINT_ENV, CodexAppServerClient } from "./app-server.mjs";
-import { loadBrokerSession } from "./broker-lifecycle.mjs";
+import { CodexAppServerClient } from "./app-server.mjs";
 import { binaryAvailable } from "./process.mjs";
 
 const SERVICE_NAME = "claude_code_codex_plugin";
@@ -66,14 +65,7 @@ export function fastTier() {
 }
 
 export function fastConnectOptions(fast) {
-  return fast ? { disableBroker: true, configOverrides: [`service_tier=${fastTier()}`] } : {};
-}
-
-// Detached workers never ride the shared broker: a SessionEnd in ANY Claude
-// session of the workspace sends broker/shutdown, which aborts every turn the
-// broker hosts. Their own app-server dies only with them.
-export function turnConnectOptions(options = {}) {
-  return { ...fastConnectOptions(options.fast), ...(options.detached ? { disableBroker: true } : {}) };
+  return fast ? { configOverrides: [`service_tier=${fastTier()}`] } : {};
 }
 
 function cleanCodexStderr(stderr) {
@@ -685,43 +677,14 @@ export async function captureTurn(client, threadId, startRequest, options = {}) 
   }
 }
 
+// Each call gets its own codex app-server, which dies with the caller: nothing
+// shared, so no other Claude session can abort a turn.
 async function withAppServer(cwd, fn, connectOptions = {}) {
-  let client = null;
-  try {
-    client = await CodexAppServerClient.connect(cwd, connectOptions);
-    const result = await fn(client);
-    await client.close();
-    return result;
-  } catch (error) {
-    const brokerRequested = client?.transport === "broker" || Boolean(process.env[BROKER_ENDPOINT_ENV]);
-    const shouldRetryDirect =
-      (client?.transport === "broker" && error?.rpcCode === BROKER_BUSY_RPC_CODE) ||
-      (brokerRequested && (error?.code === "ENOENT" || error?.code === "ECONNREFUSED"));
-
-    if (client) {
-      await client.close().catch(() => {});
-      client = null;
-    }
-
-    if (!shouldRetryDirect) {
-      throw error;
-    }
-
-    const directClient = await CodexAppServerClient.connect(cwd, { ...connectOptions, disableBroker: true });
-    try {
-      return await fn(directClient);
-    } finally {
-      await directClient.close();
-    }
-  }
-}
-
-async function withDirectAppServer(cwd, fn) {
-  const client = await CodexAppServerClient.connect(cwd, { disableBroker: true });
+  const client = await CodexAppServerClient.connect(cwd, connectOptions);
   try {
     return await fn(client);
   } finally {
-    await client.close();
+    await client.close().catch(() => {});
   }
 }
 
@@ -978,22 +941,11 @@ export function getCodexAvailability(cwd) {
   };
 }
 
-export function getSessionRuntimeStatus(env = process.env, cwd = process.cwd()) {
-  const endpoint = env?.[BROKER_ENDPOINT_ENV] ?? loadBrokerSession(cwd)?.endpoint ?? null;
-  if (endpoint) {
-    return {
-      mode: "shared",
-      label: "shared session",
-      detail: "This Claude session is configured to reuse one shared Codex runtime.",
-      endpoint
-    };
-  }
-
+export function getSessionRuntimeStatus() {
   return {
     mode: "direct",
-    label: "direct startup",
-    detail: "No shared Codex runtime is active yet. The first review or task command will start one on demand.",
-    endpoint: null
+    label: "private per job",
+    detail: "Each Codex job runs its own app-server."
   };
 }
 
@@ -1014,10 +966,7 @@ export async function getCodexAuthStatus(cwd, options = {}) {
 
   let client = null;
   try {
-    client = await CodexAppServerClient.connect(cwd, {
-      env: options.env,
-      reuseExistingBroker: true
-    });
+    client = await CodexAppServerClient.connect(cwd, { env: options.env });
     return await getCodexAuthStatusFromClient(client, cwd);
   } catch (error) {
     return buildAuthStatus({
@@ -1029,48 +978,6 @@ export async function getCodexAuthStatus(cwd, options = {}) {
     if (client) {
       await client.close().catch(() => {});
     }
-  }
-}
-
-export async function interruptAppServerTurn(cwd, { threadId, turnId }) {
-  if (!threadId || !turnId) {
-    return {
-      attempted: false,
-      interrupted: false,
-      transport: null,
-      detail: "missing threadId or turnId"
-    };
-  }
-
-  const availability = getCodexAvailability(cwd);
-  if (!availability.available) {
-    return {
-      attempted: false,
-      interrupted: false,
-      transport: null,
-      detail: availability.detail
-    };
-  }
-
-  let client = null;
-  try {
-    client = await CodexAppServerClient.connect(cwd, { reuseExistingBroker: true });
-    await client.request("turn/interrupt", { threadId, turnId });
-    return {
-      attempted: true,
-      interrupted: true,
-      transport: client.transport,
-      detail: `Interrupted ${turnId} on ${threadId}.`
-    };
-  } catch (error) {
-    return {
-      attempted: true,
-      interrupted: false,
-      transport: client?.transport ?? null,
-      detail: error instanceof Error ? error.message : String(error)
-    };
-  } finally {
-    await client?.close().catch(() => {});
   }
 }
 
@@ -1144,7 +1051,7 @@ export async function runAppServerReview(cwd, options = {}) {
       error: turnState.error ?? turnState.finalTurn?.error ?? null,
       stderr: cleanCodexStderr(client.stderr)
     };
-  }, turnConnectOptions(options));
+  }, fastConnectOptions(options.fast));
 }
 
 export async function importExternalAgentSession(cwd, options = {}) {
@@ -1156,7 +1063,7 @@ export async function importExternalAgentSession(cwd, options = {}) {
     throw new Error("A Claude session source path is required.");
   }
 
-  return withDirectAppServer(cwd, async (client) => {
+  return withAppServer(cwd, async (client) => {
     emitProgress(options.onProgress, "Importing Claude session into Codex.", "transferring");
     try {
       await requestExternalAgentSessionImport(client, externalAgentSessionMigration(options.sourcePath, cwd));
@@ -1345,7 +1252,7 @@ export async function runAppServerTurn(cwd, options = {}) {
       agents: collectAgentLabels(turnState),
       modelWarning
     };
-  }, turnConnectOptions(options));
+  }, fastConnectOptions(options.fast));
 }
 
 export async function findLatestTaskThread(cwd) {

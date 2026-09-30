@@ -23,7 +23,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
   This covers dead or stuck jobs. When Claude answers a Codex "Needs decision" question and resumes that thread (`codex-result-handling` skill), that is a new handoff Claude chooses, not recovery.
 - Nothing depends on the Claude process staying alive. Hosts like CloudCLI end it on every new message, and the session id can change. Every result must reach Claude through the prompt hook on the next message, so the hook's scope is the whole workspace, never one session.
 - Every companion run is detached. Codex is never a child of the calling process, so no harness timeout can end a run. `--background` returns a job id; the default follows the detached job and hands back a job id if it outlives the follow budget.
-- Detached workers spawn their own `codex app-server` (`detached: true` → `disableBroker`). They never ride the shared broker: a SessionEnd in any Claude session of the workspace shuts the broker down and aborts every turn on it.
+- Every companion connection spawns its own `codex app-server`; there is no shared broker. Never reintroduce one: a SessionEnd in any Claude session of the workspace used to shut it down and abort every turn on it. SessionEnd now only cleans up a broker left by a pre-2.17 version (delete that in the release after 2.17.0).
 
 ## Env vars
 

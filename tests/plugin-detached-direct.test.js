@@ -6,19 +6,6 @@ const { pathToFileURL } = require("node:url");
 const libDir = path.join(__dirname, "..", "plugin", "scripts", "lib");
 const href = (name) => pathToFileURL(path.join(libDir, name)).href;
 
-// A SessionEnd in ANY Claude session of the workspace sends broker/shutdown,
-// which aborts every turn the shared broker hosts. Detached workers therefore
-// never ride the broker - they spawn their own app-server.
-test("detached runs bypass the shared broker, inline runs keep it", async () => {
-  const { turnConnectOptions } = await import(href("codex.mjs"));
-  assert.deepEqual(turnConnectOptions({}), {});
-  assert.deepEqual(turnConnectOptions({ detached: true }), { disableBroker: true });
-  assert.deepEqual(turnConnectOptions({ detached: true, fast: true }), {
-    disableBroker: true,
-    configOverrides: ["service_tier=priority"]
-  });
-});
-
 function fakeClient() {
   let resolveExit;
   const client = {

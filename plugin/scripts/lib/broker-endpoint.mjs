@@ -1,21 +1,4 @@
-import path from "node:path";
-import process from "node:process";
-
-function sanitizePipeName(value) {
-  return String(value ?? "")
-    .replace(/[^A-Za-z0-9._-]/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-export function createBrokerEndpoint(sessionDir, platform = process.platform) {
-  if (platform === "win32") {
-    const pipeName = sanitizePipeName(`${path.win32.basename(sessionDir)}-codex-app-server`);
-    return `pipe:\\\\.\\pipe\\${pipeName}`;
-  }
-
-  return `unix:${path.join(sessionDir, "broker.sock")}`;
-}
-
+// ponytail: transition cleanup for pre-2.17 brokers, delete in the release after 2.17.0.
 export function parseBrokerEndpoint(endpoint) {
   if (typeof endpoint !== "string" || endpoint.length === 0) {
     throw new Error("Missing broker endpoint.");
