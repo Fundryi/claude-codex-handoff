@@ -5,8 +5,10 @@ export function runCommand(command, args = [], options = {}) {
   const shell = options.shell ?? (process.platform === "win32" ? (process.env.SHELL || true) : false);
   // One command string when a shell is used: Node joins file and args that way
   // anyway, and a non-empty args array with a shell trips DEP0190.
-  // ponytail: shell-routed callers pass constant tokens (no spaces/metachars);
-  // quote them if a user-supplied arg ever reaches a shell spawn.
+  // ponytail: shell-routed callers pass constant tokens (no spaces/metachars). The one
+  // outside value that reaches a shell, CODEX_PLUGIN_FAST_TIER, goes through
+  // app-server.mjs and fastTier() restricts it to [A-Za-z0-9_-]. Quote the args if
+  // free text ever reaches a shell spawn.
   const result = spawnSync(shell ? [command, ...args].join(" ") : command, shell ? [] : args, {
     cwd: options.cwd,
     env: options.env,

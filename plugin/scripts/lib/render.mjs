@@ -300,7 +300,7 @@ export function renderNativeReviewResult(result, meta) {
   } else if (result.status === 0) {
     lines.push("Codex review completed without any stdout output.");
   } else {
-    lines.push("Codex review failed.");
+    lines.push(result.failureMessage ? `Codex review failed: ${result.failureMessage}` : "Codex review failed.");
   }
 
   if (stderr) {
@@ -349,7 +349,9 @@ export function extractPreface(text) {
 
 export function readNeedsDecision(text) {
   const body = extractSection(text, "Needs decision");
-  if (!body || /^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body)) return null;
+  // "None ..." means no question only when there is no "?" in it:
+  // "None of the options fit. Should I keep researching?" is a real question.
+  if (!body || (/^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body) && !body.includes("?"))) return null;
   return body.slice(0, 1000);
 }
 

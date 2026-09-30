@@ -215,8 +215,8 @@ class SpawnedCodexAppServerClient extends AppServerClientBase {
     const args = buildAppServerArgs(this.options.configOverrides);
     // One command string when a shell is used: Node joins file and args that way
     // anyway, and a non-empty args array with a shell trips DEP0190.
-    // ponytail: args are constant except the service tier from
-    // CODEX_PLUGIN_FAST_TIER; quote them if user-supplied text ever reaches this spawn.
+    // ponytail: args are constant except the service tier, and fastTier() only lets
+    // letters, digits, - and _ through; quote them if free text ever reaches this spawn.
     this.proc = spawn(shell ? ["codex", ...args].join(" ") : "codex", shell ? [] : args, {
       cwd: this.cwd,
       env: this.options.env ?? process.env,
@@ -383,7 +383,17 @@ export class CodexAppServerClient {
     const client = brokerEndpoint
       ? new BrokerCodexAppServerClient(cwd, { ...options, brokerEndpoint })
       : new SpawnedCodexAppServerClient(cwd, options);
-    await client.initialize();
+    // A failed initialize never hands the client to a caller, so close it here or a
+    // still-running codex child keeps its stdin pipe (and this process) alive.
+    // handleExit first: close() waits on exitPromise, which never settles when the
+    // transport never opened (a malformed broker endpoint throws before the socket).
+    try {
+      await client.initialize();
+    } catch (error) {
+      client.handleExit(error);
+      await client.close().catch(() => {});
+      throw error;
+    }
     return client;
   }
 }

@@ -32,6 +32,7 @@ import {
   generateJobId,
   getConfig,
   listJobs,
+  loadState,
   resolveJobFile,
   resolveStateDir,
   setConfig,
@@ -386,7 +387,8 @@ async function executeReviewRun(request) {
       model: request.model,
       fast: request.fast,
       detached: true,
-      onProgress: request.onProgress
+      onProgress: request.onProgress,
+      shouldCancel: request.shouldCancel
     });
     const payload = {
       review: reviewName,
@@ -404,18 +406,24 @@ async function executeReviewRun(request) {
       {
         status: result.status,
         stdout: result.reviewText,
-        stderr: result.stderr
+        stderr: result.stderr,
+        // Not in stderr: that block is labelled "stderr:" and feeds diedReason.
+        failureMessage: result.error?.message ?? ""
       },
       { reviewLabel: reviewName, targetLabel: target.label, reasoningSummary: result.reasoningSummary }
     );
 
     return {
       exitStatus: result.status,
+      interrupted: Boolean(result.interrupted),
       threadId: result.threadId,
       turnId: result.turnId,
       payload,
       rendered,
-      summary: firstMeaningfulLine(result.reviewText, `${reviewName} completed.`),
+      summary: firstMeaningfulLine(
+        result.reviewText,
+        result.status === 0 ? `${reviewName} completed.` : firstMeaningfulLine(result.error?.message, `${reviewName} failed.`)
+      ),
       jobTitle: `Codex ${reviewName}`,
       jobClass: "review",
       targetLabel: target.label
@@ -433,6 +441,7 @@ async function executeReviewRun(request) {
     sandbox: companionSandbox(),
     outputSchema: readOutputSchema(REVIEW_SCHEMA),
     onProgress: request.onProgress,
+    shouldCancel: request.shouldCancel,
     // Persisted so the viewer can follow it live. The name must not start with
     // TASK_THREAD_PREFIX, or --resume-last would pick up a review thread.
     persistThread: true,
@@ -466,6 +475,7 @@ async function executeReviewRun(request) {
 
   return {
     exitStatus: result.status,
+    interrupted: Boolean(result.interrupted),
     threadId: result.threadId,
     turnId: result.turnId,
     payload,
@@ -1036,8 +1046,8 @@ async function handleTransfer(argv) {
 }
 
 // The trampoline half of spawnDetachedTaskWorker's double-spawn - see the long
-// comment there for why the extra hop exists. Spawns the real worker, hands the job
-// record the worker's pid, exits. The pid swap matters: enqueueBackgroundTask records
+// comment there for why the extra hop exists. Waits for the queued record, spawns the
+// real worker, hands the job record the worker's pid, exits. The pid swap matters: enqueueBackgroundTask records
 // this launcher's pid, and this launcher is about to die, so without the swap the
 // record would hold a dead pid and reconcileDeadJobs would mark a perfectly healthy
 // job failed. Writing it while the worker is already alive means the record names a
@@ -1054,6 +1064,29 @@ async function handleTaskWorkerLaunch(argv) {
 
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
+  // The launcher writes both stores only after spawning us. Wait (bounded) until
+  // state.json has the record: upsertJob is the launcher's last pid write, so the
+  // swap below can no longer be overwritten, and the worker finds its request.
+  const deadline = Date.now() + 10_000; // above the state lock's 3.5 s wait
+  let queued = null;
+  while (Date.now() < deadline) {
+    try {
+      const stored = readStoredJob(workspaceRoot, jobId);
+      if (stored && loadState(workspaceRoot).jobs.some((entry) => entry.id === jobId)) {
+        queued = stored;
+        break;
+      }
+    } catch {
+      // torn read while the launcher writes - retry
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  // Launcher died before storing, or the job left "queued": no worker. The record
+  // keeps our soon-dead pid, so reconcileDeadJobs marks it failed, which is the truth.
+  if (queued?.status !== "queued") {
+    return;
+  }
+
   const scriptPath = path.join(ROOT_DIR, "scripts", "codex-companion.mjs");
   const child = spawn(process.execPath, [scriptPath, "task-worker", "--cwd", cwd, "--job-id", jobId], {
     cwd,
@@ -1065,14 +1098,15 @@ async function handleTaskWorkerLaunch(argv) {
   child.unref();
 
   // Field-preserving writes to both stores, like markJobAnnounced - upsertJob would
-  // bump updatedAt and reorder sortJobsNewestFirst.
-  const stored = readStoredJob(workspaceRoot, jobId);
-  if (stored) {
-    writeJobFile(workspaceRoot, jobId, { ...stored, pid: child.pid ?? null });
+  // bump updatedAt and reorder sortJobsNewestFirst. Only while still queued: once the
+  // worker has written "running" (or a terminal state), a stale copy must not revert it.
+  const fresh = readStoredJob(workspaceRoot, jobId);
+  if (fresh?.status === "queued") {
+    writeJobFile(workspaceRoot, jobId, { ...fresh, pid: child.pid ?? null });
   }
   updateState(workspaceRoot, (state) => {
     const record = state.jobs.find((entry) => entry.id === jobId);
-    if (record) record.pid = child.pid ?? null;
+    if (record?.status === "queued") record.pid = child.pid ?? null;
   });
 }
 
@@ -1111,7 +1145,8 @@ async function handleTaskWorker(argv) {
   const shouldCancel = () => readStoredJob(workspaceRoot, options["job-id"])?.cancelRequested === true;
   const runner = storedJob.jobClass === "review" ? () => executeReviewRun({
     ...request,
-    onProgress: progress
+    onProgress: progress,
+    shouldCancel
   }) : () => executeTaskRun({
     ...request,
     onProgress: progress,

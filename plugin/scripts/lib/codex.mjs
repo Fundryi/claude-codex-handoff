@@ -28,9 +28,7 @@
  *   reviewText: string,
  *   reasoningSummary: string[],
  *   error: unknown,
- *   messages: Array<{ lifecycle: string, phase: string | null, text: string }>,
  *   fileChanges: ThreadItem[],
- *   commandExecutions: ThreadItem[],
  *   onProgress: ProgressReporter | null
  * }} TurnCaptureState
  */
@@ -57,8 +55,14 @@ export function companionSandbox() {
   return process.env.CODEX_PLUGIN_SANDBOX || "danger-full-access";
 }
 
+// The tier lands in the app-server command line, which runs through a shell on
+// Windows, so only a plain word gets through.
 export function fastTier() {
-  return process.env.CODEX_PLUGIN_FAST_TIER || "priority";
+  const tier = process.env.CODEX_PLUGIN_FAST_TIER;
+  if (!tier) return "priority";
+  if (/^[A-Za-z0-9_-]+$/.test(tier)) return tier;
+  process.stderr.write(`[codex] Ignoring CODEX_PLUGIN_FAST_TIER=${JSON.stringify(tier)}: use letters, digits, - and _ only. Using "priority".\n`);
+  return "priority";
 }
 
 export function fastConnectOptions(fast) {
@@ -367,9 +371,7 @@ function createTurnCaptureState(threadId, options = {}) {
     reviewText: "",
     reasoningSummary: [],
     error: null,
-    messages: [],
     fileChanges: [],
-    commandExecutions: [],
     onProgress: options.onProgress ?? null
   };
 }
@@ -467,11 +469,6 @@ function recordItem(state, item, lifecycle, threadId = null) {
   }
 
   if (item.type === "agentMessage") {
-    state.messages.push({
-      lifecycle,
-      phase: item.phase ?? null,
-      text: item.text ?? ""
-    });
     if (item.text) {
       if (!threadId || threadId === state.threadId) {
         state.lastAgentMessage = item.text;
@@ -527,11 +524,6 @@ function recordItem(state, item, lifecycle, threadId = null) {
 
   if (item.type === "fileChange" && lifecycle === "completed") {
     state.fileChanges.push(item);
-    return;
-  }
-
-  if (item.type === "commandExecution" && lifecycle === "completed") {
-    state.commandExecutions.push(item);
   }
 }
 
@@ -1102,30 +1094,47 @@ export async function runAppServerReview(cwd, options = {}) {
     });
     const delivery = options.delivery ?? "inline";
 
-    const turnState = await captureTurn(
-      client,
-      sourceThreadId,
-      () =>
-        client.request("review/start", {
-          threadId: sourceThreadId,
-          delivery,
-          target: options.target
-        }),
-      {
-        onProgress: options.onProgress,
-        onResponse(response, state) {
-          if (response.reviewThreadId) {
-            state.threadIds.add(response.reviewThreadId);
-            if (delivery === "detached") {
-              state.threadId = response.reviewThreadId;
+    const cancelWatcher = createTurnCancelWatcher({
+      shouldCancel: options.shouldCancel,
+      interrupt: (interruptThreadId, turnId) => {
+        emitProgress(options.onProgress, "Cancel requested - interrupting Codex review.", "cancelling");
+        return client.request("turn/interrupt", { threadId: interruptThreadId, turnId });
+      },
+      intervalMs: options.cancelPollMs ?? 1500
+    });
+
+    let turnState;
+    try {
+      turnState = await captureTurn(
+        client,
+        sourceThreadId,
+        () =>
+          client.request("review/start", {
+            threadId: sourceThreadId,
+            delivery,
+            target: options.target
+          }),
+        {
+          onProgress: options.onProgress,
+          onResponse(response, state) {
+            if (response.reviewThreadId) {
+              state.threadIds.add(response.reviewThreadId);
+              if (delivery === "detached") {
+                state.threadId = response.reviewThreadId;
+              }
             }
+            // After the delivery switch: the interrupt must name the thread that owns the turn.
+            cancelWatcher.arm(state.threadId, response.turn?.id ?? null);
           }
         }
-      }
-    );
+      );
+    } finally {
+      cancelWatcher.dispose();
+    }
 
     return {
       status: buildResultStatus(turnState),
+      interrupted: cancelWatcher.interrupted(),
       threadId: turnState.threadId,
       sourceThreadId,
       turnId: turnState.turnId,
@@ -1216,6 +1225,41 @@ export function createTurnCancelWatcher({ shouldCancel, interrupt, intervalMs = 
   };
 }
 
+// An explicit model is checked against this account's catalog, so a model
+// the account lacks (Daybreak is verification-gated, 6.1 still rolling out)
+// or an effort it does not offer fails fast with a clear message instead of
+// an opaque API error. If model/list itself fails, skip the check. With no
+// --model the configured model is unknown here, so nothing is checked.
+// Returns a retirement warning, or null.
+export async function preflightModel(client, options) {
+  if (typeof options.model !== "string" || !options.model) {
+    return null;
+  }
+  const models = await client.request("model/list", { includeHidden: true }).catch(() => null);
+  const entry = models?.data?.find((m) => m.id === options.model || m.model === options.model);
+  if (models?.data && !entry && !models.nextCursor) {
+    const reason = options.model.startsWith("gpt-daybreak") ? " (Daybreak access is verification-gated)" : "";
+    throw new Error(
+      `Model ${options.model} is not available to this Codex account${reason}. Use another model or leave the model unset.`
+    );
+  }
+  const efforts = (entry?.supportedReasoningEfforts ?? []).map((option) => option.reasoningEffort);
+  if (options.effort && efforts.length > 0 && !efforts.includes(options.effort)) {
+    throw new Error(`Model ${options.model} does not support effort "${options.effort}". Use one of: ${efforts.join(", ")}.`);
+  }
+  // A model Codex plans to retire only warns: once retired it drops out of
+  // model/list and the "not available" error above takes over.
+  const upgrade = entry?.upgradeInfo?.model ?? entry?.upgrade ?? null;
+  if (!upgrade) {
+    return null;
+  }
+  const retiresAt = entry.upgradeInfo?.retirementAt;
+  const when = retiresAt ? ` retires on ${new Date(retiresAt * 1000).toISOString().slice(0, 10)}.` : " is being replaced.";
+  const warning = `${options.model}${when} Codex suggests ${upgrade}.`;
+  emitProgress(options.onProgress, `Warning: ${warning}`, "starting");
+  return warning;
+}
+
 export async function runAppServerTurn(cwd, options = {}) {
   const availability = getCodexAvailability(cwd);
   if (!availability.available) {
@@ -1224,36 +1268,8 @@ export async function runAppServerTurn(cwd, options = {}) {
 
   return withAppServer(cwd, async (client) => {
     let threadId;
-    let modelWarning = null;
-
-    // An explicit model is checked against this account's catalog, so a model
-    // the account lacks (Daybreak is verification-gated, 6.1 still rolling out)
-    // or an effort it does not offer fails fast with a clear message instead of
-    // an opaque API error. If model/list itself fails, skip the check. With no
-    // --model the configured model is unknown here, so nothing is checked.
-    if (typeof options.model === "string" && options.model) {
-      const models = await client.request("model/list", { includeHidden: true }).catch(() => null);
-      const entry = models?.data?.find((m) => m.id === options.model || m.model === options.model);
-      if (models?.data && !entry && !models.nextCursor) {
-        const reason = options.model.startsWith("gpt-daybreak") ? " (Daybreak access is verification-gated)" : "";
-        throw new Error(
-          `Model ${options.model} is not available to this Codex account${reason}. Use another model or leave the model unset.`
-        );
-      }
-      const efforts = (entry?.supportedReasoningEfforts ?? []).map((option) => option.reasoningEffort);
-      if (options.effort && efforts.length > 0 && !efforts.includes(options.effort)) {
-        throw new Error(`Model ${options.model} does not support effort "${options.effort}". Use one of: ${efforts.join(", ")}.`);
-      }
-      // A model Codex plans to retire only warns: once retired it drops out of
-      // model/list and the "not available" error above takes over.
-      const upgrade = entry?.upgradeInfo?.model ?? entry?.upgrade ?? null;
-      if (upgrade) {
-        const retiresAt = entry.upgradeInfo?.retirementAt;
-        const when = retiresAt ? ` retires on ${new Date(retiresAt * 1000).toISOString().slice(0, 10)}.` : " is being replaced.";
-        modelWarning = `${options.model}${when} Codex suggests ${upgrade}.`;
-        emitProgress(options.onProgress, `Warning: ${modelWarning}`, "starting");
-      }
-    }
+    // Before any thread exists, so a model the account lacks fails fast.
+    const modelWarning = await preflightModel(client, options);
 
     if (options.resumeThreadId) {
       emitProgress(options.onProgress, `Resuming thread ${options.resumeThreadId}.`, "starting");
@@ -1326,7 +1342,6 @@ export async function runAppServerTurn(cwd, options = {}) {
       stderr: cleanCodexStderr(client.stderr),
       fileChanges: turnState.fileChanges,
       touchedFiles: collectTouchedFiles(turnState.fileChanges),
-      commandExecutions: turnState.commandExecutions,
       agents: collectAgentLabels(turnState),
       modelWarning
     };

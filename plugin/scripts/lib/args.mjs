@@ -25,7 +25,11 @@ export function parseArgs(argv, config = {}) {
     }
 
     if (token.startsWith("--")) {
-      const [rawKey, inlineValue] = token.slice(2).split("=", 2);
+      // Split at the first "=" only: --base=feature/auth=v2 keeps "feature/auth=v2".
+      const body = token.slice(2);
+      const eq = body.indexOf("=");
+      const rawKey = eq === -1 ? body : body.slice(0, eq);
+      const inlineValue = eq === -1 ? undefined : body.slice(eq + 1);
       const key = aliasMap[rawKey] ?? rawKey;
 
       if (booleanOptions.has(key)) {
@@ -73,22 +77,28 @@ export function parseArgs(argv, config = {}) {
   return { options, positionals };
 }
 
+// A backslash escapes only a quote (\" or \'); every other backslash is literal, so
+// Windows paths (C:\Users\x, \\srv\share) survive. Inside quotes, \" followed by
+// whitespace or the end is ambiguous ("D:\GIT\" vs "say \"hi\" there"): it closes the
+// quote, keeping the backslash, when the rest of the string holds an even number of
+// that quote character, i.e. when everything after still pairs up on its own.
 export function splitRawArgumentString(raw) {
   const tokens = [];
   let current = "";
   let quote = null;
-  let escaping = false;
 
-  for (const character of raw) {
-    if (escaping) {
-      current += character;
-      escaping = false;
-      continue;
-    }
+  for (let index = 0; index < raw.length; index += 1) {
+    const character = raw[index];
+    const next = raw[index + 1];
 
-    if (character === "\\") {
-      escaping = true;
-      continue;
+    if (character === "\\" && (next === "\"" || next === "'") && (!quote || next === quote)) {
+      const rest = raw.slice(index + 2);
+      const closesQuote = quote && /^(\s|$)/.test(rest) && rest.split(quote).length % 2 === 1;
+      if (!closesQuote) {
+        current += next;
+        index += 1;
+        continue;
+      }
     }
 
     if (quote) {
@@ -114,10 +124,6 @@ export function splitRawArgumentString(raw) {
     }
 
     current += character;
-  }
-
-  if (escaping) {
-    current += "\\";
   }
 
   if (current) {
