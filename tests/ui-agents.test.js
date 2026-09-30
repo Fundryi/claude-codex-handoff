@@ -62,7 +62,8 @@ test("childSessions ignores self-parent links and the list never recurses past o
   assert.equal(grouped.isChild("self"), false);
   assert.equal(grouped.byParent["t-self"], undefined);
 
-  // The list draws buildRows output: each session once, children one level deep.
+  // The list draws buildRows output: each session once, children one level deep,
+  // and every session reachable (a grandchild or a cycle gets its own top-level row).
   const { buildRows } = slice(/function firstLine[\s\S]*?(?=\n    function setConnection)/);
   const rows = buildRows([
     { id: "self", threadId: "t-self", parentThreadId: "t-self" },
@@ -74,6 +75,7 @@ test("childSessions ignores self-parent links and the list never recurses past o
   ], []);
   const drawn = rows.flatMap((row) => [row.id, ...row.children.map((kid) => kid.id)]);
   assert.equal(new Set(drawn).size, drawn.length, "no session drawn twice");
+  assert.deepEqual(plain([...drawn].sort()), ["a", "b", "grandkid", "kid", "p", "self"], "every session drawn");
   assert.ok(rows.every((row) => row.children.every((kid) => kid.children.length === 0)), "one level only");
   assert.deepEqual(plain(rows.find((row) => row.id === "p").children.map((kid) => kid.id)), ["kid"]);
 });
@@ -97,7 +99,7 @@ test("homeCards folds child agents into the parent card's agent count", () => {
 });
 
 test("jobDetailLine lists the agents a job used", () => {
-  const { jobDetailLine } = slice(/function jobStatusLabel[\s\S]*?function jobDetailLine[\s\S]*?\n    \}/);
+  const { jobDetailLine } = slice(/function formatDuration[\s\S]*?function jobDetailLine[\s\S]*?\n    \}/);
   const line = jobDetailLine({ phase: "done", agents: ["Kierkegaard", "Wegener"] }, NOW);
   assert.match(line, /agents: Kierkegaard, Wegener/);
   assert.doesNotMatch(jobDetailLine({ phase: "done", agents: [] }, NOW), /agents/);

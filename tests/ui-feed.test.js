@@ -164,6 +164,8 @@ test("a reply's question moves whole into the callout and nothing is lost or res
   const fenced = "## Summary\nRan:\n```\na\n\n\n\nb\n```\n\n## Needs decision\nKeep it?\n```\n## Summary\n```\n";
   assert.equal(removeResultSection(fenced, "Needs decision"), "## Summary\nRan:\n```\na\n\n\n\nb\n```");
   assert.equal(feedQuestion(fenced), "Keep it?\n```\n## Summary\n```");
+  // A Needs decision heading inside a fenced example is not the section.
+  assert.equal(feedQuestion("Template:\n```md\n## Needs decision\nPick one\n```\n\n## Summary\nDone\n\n## Needs decision\nNone"), null);
   // No question: "None", no section, or bold heading with nothing under it.
   assert.equal(feedQuestion("## Needs decision\nNone"), null);
   assert.equal(feedQuestion("No headings"), null);

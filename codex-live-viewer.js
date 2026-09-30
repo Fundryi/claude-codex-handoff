@@ -78,7 +78,8 @@ function tunnelAuthDecision(headers, rawUrl, token, tunnelActive) {
   if (!tunnelActive) return { allow: true };
   if (!headers["cf-connecting-ip"]) return { allow: true };
   if (!token) return { allow: false };
-  const eq = t => !!t && t.length === token.length && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(token));
+  // Byte lengths, not char lengths: a non-ASCII token of equal char length makes timingSafeEqual throw.
+  const eq = t => { if (!t) return false; const a = Buffer.from(t), b = Buffer.from(token); return a.length === b.length && crypto.timingSafeEqual(a, b); };
   const u = new URL(rawUrl, "http://local");
   const qtoken = u.searchParams.get("token");
   if (qtoken !== null) {
@@ -142,7 +143,7 @@ const searchIndex = new Map(); // file -> { file, id, threadId, title, cwd, mtim
 const pinnedFiles = new Map(); // file -> last-open timestamp (LRU, max 10)
 const MAX_PINNED = 10;
 let searchIndexReady = false;
-const rolloutMtimes = new Map(); // file -> mtimeMs from the last stat
+const rolloutStats = new Map(); // file -> { mtimeMs, size } from the last stat, or null
 
 // full: restat every file (the 30 s index rebuild). Otherwise (the 1 s tick) stat only new
 // and tracked files: stat is ~90% of this walk, ~120 ms for 2,600 rollouts.
@@ -163,11 +164,11 @@ function collectRolloutFiles(full) {
   // One stat per file; stat inside the comparator cost ~60k stats per call (every tick).
   // A tracked session also sorts by its newest record: Codex 0.146+ pins mtime at creation
   // on Windows, so a long run would drop out of the top 40 while it is still writing.
-  if (full) rolloutMtimes.clear();
+  if (full) rolloutStats.clear();
   const mtime = new Map(out.map(p => {
-    let m = rolloutMtimes.get(p);
-    if (m === undefined || sessions.has(p)) { m = 0; try { m = fs.statSync(p).mtimeMs; } catch {} rolloutMtimes.set(p, m); }
-    return [p, Math.max(m, sessions.get(p)?.lastGrow || 0)];
+    let st = rolloutStats.get(p);
+    if (st === undefined || sessions.has(p)) { st = null; try { const s = fs.statSync(p); st = { mtimeMs: s.mtimeMs, size: s.size }; } catch {} rolloutStats.set(p, st); }
+    return [p, Math.max(st?.mtimeMs || 0, sessions.get(p)?.lastGrow || 0)];
   }));
   out.sort((a, b) => mtime.get(b) - mtime.get(a));
   return out;
@@ -181,6 +182,7 @@ function listRolloutFiles() {
 function simplify(line) {
   let o;
   try { o = JSON.parse(line); } catch { return null; }
+  if (!o || typeof o !== "object") return null;
   const ts = o.timestamp || o.ts || null;
   const t = o.type || "";
   const p = o.payload || o;
@@ -303,9 +305,9 @@ function promptTitle(text) {
 }
 
 // ---------------- metadata search index (all sessions, not just top-40) ----------------
-function indexEntry(file) {
-  let st;
-  try { st = fs.statSync(file); } catch { return null; }
+// st: the rebuild's stat snapshot ({ mtimeMs, size }); direct callers leave it out.
+function indexEntry(file, st) {
+  if (!st) { try { st = fs.statSync(file); } catch { return null; } }
   const cached = searchIndex.get(file);
   // Size too: Codex 0.146+ pins a rollout's mtime at creation on Windows while it grows.
   if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) return cached;
@@ -360,7 +362,7 @@ function indexEntry(file) {
 function buildSearchIndex() {
   const files = collectRolloutFiles(true);
   const live = new Set(files);
-  for (const f of files) indexEntry(f);
+  for (const f of files) indexEntry(f, rolloutStats.get(f));
   for (const key of searchIndex.keys()) if (!live.has(key)) searchIndex.delete(key);
   searchIndexReady = true;
 }
@@ -377,23 +379,26 @@ function ingest(file) {
   try { st = fs.statSync(file); } catch { return; }
   let s = sessions.get(file);
   if (!s) {
-    s = { id: path.basename(file, ".jsonl"), file, offset: 0, partial: "", meta: {}, events: [], callIds: new Set(), lastGrow: st.mtimeMs, size: 0 };
+    s = { id: path.basename(file, ".jsonl"), file, offset: 0, partial: Buffer.alloc(0), meta: {}, events: [], callIds: new Set(), lastGrow: st.mtimeMs, size: 0 };
     sessions.set(file, s);
   }
-  if (st.size < s.size) { s.offset = 0; s.partial = ""; s.events = []; s.callIds.clear(); } // truncated/rotated
+  if (st.size < s.size) { s.offset = 0; s.partial = Buffer.alloc(0); s.events = []; s.callIds.clear(); } // truncated/rotated
   s.size = st.size;
   if (st.size <= s.offset) return;
 
-  const fd = fs.openSync(file, "r");
-  const len = st.size - s.offset;
-  const buf = Buffer.alloc(Math.min(len, 5 * 1024 * 1024));
-  fs.readSync(fd, buf, 0, buf.length, s.offset);
-  fs.closeSync(fd);
-  s.offset += buf.length;
+  const buf = Buffer.alloc(Math.min(st.size - s.offset, 5 * 1024 * 1024));
+  let fd, n = 0;
+  try { fd = fs.openSync(file, "r"); n = fs.readSync(fd, buf, 0, buf.length, s.offset); }
+  catch { return; } // vanished or locked between stat and read: offset unchanged, retry next tick
+  finally { if (fd !== undefined) try { fs.closeSync(fd); } catch {} }
+  if (!n) return;
+  s.offset += n;
 
-  const chunk = s.partial + buf.toString("utf8");
-  const lines = chunk.split("\n");
-  s.partial = lines.pop() || "";
+  // Carry the cut last line as bytes, so a multi-byte character split across reads survives.
+  const data = Buffer.concat([s.partial, buf.subarray(0, n)]);
+  const cut = data.lastIndexOf(10) + 1;
+  s.partial = Buffer.from(data.subarray(cut)); // copy so the 5 MiB read buffer is not retained
+  const lines = data.toString("utf8", 0, cut).split("\n");
   const fresh = [];
   let newest = 0;
   for (const line of lines) {
@@ -441,11 +446,11 @@ function ingest(file) {
   if (fresh.length) {
     broadcast({ type: "events", session: s.id, events: fresh });
     if (fresh.some(event => event.kind === "done")) {
-      broadcastNotification({
+      broadcast({
         type: "complete",
         session: s.id,
         title: String(s.meta.title || "Codex task").slice(0, 120),
-      });
+      }, notificationClients);
     }
   }
 }
@@ -459,8 +464,15 @@ function sessionSummary(s, threadJobStatus) {
   // STOPPED: quiet because the companion job for this thread was cancelled.
   const quiet = Date.now() - s.lastGrow;
   const jobLive = threadJobStatus ? threadJobStatus.get(s.meta.threadId) : undefined;
+  // DONE only when the latest turn completed: a later turn start, prompt or abort clears it.
+  let turnDone = false;
+  for (let i = s.events.length - 1; i >= 0; i--) {
+    const e = s.events[i];
+    if (e.kind === "done") { turnDone = true; break; }
+    if (e.kind === "sys" || e.kind === "err" || (e.kind === "user" && !e.internal)) break;
+  }
   let status = quiet < LIVE_WINDOW_MS ? "LIVE"
-    : s.events.some(e => e.kind === "done") ? "DONE"
+    : turnDone ? "DONE"
     : jobLive === "working" ? "LIVE"
     : jobLive === "dead" || jobLive === "possibly-stuck" ? "STALE"
     : "IDLE";
@@ -493,14 +505,9 @@ function sessionSummary(s, threadJobStatus) {
   };
 }
 
-function broadcast(obj) {
+function broadcast(obj, clients = sseClients) {
   const line = "data: " + JSON.stringify(obj) + "\n\n";
-  for (const res of sseClients) { try { res.write(line); } catch {} }
-}
-
-function broadcastNotification(obj) {
-  const line = "data: " + JSON.stringify(obj) + "\n\n";
-  for (const res of notificationClients) { try { res.write(line); } catch {} }
+  for (const res of clients) { try { res.write(line); } catch {} }
 }
 
 function tick() {
@@ -628,6 +635,7 @@ function buildCompanionTaskArgs(body) {
 
 function readJsonBody(req, cb) {
   let body = "";
+  req.setEncoding("utf8"); // decodes across chunks, so a character split between two chunks survives
   req.on("data", c => { body += c; if (body.length > 1e6) req.destroy(); });
   req.on("end", () => { let j = null; try { j = JSON.parse(body); } catch {} cb(j); });
 }
@@ -820,9 +828,11 @@ stopbtn.onclick=async()=>{
     const r=document.createElement('div');r.className='proc'+(closeMatch?' close':'');
     const b=document.createElement('button');b.className='killbtn';b.textContent='KILL';
     b.onclick=async()=>{
-      if(!confirm('Kill PID '+p.pid+' ('+p.name+') and its whole child process tree?\\nThis cannot be undone.'))return;
+      if(b.disabled)return;
+      if(!b.dataset.armed){b.dataset.armed='1';b.textContent='CONFIRM KILL (pid + child tree, cannot be undone)';return}
+      b.disabled=true;b.textContent='KILLING...';
       let msg='';try{msg=await(await fetch('/kill?pid='+p.pid,{method:'POST'})).text()}catch(e){msg='request failed: '+e}
-      alert(msg);stoplist.hidden=true;
+      stoplist.textContent=msg;
     };
     const txt=document.createElement('span');
     txt.textContent='[pid '+p.pid+'] '+p.name+' | started '+(p.started?new Date(p.started).toLocaleTimeString():'?')
@@ -936,7 +946,8 @@ const server = http.createServer((req, res) => {
   } else if (req.url.startsWith("/open?id=")) {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
     if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
-    const id = decodeURIComponent(req.url.slice("/open?id=".length));
+    let id;
+    try { id = decodeURIComponent(req.url.slice("/open?id=".length)); } catch { res.writeHead(400); return res.end("bad id"); }
     const entry = [...searchIndex.values()].find(e => e.id === id);
     res.writeHead(entry ? 200 : 404, { "Content-Type": "application/json" });
     if (!entry) return res.end(JSON.stringify({ ok: false, error: "unknown session id" }));
@@ -950,7 +961,8 @@ const server = http.createServer((req, res) => {
     tick();
     res.end(JSON.stringify({ ok: true, id }));
   } else if (req.url.startsWith("/search?q=")) {
-    const q = decodeURIComponent(req.url.slice("/search?q=".length)).trim().toLowerCase();
+    let q;
+    try { q = decodeURIComponent(req.url.slice("/search?q=".length)).trim().toLowerCase(); } catch { res.writeHead(400); return res.end("bad query"); }
     const terms = q.split(/\s+/).filter(Boolean).slice(0, 8);
     const results = [];
     for (const entry of searchIndex.values()) {
@@ -1025,7 +1037,7 @@ const server = http.createServer((req, res) => {
     // no origin check: posted by the local companion process, not a browser
     readJsonBody(req, body => {
       if (body && body.jobId) {
-        broadcastNotification({ type: "job", jobId: body.jobId, status: body.status || "", title: String(body.title || "").slice(0, 120) });
+        broadcast({ type: "job", jobId: body.jobId, status: body.status || "", title: String(body.title || "").slice(0, 120) }, notificationClients);
         kick();
       }
       jsonReply(res, 200, { ok: true });

@@ -6,7 +6,7 @@ const vm = require("node:vm");
 
 const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const slice = script.match(/function jobStatusLabel[\s\S]*?function jobDetailLine[\s\S]*?\n    \}/)[0];
+const slice = script.match(/function formatDuration[\s\S]*?function jobDetailLine[\s\S]*?\n    \}/)[0];
 
 function ctx() { const c = {}; vm.runInNewContext(slice, c); return c; }
 

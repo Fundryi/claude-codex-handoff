@@ -21,7 +21,6 @@
       --green: #4ac26b;
       --yellow: #e5b849;
       --red: #ff6b63;
-      --purple: #c49cff;
       /* Actor colors: who sent a feed message. One meaning each, never a status color. */
       --you: #f28fbf;
       --claude: #d97757;
@@ -64,7 +63,6 @@
       place-items: center;
     }
     .icon-button:hover { background: var(--hover); }
-    .muted { color: var(--muted); }
     .mono { font-family: "Cascadia Code", Consolas, monospace; }
 
     #side {
@@ -267,7 +265,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .session-project, .session-last {
+    .session-project {
       color: var(--muted);
       font-size: 11px;
       margin-top: 3px;
@@ -275,7 +273,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .session-last { display: none; }
     .row-open {
       width: 100%;
       display: block;
@@ -561,7 +558,6 @@
       background: #0e141c;
       flex: none;
     }
-    #feed-toolbar .spacer { flex: 1; }
     .toolbar-button {
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -571,7 +567,7 @@
       cursor: pointer;
       font-size: 11px;
     }
-    .toolbar-button:hover, .toolbar-button.on { background: var(--hover); color: var(--fg); }
+    .toolbar-button:hover { background: var(--hover); color: var(--fg); }
     #legend { display: flex; align-items: center; gap: 4px 14px; min-width: 0; color: var(--muted); font-size: 11px; white-space: nowrap; }
     .legend-title { color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
     .legend-item { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
@@ -634,7 +630,7 @@
     .actor-codex, .actor-work { --actor: var(--codex); }
     .actor-system { --actor: var(--system); }
     .actor-codex-lead { --actor: var(--codex-lead); }
-    .actor-codex-lead .avatar, .avatar.lead { background: transparent; color: var(--codex-lead); box-shadow: inset 0 0 0 1.5px var(--codex-lead); }
+    .actor-codex-lead .avatar { background: transparent; color: var(--codex-lead); box-shadow: inset 0 0 0 1.5px var(--codex-lead); }
     .msg-tag.neutral { --actor: var(--system); }
     .avatar {
       width: 20px;
@@ -650,7 +646,7 @@
     .avatar.mono { font: 700 9px/1 "Cascadia Code", Consolas, monospace; letter-spacing: -.5px; }
     .avatar.small { width: 16px; height: 16px; font-size: 9px; }
     .avatar.small.mono { font-size: 8px; }
-    .actor-relay > .msg-head .avatar, .avatar.ring { background: transparent; color: var(--actor); box-shadow: inset 0 0 0 1.5px var(--actor); }
+    .actor-relay > .msg-head .avatar { background: transparent; color: var(--actor); box-shadow: inset 0 0 0 1.5px var(--actor); }
     .actor-relay > .msg-head .avatar { box-shadow: none; border: 1.5px dashed var(--actor); }
     .who { color: var(--actor); font-weight: 650; }
     .route-arrow { color: var(--faint); font-size: 12px; }
@@ -1275,7 +1271,12 @@
     function resultSectionBounds(lines, heading, wholeSection) {
       var name = markdownEscapeRegExp(heading);
       var startRe = new RegExp('^(?:#{2,3}\\s*' + name + '\\s*:?|\\*\\*' + name + '\\s*:?\\s*\\*\\*\\s*:?)\\s*$', 'i');
-      var start = lines.findIndex(function (line) { return startRe.test(line.trim()); });
+      // A heading inside a code fence (a Markdown example) is not the section.
+      var start = -1, fenced = false;
+      for (var s = 0; s < lines.length; s++) {
+        if (/^\s{0,3}```/.test(lines[s])) fenced = !fenced;
+        else if (!fenced && startRe.test(lines[s].trim())) { start = s; break; }
+      }
       if (start === -1) return null;
       var known = /^(#{1,3}\s*(summary|changed files|checks run|needs decision)\s*:?\s*$|\*\*(summary|changed files|checks run|needs decision)\s*:?\s*\*\*\s*:?$)/i;
       var level = (lines[start].trim().match(/^#+/) || ['##'])[0].length;
@@ -1325,9 +1326,9 @@
       var body = lines.slice(bounds.start + 1, bounds.end).join('\n').trim();
       return noQuestion(body) ? null : body;
     }
-    // A Needs decision body that asks nothing: empty, "None", "n/a", "-", "No questions".
+    // A Needs decision body that asks nothing: empty, or "None", "n/a", "-", "No questions" with no '?' in it.
     function noQuestion(body) {
-      return !body || /^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body);
+      return !body || (/^(none\b|n\/a\b|-$|no (decision|question)s?\b)/i.test(body) && body.indexOf('?') === -1);
     }
 
     function readResultQuestion(text) {
@@ -1540,23 +1541,10 @@
       };
       return map[job.live] || map[job.status] || String(job.status || job.live || '?');
     }
-    function jobBadgeClass(job) {
-      if (job.live === 'completed' && job.needsDecision) return 'NEEDS_ANSWER';
-      return job.live === 'working' ? 'LIVE'
-        : job.live === 'possibly-stuck' || job.live === 'dead' || job.live === 'failed' ? 'STALE'
-        : job.live === 'cancelled' ? 'STOPPED' : 'DONE';
-    }
     function jobDetailLine(job, now) {
-      function duration(ms) {
-        var seconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
-        if (seconds < 60) return seconds + 's';
-        var minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return minutes + 'm ' + (seconds % 60) + 's';
-        return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
-      }
       var parts = [];
       if (job.phase) parts.push(job.phase);
-      if (job.heartbeatAt) parts.push('last activity ' + duration(now - Date.parse(job.heartbeatAt)) + ' ago');
+      if (job.heartbeatAt) parts.push('last activity ' + formatDuration(now - Date.parse(job.heartbeatAt)) + ' ago');
       if (job.model) parts.push(job.model);
       if (job.effort) parts.push(job.effort);
       if (job.sandbox) parts.push(job.sandbox);
@@ -1752,7 +1740,7 @@
       var grouped = childSessions(sessions);
       var drawn = {};
       var rows = [];
-      // Today's nesting: one level, each session once, grandchildren and cycles stay hidden.
+      // One level of nesting, each session once; deeper or cyclic agents get their own row.
       sessions.forEach(function (session) {
         if (grouped.isChild(session.id) || drawn[session.id]) return;
         drawn[session.id] = true;
@@ -1763,6 +1751,10 @@
           row.children.push(sessionRow(kid));
         });
         rows.push(row);
+      });
+      // Grandchildren and cyclic parent links: their own top-level row, never hidden.
+      sessions.forEach(function (session) {
+        if (!drawn[session.id]) { drawn[session.id] = true; rows.push(sessionRow(session)); }
       });
       threadOrder.forEach(function (threadId) {
         if (!claimed[threadId]) rows.push(makeRow(null, byThread[threadId]));
@@ -2213,7 +2205,9 @@
         list.appendChild(empty);
       }
       var history = query
-        ? mergeHistoryResults(historyResults, shown.map(function (row) { return row.id; }))
+        ? mergeHistoryResults(historyResults, shown.reduce(function (ids, row) {
+            return ids.concat(row.id, row.children.map(function (kid) { return kid.id; }));
+          }, []))
         : [];
       if (history.length) {
         var caption = document.createElement('div');
@@ -2668,17 +2662,7 @@
       project.className = 'session-project';
       project.textContent = projectName(card.project);
       project.title = card.project;
-      var meta = document.createElement('div');
-      meta.className = 'session-last';
-      var parts = [card.model, card.effort, card.tokens ? 'tokens: ' + card.tokens.toLocaleString() : '', card.detail];
-      meta.textContent = parts.filter(Boolean).join(' · ');
-      el.append(top, title, project, meta);
-      if (card.question) {
-        var question = document.createElement('div');
-        question.className = 'session-last';
-        question.textContent = 'Asked: ' + card.question;
-        el.appendChild(question);
-      }
+      el.append(top, title, project);
       el.addEventListener('click', function () { openHomeCard(card); });
       el.addEventListener('contextmenu', function (event) { openContextMenu(event, findRow(currentRows(), card.id)); });
       return el;
@@ -2875,6 +2859,7 @@
         var data = await response.json();
         if (!response.ok) return;
         var previousRow = findRow(currentRows(), selected);
+        var previousFeedStatus = (selectedRow() || {}).status;
         jobs = data.jobs || [];
         // A handoff finishing changes its row's status just like a session update does. Not on the
         // first load: jobs arriving would look like status changes and move a restored tab/chip.
@@ -2885,6 +2870,7 @@
         renderHeader();
         renderResultCard();
         if (showOverview()) renderFeed();
+        else if ((selectedRow() || {}).status !== previousFeedStatus) requestFeedRender(); // spinner/open block follow status with no new events
       } catch (_) {}
     }
 
@@ -3216,18 +3202,17 @@
       var effort = effortSelect();
       var model = textInput('default');
       var sandbox = sandboxSelect();
-      var write = controlCheckbox('Allow writes');
       var fast = controlCheckbox('Fast (priority processing \u2014 uses more quota)');
       var grid = document.createElement('div');
       grid.className = 'control-grid';
-      grid.append(controlField('Effort', effort), controlField('Model', model), controlField('Sandbox', sandbox), write.label, fast.label);
+      grid.append(controlField('Effort', effort), controlField('Model', model), controlField('Sandbox', sandbox), fast.label);
       controlModalBody.appendChild(grid);
       controlAction = function () {
         return {
           endpoint: '/resume',
           body: resumeBody(session, {
             prompt: prompt.value.trim(), effort: effort.value, model: model.value.trim(),
-            write: write.input.checked, fast: fast.input.checked, sandbox: sandbox.value
+            fast: fast.input.checked, sandbox: sandbox.value
           }),
           onSuccess: function () { chooseView('HANDOFFS', 'ALL'); }
         };
@@ -3686,6 +3671,8 @@
       if (data.type === 'sessions') {
         var previousSelectedRow = findRow(currentRows(), selected);
         var previousSelectedStatus = previousSelectedRow ? previousSelectedRow.status : null;
+        var previousSelected = selected;
+        var previousFeedStatus = (selectedRow() || {}).status;
         data.sessions.forEach(function (session) {
           var oldStatus = previousStatus[session.id];
           if (seeded && session.id !== selected && oldStatus !== session.status) unread.add(session.id);
@@ -3707,10 +3694,12 @@
         renderHeader();
         renderResultCard();
         if (showOverview()) renderFeed();
+        else if (selected === previousSelected && (selectedRow() || {}).status !== previousFeedStatus) requestFeedRender();
       }
       if (data.type === 'snapshot') {
         store[data.session] = data.events;
-        if (data.session === selected) renderFeed();
+        // Through requestFeedRender, like new events: a reconnect keeps the reader's scroll and selection.
+        if (data.session === selected && !showOverview()) requestFeedRender();
       }
       if (data.type === 'events') {
         var existing = store[data.session] = store[data.session] || [];

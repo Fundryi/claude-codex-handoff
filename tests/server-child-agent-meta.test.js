@@ -11,7 +11,7 @@ function serverContext() {
   const slice = [
     src.match(/function simplify\(line\) \{[\s\S]*?\n\}/)[0],
     src.match(/function promptTitle\(text\) \{[\s\S]*?\n\}/)[0],
-    src.match(/function indexEntry\(file\) \{[\s\S]*?\n\}/)[0],
+    src.match(/function indexEntry\(file, st\) \{[\s\S]*?\n\}/)[0],
     src.match(/function ingest\(file\) \{[\s\S]*?\n\}/)[0],
     src.match(/function sessionSummary[\s\S]*?\n\}/)[0],
   ].join("\n");
@@ -19,7 +19,7 @@ function serverContext() {
     fs, path, Buffer, Date, JSON, Map, String, Math,
     sessions: new Map(), searchIndex: new Map(),
     ARCHIVED_DIR: "Z:\\archived", MAX_EVENTS_KEPT: 500, LIVE_WINDOW_MS: 20000,
-    broadcast() {}, broadcastNotification() {},
+    broadcast() {}, notificationClients: new Set(),
   };
   vm.runInNewContext(slice, context);
   return context;
