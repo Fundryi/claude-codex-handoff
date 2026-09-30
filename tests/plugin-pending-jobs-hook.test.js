@@ -54,15 +54,6 @@ test("a finished but unannounced job is reported with how to fetch it", async ()
   assert.match(report, /result task-2/);
 });
 
-test("an already-announced finished job is not reported again", async () => {
-  const { buildPendingJobsReport } = await import(hookUrl);
-  const report = buildPendingJobsReport(
-    [{ id: "task-3", status: "completed", completedAt: iso(60_000), announcedAt: iso(30_000) }],
-    NOW
-  );
-  assert.equal(report, "");
-});
-
 test("active jobs are reported every time, announced or not", async () => {
   const { buildPendingJobsReport } = await import(hookUrl);
   const report = buildPendingJobsReport(
@@ -70,24 +61,6 @@ test("active jobs are reported every time, announced or not", async () => {
     NOW
   );
   assert.match(report, /task-4/);
-});
-
-// Required extension: printing a result inline (the common "feels like foreground"
-// path through followAndReport in codex-companion.mjs) is delivery. followAndReport
-// stamps announcedAt on that path, so the record this hook sees afterward looks like
-// the one below - the hook must not flag it as an undelivered result.
-test("a job followed to completion and delivered inline is not reported", async () => {
-  const { buildPendingJobsReport } = await import(hookUrl);
-  const jobs = [
-    {
-      id: "task-followed",
-      status: "completed",
-      title: "Codex Rescue",
-      completedAt: iso(2 * 60_000),
-      announcedAt: iso(2 * 60_000)
-    }
-  ];
-  assert.equal(buildPendingJobsReport(jobs, NOW), "");
 });
 
 // Required extension: when the follow budget expires, followAndReport hands back

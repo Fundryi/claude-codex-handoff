@@ -154,25 +154,33 @@ test("concurrent updateState calls from separate processes lose no update", asyn
   }
 
   // Each child bumps its own job's counter; a save built on a stale load drops
-  // another child's bump. The shared start time makes the children overlap.
-  const startAt = Date.now() + 1500;
+  // another child's bump. Children report ready over IPC and are released
+  // together so they overlap.
   const child = `
     const { updateState } = await import(process.env.STATE_URL);
-    while (Date.now() < Number(process.env.START_AT)) {}
+    await new Promise((go) => { process.once("message", go); process.send("ready"); });
     for (let i = 0; i < ${ROUNDS}; i += 1) {
       updateState(process.cwd(), (s) => { s.jobs.find((job) => job.id === process.env.JOB_ID).count += 1; });
     }
+    process.disconnect();
   `;
   const { spawn } = require("node:child_process");
+  const procs = [];
+  const ready = [];
   const exits = Array.from({ length: WORKERS }, (_, i) => new Promise((resolve) => {
     const proc = spawn(process.execPath, ["--input-type=module", "-e", child], {
-      env: { ...process.env, STATE_URL: stateUrl, START_AT: String(startAt), JOB_ID: `job-${i}` },
-      stdio: ["ignore", "ignore", "pipe"]
+      env: { ...process.env, STATE_URL: stateUrl, JOB_ID: `job-${i}` },
+      stdio: ["ignore", "ignore", "pipe", "ipc"]
     });
+    procs.push(proc);
+    // exit also counts as ready, so a child that crashes early cannot hang the test
+    ready.push(new Promise((r) => { proc.once("message", r); proc.once("exit", r); }));
     let stderr = "";
     proc.stderr.on("data", (chunk) => { stderr += chunk; });
     proc.on("exit", (code) => resolve({ code, stderr }));
   }));
+  await Promise.all(ready);
+  for (const proc of procs) if (proc.connected) proc.send("go");
   for (const { code, stderr } of await Promise.all(exits)) {
     assert.equal(code, 0, stderr);
   }

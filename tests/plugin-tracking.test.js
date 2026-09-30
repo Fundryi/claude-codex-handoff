@@ -38,6 +38,7 @@ test("runTrackedJob beats on a timer even when the runner emits no progress", as
   const os = require("node:os");
   const fs = require("node:fs");
   process.env.CODEX_COMPANION_STATE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "clv-hb2-"));
+  process.env.CODEX_VIEWER_PORT = "1"; // notifyViewer must not reach a real viewer
   const { runTrackedJob } = await import(mjs("tracked-jobs.mjs"));
   const { listJobs } = await import(mjs("state.mjs"));
   const ws = process.cwd();
@@ -52,4 +53,5 @@ test("runTrackedJob beats on a timer even when the runner emits no progress", as
   const stored = listJobs(ws).find((j) => j.id === "job-hb-2");
   assert.ok(stored.heartbeatAt, "the timer must write heartbeatAt with zero progress events");
   delete process.env.CODEX_COMPANION_STATE_ROOT;
+  delete process.env.CODEX_VIEWER_PORT;
 });

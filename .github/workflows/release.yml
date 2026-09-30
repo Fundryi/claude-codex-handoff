@@ -31,6 +31,11 @@ jobs:
           Copy-Item "tray-launcher/target/release/codex-live-viewer-tray.exe" "$folder/Codex Live Viewer.exe"
           Copy-Item "codex-live-viewer.js", "viewer-ui.html", "README.md" $folder
           Copy-Item "assets/logo.svg" "$folder/assets/logo.svg"
+          # The companion Resume/Cancel run; the server finds it at plugin/scripts/.
+          New-Item -ItemType Directory -Force -Path "$folder/plugin/.claude-plugin" | Out-Null
+          Copy-Item -Recurse "plugin/scripts", "plugin/prompts", "plugin/schemas" "$folder/plugin/"
+          Copy-Item "plugin/LICENSE", "plugin/NOTICE" "$folder/plugin/"
+          Copy-Item "plugin/.claude-plugin/plugin.json" "$folder/plugin/.claude-plugin/plugin.json"
           Copy-Item "install-codex-notify-hook.bat" "$folder/install-codex-notify-hook.bat"
           Compress-Archive -Path $folder -DestinationPath "dist/Codex-Live-Viewer-Windows-x64.zip"
 
@@ -63,6 +68,10 @@ jobs:
           cp tray-launcher/target/release/codex-live-viewer-tray "$folder/codex-live-viewer-tray"
           cp codex-live-viewer.js viewer-ui.html README.md "$folder/"
           cp assets/logo.svg "$folder/assets/logo.svg"
+          # The companion Resume/Cancel run; the server finds it at plugin/scripts/.
+          mkdir -p "$folder/plugin/.claude-plugin"
+          cp -r plugin/scripts plugin/prompts plugin/schemas plugin/LICENSE plugin/NOTICE "$folder/plugin/"
+          cp plugin/.claude-plugin/plugin.json "$folder/plugin/.claude-plugin/plugin.json"
           chmod +x "$folder/codex-live-viewer-tray"
           cd dist
           zip -r Codex-Live-Viewer-Linux-x64.zip Codex-Live-Viewer-Linux-x64

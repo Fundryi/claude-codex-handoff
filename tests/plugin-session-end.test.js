@@ -31,8 +31,14 @@ test("SessionEnd leaves running jobs and their workers alone", async () => {
     });
     assert.equal(run.status, 0, run.stderr);
 
-    assert.equal(worker.exitCode, null, "worker was killed");
-    assert.equal(loadState(workspace).jobs.length, 1, "job record was deleted");
+    // spawnSync blocks the event loop, so worker.exitCode cannot change here; ask the OS instead.
+    let alive = true;
+    try { process.kill(worker.pid, 0); } catch (err) { alive = err?.code === "EPERM"; }
+    assert.ok(alive, "worker was killed");
+    const jobs = loadState(workspace).jobs;
+    assert.equal(jobs.length, 1, "job record was deleted");
+    assert.equal(jobs[0].status, "running", "job status was changed");
+    assert.equal(jobs[0].pid, worker.pid, "job pid was changed");
   } finally {
     worker.kill();
     delete process.env.CODEX_COMPANION_STATE_ROOT;

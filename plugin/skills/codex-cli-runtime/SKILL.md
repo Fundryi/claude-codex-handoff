@@ -25,7 +25,7 @@ Execution rules:
 - Leave `--effort` unset unless the user explicitly requests a specific effort. The helper then defaults to `xhigh`, never Codex's low built-in default. Use `max` or `ultra` only when the user asks for them.
 - Leave model unset by default. Add `--model` only when the user explicitly asks for one.
 - Model shortcuts: `astra` → `--model gpt-6-astra`, `sol` → `--model gpt-6.1-sol`, `terra` → `--model gpt-5.6-terra`, `luna` → `--model gpt-6-luna`, `daybreak-blue` → `--model gpt-daybreak-blue-latest`. GPT-6 Sol (`gpt-6-sol`) and the GPT-5.6 Sol and Luna models are still reachable by their full names. Daybreak Blue is the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work. Daybreak access is verification-gated per account; the helper checks availability before starting the run and fails fast with a clear message if the account has no access, so do not pre-test access yourself. (A Red variant exists but is not available here.)
-- Default to a write-capable Codex run by adding `--write` unless the user explicitly asks for read-only behavior or only wants review, diagnosis, or research without edits.
+- Add `--write` when the task may edit files. It only marks the job as an edit task (it turns on the `/codex:review` hint in status) and does not change permissions. Every run uses the configured sandbox (`CODEX_PLUGIN_SANDBOX`, default `danger-full-access`). For read-only intent, put "do not edit files" in the handoff rules.
 
 Command selection:
 - Use exactly one `task` invocation per rescue handoff, followed by `result <job-id> --wait` calls only if the job is still running when `task` returns.
@@ -43,7 +43,7 @@ Command selection:
 - `task --resume-last`: internal helper for "keep going", "resume", "apply the top fix", or "dig deeper" after a previous rescue run.
 
 Safety rules:
-- Default to write-capable Codex work in `codex:codex-rescue` unless the user explicitly asks for read-only behavior.
+- `--write` is a label, not a permission. Do not treat leaving it out as a read-only guarantee.
 - Preserve the user's task text as-is apart from stripping routing flags.
 - Do not inspect the repository, read files, grep, monitor progress, poll status, cancel jobs, summarize output, or do any follow-up work of your own.
 - Return the stdout of the `task` command exactly as-is, or of the last `result --wait` call once the job has ended.

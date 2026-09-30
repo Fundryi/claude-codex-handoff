@@ -72,6 +72,7 @@ test("collectAgentLabels lists child agents by nickname, never the root thread",
 
 test("runTrackedJob stores the agents a run used on the job record", async () => {
   process.env.CODEX_COMPANION_STATE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "clv-agents-"));
+  process.env.CODEX_VIEWER_PORT = "1"; // notifyViewer must not reach a real viewer
   const { runTrackedJob } = await import(mjs("tracked-jobs.mjs"));
   const { listJobs, readJobFile, resolveJobFile } = await import(mjs("state.mjs"));
   const ws = process.cwd();
@@ -88,6 +89,7 @@ test("runTrackedJob stores the agents a run used on the job record", async () =>
   await runTrackedJob(plain, async () => ({ exitStatus: 0, threadId: "t", turnId: "u", payload: {}, rendered: "", summary: "ok", agents: [] }), { heartbeatMs: 25 });
   assert.equal("agents" in listJobs(ws).find((j) => j.id === "job-agents-2"), false);
   delete process.env.CODEX_COMPANION_STATE_ROOT;
+  delete process.env.CODEX_VIEWER_PORT;
 });
 
 // A caller pasted "--model astra --effort high" as the first prompt line. The

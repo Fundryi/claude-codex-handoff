@@ -130,14 +130,16 @@ test("result --wait does not mark a job delivered when stdout is gone", async ()
     stdio: ["ignore", "pipe", "pipe"]
   });
   child.stdout.destroy();
-  child.stderr.resume();
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
   const exited = new Promise((resolve) => child.on("close", resolve));
 
   const done = { ...record, status: "completed", rendered: "done\n", exitCode: 0, pid: null };
   state.writeJobFile(process.cwd(), record.id, done);
   state.upsertJob(process.cwd(), done);
-  await exited;
+  const code = await exited;
 
+  assert.equal(code, 0, stderr);
   const job = state.loadState(process.cwd()).jobs.find((entry) => entry.id === record.id);
   assert.equal(job.status, "completed");
   assert.equal(job.announcedAt, undefined, "state not marked");

@@ -21,6 +21,7 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 // A tiny DOM shim built from plain objects: renderMarkdown only ever calls
 // createElement / createTextNode / createDocumentFragment / appendChild and
 // sets .className / .textContent, so that's all this needs to provide.
+// Any HTML-parsing write throws, so the renderer must build text nodes only.
 function fakeDoc() {
   function makeNode(tag) {
     return {
@@ -28,6 +29,9 @@ function fakeDoc() {
       className: "",
       textContent: "",
       children: [],
+      set innerHTML(_) { throw new Error("renderMarkdown wrote innerHTML"); },
+      set outerHTML(_) { throw new Error("renderMarkdown wrote outerHTML"); },
+      insertAdjacentHTML() { throw new Error("renderMarkdown called insertAdjacentHTML"); },
       appendChild(child) {
         this.children.push(child);
         return child;
@@ -171,6 +175,7 @@ test("parseMarkdown: <script> and <img onerror> stay literal text (Review Focus 
   const dangerous = "<script>alert(1)</script> and <img src=x onerror=alert(2)>";
   const blocks = lib.parseMarkdown(dangerous);
   assert.equal(blocks[0].inline.map((t) => t.text).join(""), dangerous);
+  assert.equal(flatten(lib.renderMarkdown(dangerous, fakeDoc())), dangerous);
 });
 
 test("parseMarkdown: CRLF input", () => {
@@ -194,8 +199,8 @@ test("renderMarkdown builds DOM nodes only, no innerHTML anywhere in reach", () 
   assert.equal(fragment.children[2].children.length, 2);
 });
 
-// Mirrors the case list in tests/plugin-task-result.test.js (extractSection /
-// readNeedsDecision) so the UI's copy of the rule never drifts from the plugin's.
+// Same fixture as tests/plugin-task-result.test.js, which pins the expected values;
+// the parity test below holds the UI's copy of the parser to the plugin's.
 const ANSWER = [
   "Fixed the retry loop.",
   "",
@@ -211,39 +216,6 @@ const ANSWER = [
   "## Needs decision",
   "Should the old API stay? Options: keep it (recommended), delete it.",
 ].join("\n");
-
-test("extractResultSection stops at the next heading", () => {
-  assert.equal(lib.extractResultSection(ANSWER, "Summary"), "The uploader now retries 3 times.");
-  assert.equal(lib.extractResultSection(ANSWER, "Missing"), null);
-});
-
-test("readResultQuestion finds a real question and ignores empty answers", () => {
-  assert.equal(
-    lib.readResultQuestion(ANSWER),
-    "Should the old API stay? Options: keep it (recommended), delete it.",
-  );
-  assert.equal(
-    lib.readResultQuestion(ANSWER.replace(/\n/g, "\r\n")),
-    "Should the old API stay? Options: keep it (recommended), delete it.",
-  );
-  assert.equal(lib.readResultQuestion("### Needs Decision:\nPick a name?\n## Other\nx"), "Pick a name?");
-  assert.equal(lib.readResultQuestion("**Needs decision:**\nPick a name?"), "Pick a name?");
-  assert.equal(
-    lib.readResultQuestion("## Needs decision\n**Keep the old API?**\n- keep\n- delete"),
-    "**Keep the old API?**\n- keep\n- delete",
-    "a bold-line question keeps its options",
-  );
-  assert.equal(
-    lib.readResultQuestion("## Needs decision\nKeep the old API?\n**Options:**\n- keep\n- delete\n**Summary**\nx"),
-    "Keep the old API?\n**Options:**\n- keep\n- delete",
-    "a bold label inside the section does not end it; a known bold heading does",
-  );
-  for (const empty of ["None", "none.", "-", "N/A", "", "None - all clear.", "No decision needed.", "No questions."]) {
-    assert.equal(lib.readResultQuestion(`## Summary\nok\n## Needs decision\n${empty}`), null, `"${empty}" is not a question`);
-  }
-  assert.equal(lib.readResultQuestion("No headings at all."), null);
-  assert.equal(lib.readResultQuestion(`## Needs decision\n${"q".repeat(3000)}`).length, 1000);
-});
 
 test("groupThinking: 3 consecutive thinking + message + 1 thinking makes 2 groups", () => {
   const events = [
@@ -397,7 +369,7 @@ test("the UI section parser and the plugin's parser agree (ruling R3 drift guard
     const label = String(JSON.stringify(text)).slice(0, 60);
     assert.equal(lib.readResultQuestion(text), readNeedsDecision(text), "question: " + label);
     assert.equal(lib.resultPreface(text), extractPreface(text), "preface: " + label);
-    for (const heading of ["Summary", "Changed files", "Checks run", "Needs decision"]) {
+    for (const heading of ["Summary", "Changed files", "Checks run", "Needs decision", "Missing"]) {
       assert.equal(lib.extractResultSection(text, heading), extractSection(text, heading), heading + ": " + label);
     }
   }

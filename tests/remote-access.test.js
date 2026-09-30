@@ -161,3 +161,71 @@ test("parseTunnelUrl: finds trycloudflare URL in cloudflared stderr chatter", ()
   assert.equal(ctx.parseTunnelUrl(noise), "https://witty-fox-example.trycloudflare.com");
   assert.equal(ctx.parseTunnelUrl("no url here"), null);
 });
+
+// The guards above are only predicates; this checks they are wired into the real
+// request handler. A spawned viewer must refuse a wrong method or a foreign origin
+// on every state-changing route, and do nothing when it refuses.
+test("serve: control routes refuse GET and foreign origins, with no side effects", async () => {
+  const http = require("node:http");
+  const net = require("node:net");
+  const os = require("node:os");
+  const { spawn } = require("node:child_process");
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "clv-guard-"));
+  fs.mkdirSync(path.join(home, "sessions"));
+  const stateRoot = path.join(home, "state");
+  const port = await new Promise((resolve) => {
+    const probe = net.createServer().listen(0, "127.0.0.1", () => {
+      const p = probe.address().port;
+      probe.close(() => resolve(p));
+    });
+  });
+  const env = { ...process.env, CODEX_VIEWER_PORT: String(port), CODEX_HOME: home, CODEX_COMPANION_STATE_ROOT: stateRoot };
+  delete env.CODEX_VIEWER_ALLOWED_HOSTS; // the owner's own settings must not widen the bind
+  delete env.CODEX_VIEWER_HOST;
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "codex-live-viewer.js"), "serve", "--no-open"], { env, stdio: "ignore" });
+  const exited = new Promise((resolve) => child.on("exit", resolve));
+  const call = (method, url, headers = {}, body) => new Promise((resolve) => {
+    const req = http.request({ host: "127.0.0.1", port, method, path: url, headers }, (res) => {
+      res.resume();
+      res.on("end", () => resolve(res.statusCode));
+    });
+    req.on("error", () => resolve(0));
+    req.end(body);
+  });
+  try {
+    let up = 0;
+    for (let i = 0; i < 50 && up !== 200; i++) {
+      up = await call("GET", "/health");
+      if (up !== 200) await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.equal(up, 200, "viewer did not start");
+
+    const trusted = { Origin: "http://127.0.0.1:" + port, "Content-Type": "application/json" };
+    const evil = { Origin: "https://evil.example", "Content-Type": "application/json" };
+    const valid = JSON.stringify({ jobId: "job-x", threadId: "thread-x", cwd: home });
+    const routes = ["/cancel", "/resume", "/open?id=x"];
+    if (process.platform === "win32") routes.push("/kill?pid=1"); // other platforms answer 501 before any guard
+    for (const route of routes) {
+      assert.equal(await call("GET", route), 405, "GET " + route);
+      assert.equal(await call("POST", route, evil, valid), 403, "foreign origin " + route);
+    }
+    assert.equal(await call("POST", "/cancel", { ...trusted, Host: "rebind.attacker.com" }, valid), 403, "rebound Host");
+    // The guard does not just refuse everything: a trusted caller reaches validation.
+    assert.equal(await call("POST", "/cancel", trusted, "{}"), 400);
+    assert.equal(await call("POST", "/resume", trusted, "{}"), 400);
+    assert.equal(await call("POST", "/open?id=x", trusted), 404);
+
+    assert.equal(await call("GET", "/shutdown"), 405);
+    assert.equal(await call("POST", "/shutdown", evil), 403);
+    assert.equal(await call("GET", "/health"), 200, "a refused /shutdown must not stop the viewer");
+    const stateFiles = fs.existsSync(stateRoot) ? fs.readdirSync(stateRoot).filter((f) => f !== "live-viewer-token") : [];
+    assert.deepEqual(stateFiles, [], "a refused request must not create job state");
+
+    assert.equal(await call("POST", "/shutdown", trusted), 200);
+    await exited;
+  } finally {
+    if (child.exitCode === null) child.kill();
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(path.join(os.tmpdir(), "codex-live-viewer-" + port + ".pid"), { force: true });
+  }
+});
