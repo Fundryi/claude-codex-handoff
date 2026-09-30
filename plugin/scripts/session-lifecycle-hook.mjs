@@ -8,15 +8,8 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import {
-  clearBrokerSession,
-  loadBrokerSession,
-  sendBrokerShutdown,
-  teardownBrokerSession
-} from "./lib/broker-lifecycle.mjs";
 import { TRANSCRIPT_PATH_ENV } from "./lib/claude-session-transfer.mjs";
 import { checkForUpdate, compareVersions } from "./lib/update-check.mjs";
-import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
 export const SESSION_ID_ENV = "CODEX_COMPANION_SESSION_ID";
 
@@ -187,40 +180,12 @@ async function handleSessionStart(input) {
   if (notice) console.log(notice);
 }
 
-// ponytail: transition cleanup for pre-2.17 brokers, delete in the release after 2.17.0
-// (with lib/broker-lifecycle.mjs, lib/broker-endpoint.mjs and the SessionEnd hook entry).
-// Stops a shared broker an older plugin version left running. Job workers are
-// detached and own their app-server, so a SessionEnd must not touch them; under
-// CloudCLI a SessionEnd fires on every superseded turn.
-async function handleSessionEnd(input) {
-  const cwd = input.cwd || process.cwd();
-  const broker = loadBrokerSession(cwd);
-  if (!broker) {
-    return;
-  }
-  if (broker.endpoint) {
-    await sendBrokerShutdown(broker.endpoint);
-  }
-  teardownBrokerSession({
-    endpoint: broker.endpoint ?? null,
-    pidFile: broker.pidFile ?? null,
-    logFile: broker.logFile ?? null,
-    sessionDir: broker.sessionDir ?? null
-  });
-  clearBrokerSession(cwd);
-}
-
 async function main() {
   const input = readHookInput();
   const eventName = process.argv[2] ?? input.hook_event_name ?? "";
 
   if (eventName === "SessionStart") {
     await handleSessionStart(input);
-    return;
-  }
-
-  if (eventName === "SessionEnd") {
-    await handleSessionEnd(input);
   }
 }
 
