@@ -8,9 +8,23 @@ import { resolveStateDir } from "./state.mjs";
 
 const BROKER_STATE_FILE = "broker.json";
 
-export async function sendBrokerShutdown(endpoint) {
+// Bounded: a frozen broker that accepts but never answers must not hold SessionEnd
+// past its 3 s hook timeout, or broker.json is never cleared and every later
+// SessionEnd hangs again. A bad endpoint also just resolves, so cleanup still runs.
+export async function sendBrokerShutdown(endpoint, timeoutMs = 1000) {
   await new Promise((resolve) => {
-    const socket = net.createConnection({ path: parseBrokerEndpoint(endpoint).path });
+    let socket;
+    try {
+      socket = net.createConnection({ path: parseBrokerEndpoint(endpoint).path });
+    } catch {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      socket.destroy();
+      resolve();
+    }, timeoutMs);
+    socket.on("close", () => clearTimeout(timer));
     socket.setEncoding("utf8");
     socket.on("connect", () => {
       socket.write(`${JSON.stringify({ id: 1, method: "broker/shutdown", params: {} })}\n`);
