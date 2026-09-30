@@ -3,7 +3,7 @@ import http from "node:http";
 import process from "node:process";
 
 import { mapDeathReason } from "./death-reasons.mjs";
-import { readJobFile, resolveJobFile, resolveJobLogFile, upsertJob, writeJobFile } from "./state.mjs";
+import { patchJobFile, readJobFile, resolveJobFile, resolveJobLogFile, upsertJob, writeJobFile } from "./state.mjs";
 
 export const SESSION_ID_ENV = "CODEX_COMPANION_SESSION_ID";
 
@@ -127,17 +127,7 @@ export function createJobProgressUpdater(workspaceRoot, jobId) {
     }
 
     upsertJob(workspaceRoot, patch);
-
-    const jobFile = resolveJobFile(workspaceRoot, jobId);
-    if (!fs.existsSync(jobFile)) {
-      return;
-    }
-
-    const storedJob = readJobFile(jobFile);
-    writeJobFile(workspaceRoot, jobId, {
-      ...storedJob,
-      ...patch
-    });
+    patchJobFile(workspaceRoot, jobId, patch);
   };
 }
 
@@ -186,10 +176,7 @@ export async function runTrackedJob(job, runner, options = {}) {
     const heartbeatAt = nowIso();
     try {
       upsertJob(job.workspaceRoot, { id: job.id, heartbeatAt });
-      const jobFile = resolveJobFile(job.workspaceRoot, job.id);
-      if (fs.existsSync(jobFile)) {
-        writeJobFile(job.workspaceRoot, job.id, { ...readJobFile(jobFile), heartbeatAt });
-      }
+      patchJobFile(job.workspaceRoot, job.id, { heartbeatAt });
     } catch {
       // state file busy (viewer read race) - the next beat will land
     }
@@ -198,10 +185,11 @@ export async function runTrackedJob(job, runner, options = {}) {
 
   try {
     const execution = await runner();
-    // interrupted = the run was stopped via native turn/interrupt after a cancel
-    // request - that is a successful cancel, not a failure.
-    const completionStatus = execution.interrupted ? "cancelled"
-      : execution.exitStatus === 0 ? "completed" : "failed";
+    // A turn that finished successfully wins over a cancel request that raced it
+    // (or whose interrupt was rejected). Otherwise an interrupted run is a
+    // successful cancel, not a failure.
+    const completionStatus = execution.exitStatus === 0 ? "completed"
+      : execution.interrupted ? "cancelled" : "failed";
     const completedAt = nowIso();
     writeJobFile(job.workspaceRoot, job.id, {
       ...runningRecord,

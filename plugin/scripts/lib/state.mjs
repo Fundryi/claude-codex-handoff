@@ -348,11 +348,28 @@ export function getConfig(cwd) {
   return loadState(cwd).config;
 }
 
+// Job files take a per-job lock: the worker's progress/heartbeat patches and
+// /codex:cancel (another process) both rewrite the file, and an unlocked stale
+// snapshot erased cancelRequested. Plain writeFileSync, not writeFileAtomic: a
+// Windows rename fails with EPERM while a lock-free reader (viewer, shouldCancel,
+// waitForJobSettled) has the file open, and those readers already retry torn reads.
+// Paths resolve outside the lock (resolveJobFile spawns git).
 export function writeJobFile(cwd, jobId, payload) {
-  ensureStateDir(cwd);
   const jobFile = resolveJobFile(cwd, jobId);
-  fs.writeFileSync(jobFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  withFileLock(jobFile, () => fs.writeFileSync(jobFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8"));
   return jobFile;
+}
+
+// Locked read-merge-write of one job file, so a patch never overwrites fields
+// another process wrote since. A missing file stays missing (returns null).
+export function patchJobFile(cwd, jobId, patch) {
+  const jobFile = resolveJobFile(cwd, jobId);
+  return withFileLock(jobFile, () => {
+    if (!fs.existsSync(jobFile)) return null;
+    const next = { ...readJobFile(jobFile), ...patch };
+    fs.writeFileSync(jobFile, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+    return next;
+  });
 }
 
 export function readJobFile(jobFile) {

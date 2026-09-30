@@ -163,7 +163,10 @@ function main() {
   for (const { root, job } of pointed) rootOf.set(job.id, root);
   const jobs = sortJobsNewestFirst([...own, ...pointed.map((entry) => entry.job)]);
   // A torn or corrupt job file falls back to the pointer line, never to silence.
+  // `read` records whose payload was looked at; jobs past MAX_DETAILED never are.
+  const read = new Set();
   const readStored = (job) => {
+    read.add(job.id);
     try {
       const jobFile = resolveJobFile(rootOf.get(job.id), job.id);
       return fs.existsSync(jobFile) ? readJobFile(jobFile) : null;
@@ -183,7 +186,9 @@ function main() {
     const nowIso = new Date().toISOString();
     for (const root of new Set(rootOf.values())) {
       try {
-        markAnnounced(root, jobs.filter((job) => rootOf.get(job.id) === root), nowIso);
+        // Jobs past the cap stay unannounced, so a later prompt delivers their
+        // answer and question (a missing/corrupt payload was read, so it is marked once).
+        markAnnounced(root, jobs.filter((job) => rootOf.get(job.id) === root && read.has(job.id)), nowIso);
       } catch {
         // Best-effort: a lost stamp only means the job is reported once more.
       }
