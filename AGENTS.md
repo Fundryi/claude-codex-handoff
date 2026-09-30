@@ -18,12 +18,12 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 
 - **Zero npm dependencies.** Node stdlib only (`node >= 22`; requirements always track a current LTS, never an EOL line). Never add a package.
 - Server stays one file, UI stays one file. No build step for the Node side.
-- The viewer never *edits* Codex session files or anything under `~/.codex`. It DOES spawn codex via `plugin/scripts/codex-companion.mjs` (resume/cancel) and shares plugin job state at `~/.codex-companion/state`. All state-changing endpoints are POST, origin-guarded (`trustedControlOrigin`), and confirmed in-app — never `window.confirm`/`alert`.
+- The viewer never *edits* Codex session files or anything under `~/.codex`. `~/.claude` is read-only the same way: the Claude tab polls the workflow run files under `~/.claude/projects` (no `fs.watch`, never runs a workflow script) and serves agent transcripts only to a loopback browser or the tunnel link. It DOES spawn codex via `plugin/scripts/codex-companion.mjs` (resume/cancel) and shares plugin job state at `~/.codex-companion/state`. All state-changing endpoints are POST, origin-guarded (`trustedControlOrigin`), and confirmed in-app — never `window.confirm`/`alert`.
 - Recovery is flag-only: the classifier marks jobs working / possibly-stuck / dead; the user clicks Resume. No auto-resume, no auto-kill. The one permitted automatic state write is liveness bookkeeping — a `queued`/`running` record whose pid is gone is reconciled to `failed` on read (`reconcileDeadJobs`), because nothing else will ever correct it and a frozen record permanently jams `/codex:result`.
   This covers dead or stuck jobs. When Claude answers a Codex "Needs decision" question and resumes that thread (`codex-result-handling` skill), that is a new handoff Claude chooses, not recovery.
 - Nothing depends on the Claude process staying alive. Hosts like CloudCLI end it on every new message, and the session id can change. Every result must reach Claude through the prompt hook on the next message, so the hook's scope is the whole workspace, never one session.
 - Every companion run is detached. Codex is never a child of the calling process, so no harness timeout can end a run. `--background` returns a job id; the default follows the detached job and hands back a job id if it outlives the follow budget.
-- Every companion connection spawns its own `codex app-server`; there is no shared broker. Never reintroduce one: a SessionEnd in any Claude session of the workspace used to shut it down and abort every turn on it. SessionEnd now only cleans up a broker left by a pre-2.17 version (delete that in the release after 2.17.0).
+- Every companion connection spawns its own `codex app-server`; there is no shared broker. Never reintroduce one: a SessionEnd in any Claude session of the workspace used to shut it down and abort every turn on it.
 
 ## Env vars
 
@@ -37,6 +37,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 | `CODEX_VIEWER_HOST` | `127.0.0.1` | Viewer bind address (`--host` overrides; `0.0.0.0` = LAN, no token) |
 | `CODEX_VIEWER_ALLOWED_HOSTS` | (none) | Comma list of reverse-proxy names trusted by `controlHosts`; when set, the default bind becomes `0.0.0.0` |
 | `CODEX_VIEWER_AUTOSTART` | `1` | Set to `0` to disable SessionStart viewer autostart |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | Where the Claude tab reads workflow runs (`projects/`) |
 
 ## Commands
 

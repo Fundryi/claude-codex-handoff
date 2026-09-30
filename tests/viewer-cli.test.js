@@ -14,7 +14,7 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), "clv-cli-"));
 fs.mkdirSync(path.join(home, "sessions")); // serve refuses to run without it
 
 function cli(port, ...args) {
-  const env = { ...process.env, CODEX_VIEWER_PORT: String(port), CODEX_HOME: home, CODEX_COMPANION_STATE_ROOT: path.join(home, "state") };
+  const env = { ...process.env, CODEX_VIEWER_PORT: String(port), CODEX_HOME: home, CODEX_COMPANION_STATE_ROOT: path.join(home, "state"), CLAUDE_CONFIG_DIR: path.join(home, "claude") };
   return new Promise((resolve) => {
     execFile(process.execPath, [SCRIPT, ...args, "--no-open"], { env, timeout: 20000 }, (error, stdout, stderr) => {
       resolve({ code: error ? error.code : 0, out: stdout + stderr });

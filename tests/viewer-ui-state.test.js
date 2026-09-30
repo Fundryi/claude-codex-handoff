@@ -24,6 +24,7 @@ function navigation(overrides = {}) {
     renderList() {},
     renderHeader() {},
     renderFeed() {},
+    syncClaudePoll() {},
     refreshJobs() { context.refreshed = (context.refreshed || 0) + 1; },
     selectSession(id) { context.selected = id; },
     ...overrides,

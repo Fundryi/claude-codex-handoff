@@ -28,6 +28,9 @@
       --codex: #45c4b0;
       --system: #8c9bab;
       --codex-lead: #9ae0d4; /* a lead agent writing to its child: Codex family, lighter, ring avatar */
+      /* Claude workflow accent: orchid. Not Codex teal, not Claude clay (Handoff), not agent-team violet,
+         not a status color. Every Claude workflow surface uses it, so it never reads as Codex work. */
+      --claude-wf: #e08ae6;
       --sidebar-width: 340px;
       font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
       font-size: 13px;
@@ -123,7 +126,7 @@
     /* Tabs: one fixed row, 28 px. Chips: one small wrapping row inside the tab. */
     #tabs { display: flex; margin-top: 8px; border-bottom: 1px solid var(--border); }
     .tab-button {
-      flex: 1;
+      flex: 1 1 auto;
       height: 28px;
       border: 0;
       border-bottom: 2px solid transparent;
@@ -132,10 +135,18 @@
       cursor: pointer;
       font-size: 11px;
       white-space: nowrap;
+      /* four tabs fit a 240 px sidebar */
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 4px;
     }
     .tab-button:hover { color: var(--fg); background: var(--hover); }
     .tab-button.on { color: #b9d8ff; border-bottom-color: var(--blue); font-weight: 600; }
     .tab-button .count { margin-left: 0; }
+    /* A narrow sidebar drops the tab counts so the four tab names stay whole (the chips keep theirs). */
+    #side-controls { container-type: inline-size; }
+    @container (max-width: 300px) { .tab-button .count { display: none; } }
     #chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
     .chip-button {
       display: inline-flex;
@@ -331,6 +342,29 @@
     .status.HANDOFF { background: transparent; color: var(--claude); padding: 2px 1px; }
     .status.HANDOFF::before { content: '\2733\FE0E'; margin-right: 4px; font-size: 10px; }
     .status.AGENT { background: #2a2440; color: #c9b6ff; }
+    /* The Claude workflow mark: orchid, flow icon, no pill (like Handoff), so it never reads as a status
+       and never as Codex work. Its own tab, counter, rows, header badge, rails and avatars. */
+    .status.CLAUDE_WF { background: transparent; color: var(--claude-wf); padding: 2px 1px; gap: 4px; }
+    .claude-mark svg, .status.CLAUDE_WF svg, .tab-button svg, #claude-counter svg { width: 11px; height: 11px; vertical-align: -1px; color: var(--claude-wf); flex: none; }
+    .tab-button svg { margin-right: 4px; }
+    .session.claude-run { border-left-color: color-mix(in srgb, var(--claude-wf) 45%, transparent); }
+    .session.claude-run.selected { border-left-color: var(--blue); }
+    .home-card.claude-card { border-left: 3px solid var(--claude-wf); }
+    #claude-counter { height: 32px; border: 1px solid color-mix(in srgb, var(--claude-wf) 45%, var(--border)); border-radius: 7px; background: transparent; color: var(--claude-wf); padding: 0 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+    #claude-counter:hover { background: var(--hover); }
+    body.claude-tab .codex-only, body:not(.claude-tab) .claude-only { display: none !important; }
+    .claude-phase { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 4px; padding: 2px 0 2px 10px; border-left: 2px solid var(--claude-wf); color: var(--claude-wf); font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+    .claude-phase .phase-count { color: var(--muted); font-weight: 600; letter-spacing: 0; text-transform: none; }
+    .claude-agent { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; border: 0; border-left: 2px solid color-mix(in srgb, var(--claude-wf) 40%, transparent); border-radius: 0 6px 6px 0; padding: 5px 10px; background: transparent; color: var(--fg); text-align: left; cursor: pointer; font-size: 12px; transition: background-color .14s ease; }
+    .claude-agent:hover { background: var(--hover); }
+    .claude-agent .agent-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .claude-agent .agent-meta { flex: none; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .state-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #7b8794; }
+    .state-dot.done { background: var(--green); }
+    .state-dot.failed { background: #ee964b; }
+    .state-dot.running { width: 9px; height: 9px; background: transparent; border: 2px solid var(--blue); border-top-color: transparent; animation: spin .8s linear infinite; }
+    .claude-note { margin: 18px 0 0; color: var(--faint); font-size: 11px; }
+    .claude-totals { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
 
@@ -572,7 +606,7 @@
     .legend-title { color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
     .legend-item { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
     .legend-item::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--actor); flex: none; }
-    .legend-item.actor-work::before { background: transparent; box-shadow: inset 0 0 0 2px var(--codex); }
+    .legend-item.actor-work::before, .legend-item.actor-claude-work::before, .legend-item.actor-workflow-script::before { background: transparent; box-shadow: inset 0 0 0 2px var(--actor); }
     .legend-item.actor-system::before { background: transparent; box-shadow: none; border: 1px dashed var(--system); width: 7px; height: 7px; }
     .started-by { display: inline-flex; align-items: center; gap: 6px; }
     .started-by b { color: var(--actor); font-weight: 650; }
@@ -631,6 +665,11 @@
     .actor-system { --actor: var(--system); }
     .actor-codex-lead { --actor: var(--codex-lead); }
     .actor-codex-lead .avatar { background: transparent; color: var(--codex-lead); box-shadow: inset 0 0 0 1.5px var(--codex-lead); }
+    /* Claude workflow actors: the orchid accent and the flow icon. Ring = the script's prompt, filled = the agent. */
+    .actor-workflow-script, .actor-claude-agent, .actor-claude-work { --actor: var(--claude-wf); }
+    .actor-workflow-script .avatar { background: transparent; color: var(--claude-wf); box-shadow: inset 0 0 0 1.5px var(--claude-wf); }
+    .avatar svg { width: 12px; height: 12px; }
+    .avatar.small svg { width: 10px; height: 10px; }
     .msg-tag.neutral { --actor: var(--system); }
     .avatar {
       width: 20px;
@@ -733,7 +772,7 @@
     details.work {
       margin: 2px 0 2px 9px;
       padding: 2px 0 2px 14px;
-      border-left: 2px solid color-mix(in srgb, var(--codex) 40%, transparent);
+      border-left: 2px solid color-mix(in srgb, var(--actor, var(--codex)) 40%, transparent);
     }
     details.work > summary { padding: 4px 0; }
     .work-list { display: grid; gap: 4px; padding: 3px 0 6px; }
@@ -788,7 +827,7 @@
     details.technical[open] { border-color: var(--border); }
     details.technical > summary { padding: 5px 9px; }
     details.technical > summary:hover, details.quiet > summary:hover .sum-text, details.work > summary:hover .sum-text { color: var(--fg); }
-    .step-kind { flex: none; min-width: 62px; color: color-mix(in srgb, var(--codex) 80%, var(--muted)); font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+    .step-kind { flex: none; min-width: 62px; color: color-mix(in srgb, var(--actor, var(--codex)) 80%, var(--muted)); font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
     .step-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #b8c5d1; font: 11px "Cascadia Code", Consolas, monospace; }
     details.technical pre {
       margin: 0;
@@ -839,7 +878,9 @@
       #chips { flex-wrap: nowrap; overflow-x: auto; }
       #side-backdrop { display: none; position: fixed; inset: 0; z-index: 19; background: #000a; }
       body.mobile-side-open #side-backdrop { display: block; }
-      #task-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      /* Badges and the header counter leave little room: the title wraps under the badges instead of shrinking to nothing. */
+      #task-title-row { flex-wrap: wrap; row-gap: 4px; }
+      #task-title { flex: 1 1 120px; min-width: 120px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
       .meta-item { white-space: normal; overflow: visible; text-overflow: clip; }
       .legend-title { display: none; }
       #legend { gap: 12px; }
@@ -849,7 +890,7 @@
   </style>
 </head>
 <body>
-  <aside id="side" aria-label="Codex sessions">
+  <aside id="side" aria-label="Task list">
     <div id="brand">
       <img id="brand-mark" src="/logo.svg" alt="">
       <div id="brand-copy">
@@ -859,11 +900,11 @@
       <button id="hide-side" class="icon-button" type="button" title="Collapse session list" aria-label="Collapse session list">&#x2039;</button>
     </div>
     <div id="side-controls">
-      <input id="search" type="search" placeholder="Search tasks, projects, or IDs" aria-label="Search sessions">
+      <input id="search" type="search" placeholder="Search tasks, projects, or IDs" aria-label="Search tasks">
       <div id="tabs" aria-label="Views"></div>
       <div id="chips" aria-label="Filter this view"></div>
     </div>
-    <div id="open-elsewhere" hidden>Open: <span id="open-elsewhere-title"></span> (not in this view) &#xB7; <button id="open-elsewhere-show" type="button">Show</button></div>
+    <div id="open-elsewhere" class="codex-only" hidden>Open: <span id="open-elsewhere-title"></span> (not in this view) &#xB7; <button id="open-elsewhere-show" type="button">Show</button></div>
     <div id="list"></div>
   </aside>
 
@@ -876,32 +917,37 @@
       <div id="header-top">
         <button id="show-side" class="icon-button" type="button" title="Show session list" aria-label="Show session list">&#x2630;</button>
         <div id="task-copy">
-          <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-handoff" class="status HANDOFF" hidden>Handoff</span><span id="task-fast" class="status FAST" title="Priority processing (fast tier)" hidden>FAST</span><span id="task-title">Select a task</span></div>
+          <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-handoff" class="status HANDOFF" hidden>Handoff</span><span id="task-claude" class="status CLAUDE_WF claude-only" title="A Claude Code workflow (Workflow tool), not a Codex task" hidden>Claude workflow</span><span id="task-fast" class="status FAST" title="Priority processing (fast tier)" hidden>FAST</span><span id="task-title">Select a task</span></div>
           <div id="task-meta"><span class="meta-item">Running tasks are selected automatically</span></div>
         </div>
         <div id="header-actions">
+          <button id="claude-counter" type="button" title="Claude workflows: click to open the Claude tab" hidden></button>
           <button id="resume-session-button" class="toolbar-button" type="button" hidden>Resume</button>
           <button id="auto-open-toggle" type="button" role="switch" aria-pressed="false" title="Automatically open the newest running task" hidden>Auto-open new runs: Off</button>
           <button id="actions-button" class="icon-button" type="button" title="Task actions" aria-label="Task actions" aria-expanded="false">&#x22EF;</button>
         </div>
       </div>
       <div id="action-menu" role="menu" hidden></div>
-      <div id="process-panel" hidden></div>
+      <div id="process-panel" class="codex-only" hidden></div>
     </header>
 
     <div id="feed-toolbar">
       <div id="legend" role="note" aria-label="Who's who in the feed">
         <span class="legend-title">Who's who</span>
-        <span class="legend-item actor-you" title="You: a message you typed, or your answer relayed through Claude or the answer box">You</span>
-        <span class="legend-item actor-claude" title="Claude: a handoff prompt, or an answer Claude gave by itself">Claude</span>
-        <span class="legend-item actor-plugin" title="Plugin: the return format the codex plugin adds to every handoff">Plugin</span>
-        <span class="legend-item actor-codex" title="Codex: replies, and questions it asks you. In a child agent's session, the lead agent's messages show as Codex (lead), in a lighter teal with a ring avatar">Codex</span>
-        <span class="legend-item actor-work" title="Codex work: thinking, commands, output, patches and tools">Codex work</span>
-        <span class="legend-item actor-system" title="System: injected context and hook text, collapsed">System</span>
+        <span class="legend-item actor-you codex-only" title="You: a message you typed, or your answer relayed through Claude or the answer box">You</span>
+        <span class="legend-item actor-claude codex-only" title="Claude: a handoff prompt, or an answer Claude gave by itself">Claude</span>
+        <span class="legend-item actor-plugin codex-only" title="Plugin: the return format the codex plugin adds to every handoff">Plugin</span>
+        <span class="legend-item actor-codex codex-only" title="Codex: replies, and questions it asks you. In a child agent's session, the lead agent's messages show as Codex (lead), in a lighter teal with a ring avatar">Codex</span>
+        <span class="legend-item actor-work codex-only" title="Codex work: thinking, commands, output, patches and tools">Codex work</span>
+        <span class="legend-item actor-system codex-only" title="System: injected context and hook text, collapsed">System</span>
+        <span class="legend-item actor-workflow-script claude-only" title="Workflow script: the prompt a Claude workflow script gave this agent">Workflow script</span>
+        <span class="legend-item actor-claude-agent claude-only" title="Claude agent: the replies of an agent a Claude workflow started (not Codex)">Claude agent</span>
+        <span class="legend-item actor-claude-work claude-only" title="Agent work: the Claude agent's tool calls, output and thinking">Agent work</span>
+        <span class="legend-item actor-system claude-only" title="System: injected context and hook text, collapsed">System</span>
       </div>
     </div>
 
-    <section id="result-card" aria-label="Handoff result" hidden></section>
+    <section id="result-card" class="codex-only" aria-label="Handoff result" hidden></section>
 
     <div id="feed-wrap">
       <div id="feed"><div id="feed-inner"></div></div>
@@ -960,7 +1006,9 @@
       home: false,
       autoFollow: true,
       selected: null,
-      dismissed: []
+      dismissed: [],
+      claudeRun: null, // the open Claude workflow run id (Claude tab)
+      claudeAgent: null // the open agent id inside it: its transcript shows in the feed
     };
     var prefs = loadPrefs();
     var sessions = [];
@@ -990,6 +1038,14 @@
     var historyResults = [];
     var historySearchTimer = null;
     var jobsLoaded = false;
+    // Claude workflows (the Claude tab): the claudeRuns SSE frame, and the open agent's transcript,
+    // polled from /claude/agent (transcripts never ride /events).
+    var claudeRuns = [];
+    var claudeLoaded = false;
+    var lastClaudeListSignature = '', lastClaudeFeedSignature = '';
+    var claudeFeed = newClaudeFeed('');
+    var claudePollTimer = 0;
+    var CLAUDE_SESSION = { source: 'claude' }; // the pseudo-session the feed code sees for a Claude transcript
 
     var side = document.getElementById('side');
     var splitter = document.getElementById('splitter');
@@ -1007,6 +1063,8 @@
     var taskStatus = document.getElementById('task-status');
     var taskFast = document.getElementById('task-fast');
     var taskHandoff = document.getElementById('task-handoff');
+    var taskClaude = document.getElementById('task-claude');
+    var claudeCounter = document.getElementById('claude-counter');
     var taskMeta = document.getElementById('task-meta');
     var actionMenu = document.getElementById('action-menu');
     var contextMenu = document.getElementById('context-menu');
@@ -1050,7 +1108,7 @@
     };
     // Tab and chip ids come from TABS.
     var VIEW_LABELS = {
-      NOW: 'Now', HANDOFFS: 'Handoffs', HISTORY: 'History',
+      NOW: 'Now', HANDOFFS: 'Handoffs', HISTORY: 'History', CLAUDE: 'Claude',
       ALL: 'All', RUNNING: 'Running', WAITING: 'Waiting', ATTENTION: 'Needs attention', ANSWER: 'Needs answer',
       FINISHED: 'Finished', STOPPED: 'Stopped', ARCHIVED: 'Archived', DISMISSED: 'Dismissed', EVERYTHING: 'Everything'
     };
@@ -1394,6 +1452,7 @@
     // originator is Claude Code; the two answer prefixes win over that. Nothing else is guessed.
     function messageActor(event, session) {
       if (!event) return 'system';
+      if (session && session.source === 'claude') return claudeActor(event);
       var kind = event.kind;
       if (['cmd', 'out', 'patch', 'tool', 'think', 'thinkgroup'].indexOf(kind) !== -1) return 'work';
       if (kind === 'done' || kind === 'err' || kind === 'sys') return 'status';
@@ -1413,6 +1472,10 @@
     }
     // Who a message goes to: everything incoming goes to Codex; Codex answers whoever started the session.
     function messageRoute(actor, session) {
+      // A Claude workflow transcript never names Codex: the script prompts the agent, the agent answers it.
+      if (session && session.source === 'claude') {
+        return actor === 'claude-agent' ? { from: 'claude-agent', to: 'workflow-script' } : { from: actor, to: 'claude-agent' };
+      }
       if (actor !== 'codex') return { from: actor === 'relay' ? 'you' : actor, to: 'codex' };
       return { from: 'codex', to: sessionStarter(session) };
     }
@@ -1672,7 +1735,8 @@
     }
     // Unified row model: sessions and handoff jobs become one list of rows.
     // Row status ids: RUNNING, WAITING, ATTENTION, ANSWER, STOPPED, FINISHED, ARCHIVED.
-    var TABS = { NOW: ['ALL', 'RUNNING', 'WAITING', 'ATTENTION', 'ANSWER'], HANDOFFS: ['ALL', 'RUNNING', 'ATTENTION', 'ANSWER', 'FINISHED', 'STOPPED'], HISTORY: ['FINISHED', 'STOPPED', 'ARCHIVED', 'DISMISSED', 'EVERYTHING'] };
+    // CLAUDE lists Claude Code workflows only (claudeRuns, not rows): no Codex row is ever in it.
+    var TABS = { NOW: ['ALL', 'RUNNING', 'WAITING', 'ATTENTION', 'ANSWER'], HANDOFFS: ['ALL', 'RUNNING', 'ATTENTION', 'ANSWER', 'FINISHED', 'STOPPED'], HISTORY: ['FINISHED', 'STOPPED', 'ARCHIVED', 'DISMISSED', 'EVERYTHING'], CLAUDE: ['ALL', 'RUNNING', 'ATTENTION', 'FINISHED'] };
     // The session wrote more than 5 s after the run finished asking: answered outside the viewer.
     function answeredElsewhere(session, job) {
       var asked = job ? Date.parse(job.updatedAt || '') : NaN;
@@ -1762,6 +1826,7 @@
     }
     function rowInView(row, tab, chip, dismissedIds) {
       if (!row || !Object.prototype.hasOwnProperty.call(TABS, tab) || TABS[tab].indexOf(chip) === -1) return false;
+      if (tab === 'CLAUDE') return false;
       var dismissed = (dismissedIds || []).indexOf(row.id) !== -1;
       if (tab === 'HISTORY' && chip === 'EVERYTHING') return true;
       if (tab === 'HISTORY' && chip === 'DISMISSED') return dismissed;
@@ -1995,6 +2060,112 @@
       if (row.olderJobs) lines.push(row.olderJobs + (row.olderJobs === 1 ? ' earlier run' : ' earlier runs') + ' on this thread');
       return lines.filter(Boolean).join('\n');
     }
+    // -- Claude workflows (the Claude tab). Runs come from the server's claudeRuns frame.
+    // Run status -> its chip (the tab's filter), badge class (existing status colors only), label and help.
+    function claudeStatusView(status) {
+      return ({
+        RUNNING: { chip: 'RUNNING', badge: 'LIVE', label: 'Running', help: 'The workflow wrote in the last 5 minutes, or an agent is waiting on its own tool.' },
+        QUIET: { chip: 'ATTENTION', badge: 'STALE', label: 'Quiet', help: 'Quiet for 5 min, no finish record. May be paused, rate-limited or ended.' },
+        FAILED: { chip: 'ATTENTION', badge: 'STALE', label: 'Failed', help: 'The workflow reported failed.' },
+        DONE: { chip: 'FINISHED', badge: 'DONE', label: 'Finished', help: 'The workflow wrote its finish record.' },
+        KILLED: { chip: 'FINISHED', badge: 'STOPPED', label: 'Stopped', help: 'The workflow was stopped.' }
+      })[status] || { chip: 'ATTENTION', badge: 'STALE', label: 'Quiet', help: 'No known status.' };
+    }
+    // An agent's state -> badge class, label and help (dot and header chip).
+    function claudeAgentView(state) {
+      return ({
+        running: { badge: 'LIVE', label: 'Running', help: 'This agent is working.' },
+        done: { badge: 'DONE', label: 'Done', help: 'This agent returned its result.' },
+        failed: { badge: 'STALE', label: 'Failed', help: 'This agent failed.' },
+        ended: { badge: 'STOPPED', label: 'Ended', help: 'No end record. The run ended or went quiet.' }
+      })[state] || { badge: 'STOPPED', label: 'Ended', help: 'No end record. The run ended or went quiet.' };
+    }
+    function claudeRunInView(run, chip) {
+      return !!run && (chip === 'ALL' || claudeStatusView(run.status).chip === chip);
+    }
+    function claudeViewCounts(runs) {
+      var counts = { ALL: 0, RUNNING: 0, ATTENTION: 0, FINISHED: 0 };
+      (runs || []).forEach(function (run) { counts.ALL++; counts[claudeStatusView(run.status).chip]++; });
+      return counts;
+    }
+    // The header counter, visible from every tab. '' when nothing runs or needs attention.
+    function claudeCounterText(runs) {
+      var counts = claudeViewCounts(runs);
+      if (!counts.RUNNING && !counts.ATTENTION) return '';
+      var parts = [];
+      if (counts.RUNNING) parts.push(counts.RUNNING + ' running');
+      if (counts.ATTENTION) parts.push(counts.ATTENTION + (counts.ATTENTION === 1 ? ' needs' : ' need') + ' attention');
+      return 'Claude: ' + parts.join(' · ');
+    }
+    // "9 started, 6 done, 1 failed". Never "6/71": the planned total is not on disk.
+    function claudeRunLine(run) {
+      var c = (run && run.counts) || {};
+      return (c.started || 0) + ' started, ' + (c.done || 0) + ' done' + (c.failed ? ', ' + c.failed + ' failed' : '');
+    }
+    // Phases in the run's order with their agents. The counts come from run.phases (exact) because
+    // run.agents is capped for big runs. Agents whose phase is not listed get their own group last.
+    function claudePhaseGroups(run) {
+      var groups = [];
+      var byTitle = {};
+      ((run && run.phases) || []).forEach(function (phase) {
+        var group = { title: phase.title, started: phase.started || 0, done: phase.done || 0, failed: phase.failed || 0, agents: [] };
+        byTitle[phase.title] = group;
+        groups.push(group);
+      });
+      ((run && run.agents) || []).forEach(function (agent) {
+        var title = agent.phase || 'phase unknown';
+        if (!byTitle[title]) {
+          byTitle[title] = { title: title, started: 0, done: 0, failed: 0, agents: [], counted: true };
+          groups.push(byTitle[title]);
+        }
+        var group = byTitle[title];
+        group.agents.push(agent);
+        if (group.counted) { group.started++; if (agent.state === 'done') group.done++; if (agent.state === 'failed') group.failed++; }
+      });
+      return groups.map(function (group) { return { title: group.title, agents: group.agents, started: group.started, done: group.done, failed: group.failed }; });
+    }
+    function claudeRunMatch(run, query) {
+      var needle = String(query || '').trim().toLowerCase();
+      if (!needle) return true;
+      var fields = [run.name, run.description, run.project, run.id, run.session].concat((run.agents || []).map(function (agent) { return agent.label; }));
+      return fields.some(function (value) { return String(value || '').toLowerCase().indexOf(needle) !== -1; });
+    }
+    // Copy only: Claude Code has no outside interface to stop, pause or resume a workflow
+    // (/workflows in a terminal, or Remote Control, does that).
+    function claudeMenuItems(run, agentId) {
+      var items = [
+        { group: 'Copy', id: 'copy-run-id', label: 'Copy run ID', title: run.id },
+        { group: 'Copy', id: 'copy-journal-path', label: 'Copy journal path', title: 'The run journal (journal.jsonl) on this PC' },
+        { group: 'Copy', id: 'copy-resume-hint', label: 'Copy resume hint', title: 'A line to paste into Claude Code: resume this workflow with the Workflow tool' }
+      ];
+      if (agentId) items.push({ group: 'Copy', id: 'copy-agent-id', label: 'Copy agent ID', title: agentId });
+      return items;
+    }
+    // Who wrote a line of a Claude agent's transcript. Never a Codex actor.
+    function claudeActor(event) {
+      var kind = event.kind;
+      if (['cmd', 'out', 'patch', 'tool', 'think', 'thinkgroup'].indexOf(kind) !== -1) return 'claude-work';
+      if (kind === 'done' || kind === 'err' || kind === 'sys') return 'status';
+      if (kind === 'sysgroup' || isInternal(event)) return 'system';
+      if (kind === 'agent') return 'claude-agent';
+      if (kind === 'user') return 'workflow-script';
+      return 'system';
+    }
+    // 1.9M / 104k / 950 tokens.
+    function compactCount(value) {
+      var n = Number(value) || 0;
+      if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+      if (n >= 1000) return Math.round(n / 1000) + 'k';
+      return String(n);
+    }
+    // Run length: the snapshot's duration when finished, the time since start while running.
+    function claudeRunDuration(run, now) {
+      if (!run) return 0;
+      if (run.durationMs) return run.durationMs;
+      if (run.endedMs && run.startedMs) return run.endedMs - run.startedMs;
+      return run.startedMs ? Math.max(0, (run.status === 'RUNNING' ? now : run.updatedMs || now) - run.startedMs) : 0;
+    }
+
     // Next index for arrow-key roving focus within a row of buttons (tabs, chips). Wraps around.
     function rovingFocusIndex(currentIndex, itemCount, key) {
       if (itemCount <= 0) return currentIndex;
@@ -2028,6 +2199,7 @@
         : savedWidth;
       document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
       document.body.classList.toggle('side-collapsed', !!prefs.sideCollapsed);
+      document.body.classList.toggle('claude-tab', prefs.tab === 'CLAUDE');
       search.value = prefs.query || '';
       autoOpenToggle.classList.toggle('on', !!prefs.autoFollow);
       autoOpenToggle.setAttribute('aria-pressed', prefs.autoFollow ? 'true' : 'false');
@@ -2038,6 +2210,10 @@
     // The Now overview shows whenever no task is open, or the user explicitly asked for it
     // (prefs.home, set by re-clicking the active Now tab; cleared by picking any task or view).
     function showOverview() { return prefs.home || !currentSession(); }
+    // No transcript in the feed: the Codex overview, or the Claude tab without an open agent.
+    function feedOverview() { return prefs.tab === 'CLAUDE' ? !prefs.claudeAgent : showOverview(); }
+    // Whose feed rows the open-state and paging choices belong to.
+    function feedScope() { return prefs.tab === 'CLAUDE' ? 'claude:' + prefs.claudeRun + '/' + prefs.claudeAgent : String(selected || ''); }
 
     function viewButton(className, label, count, on) {
       var button = document.createElement('button');
@@ -2054,6 +2230,7 @@
 
     function renderFilters() {
       var counts = viewCounts(currentRows(), prefs.dismissed);
+      counts.CLAUDE = claudeViewCounts(claudeRuns);
       var perTab = tabCounts(counts);
       var signature = JSON.stringify([prefs.tab, prefs.chip, counts]);
       if (signature === lastFilterSignature) return;
@@ -2062,6 +2239,7 @@
       Object.keys(TABS).forEach(function (tab) {
         var button = viewButton('tab-button', VIEW_LABELS[tab], '(' + perTab[tab] + ')', prefs.tab === tab);
         button.dataset.tab = tab;
+        if (tab === 'CLAUDE') { button.prepend(flowIcon()); button.title = 'Claude Code workflows (not Codex)'; }
         button.addEventListener('click', function () {
           // Clicking the already-active Now tab opens the overview instead of re-picking a chip.
           if (tab === 'NOW' && prefs.tab === 'NOW' && !prefs.home) {
@@ -2099,12 +2277,14 @@
       renderList();
       renderHeader();
       renderFeed();
+      syncClaudePoll(); // leaving the Claude tab stops the transcript poll; coming back resumes it
       if (tab === 'HANDOFFS') refreshJobs();
     }
 
     // previousStatus: the selected row's status before the update. Handoffs/All stays put
     // like the old Jobs filter; History/Everything always shows the row anyway.
     function followSelectedStatus(previousStatus) {
+      if (prefs.tab === 'CLAUDE') return; // a Codex row changing status never pulls the view out of the Claude tab
       var row = findRow(currentRows(), selected);
       if (!row || !previousStatus || row.status === previousStatus) return;
       if ((prefs.tab === 'HANDOFFS' && prefs.chip === 'ALL') || rowInView(row, prefs.tab, prefs.chip, prefs.dismissed)) return;
@@ -2124,7 +2304,7 @@
     }
 
     function followRunningSession(running) {
-      if (prefs.home) return;
+      if (prefs.home || prefs.tab === 'CLAUDE') return;
       if (!prefs.autoFollow || !running) return;
       var row = findRow(currentRows(), running.id);
       if (row && !rowInView(row, prefs.tab, prefs.chip, prefs.dismissed)) {
@@ -2135,6 +2315,8 @@
     }
 
     function renderList() {
+      if (prefs.tab === 'CLAUDE') { renderClaudeList(); return; }
+      lastClaudeListSignature = '';
       var rows = currentRows();
       var query = String(prefs.query || '').trim();
       var hints = {};
@@ -2330,6 +2512,9 @@
     // Line 1: status, Handoff, FAST, title. Line 2: meta (click copies the thread id), time.
     // Line 3: the reason line, only when there is one.
     function renderHeader() {
+      renderClaudeCounter();
+      if (prefs.tab === 'CLAUDE') { renderClaudeHeader(); return; }
+      taskClaude.hidden = true;
       var overview = showOverview();
       var row = overview ? null : selectedRow();
       taskMeta.textContent = '';
@@ -2408,6 +2593,10 @@
       you: { name: 'You', glyph: 'Y' },
       relay: { name: 'You', glyph: 'Y' },
       claude: { name: 'Claude', glyph: '✳︎' },
+      // Claude workflow actors: orchid and the flow icon, never the Codex >_ or the handoff ✳.
+      'workflow-script': { name: 'Workflow script', icon: 'flow' },
+      'claude-agent': { name: 'Claude agent', icon: 'flow' },
+      'claude-work': { name: 'Agent work', icon: 'flow' },
       plugin: { name: 'Plugin', glyph: '+' },
       codex: { name: 'Codex', glyph: '>_', mono: true },
       work: { name: 'Codex work', glyph: '>_', mono: true },
@@ -2421,8 +2610,40 @@
       var avatar = document.createElement('span');
       avatar.className = 'avatar' + (info.mono ? ' mono' : '') + (small ? ' small' : '');
       avatar.setAttribute('aria-hidden', 'true');
-      avatar.textContent = info.glyph;
+      if (info.icon === 'flow') avatar.appendChild(flowIcon());
+      else avatar.textContent = info.glyph;
       return avatar;
+    }
+
+    // The Claude workflow icon: one node fanning out to three (a script starting agents).
+    // Not the Codex >_ and not the handoff ✳.
+    function flowIcon() {
+      var ns = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 12 12');
+      svg.setAttribute('width', '12');
+      svg.setAttribute('height', '12');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('fill', 'currentColor');
+      svg.setAttribute('stroke', 'currentColor');
+      [[2, 6], [10, 2], [10, 6], [10, 10]].forEach(function (p) {
+        var circle = document.createElementNS(ns, 'circle');
+        circle.setAttribute('cx', p[0]);
+        circle.setAttribute('cy', p[1]);
+        circle.setAttribute('r', '1.6');
+        circle.setAttribute('stroke', 'none');
+        svg.appendChild(circle);
+      });
+      [2, 6, 10].forEach(function (y) {
+        var line = document.createElementNS(ns, 'line');
+        line.setAttribute('x1', '3.6');
+        line.setAttribute('y1', '6');
+        line.setAttribute('x2', '8.4');
+        line.setAttribute('y2', y);
+        line.setAttribute('stroke-width', '1.2');
+        svg.appendChild(line);
+      });
+      return svg;
     }
 
     function actorName(actor) {
@@ -2464,10 +2685,13 @@
       head.append(actorAvatar(actor), actorName(route.from), textSpan('route-arrow', '→'), actorName(route.to));
 
       var text = String(event.text || '');
-      var parts = actor === 'codex' ? { body: text, footer: '' } : splitReturnFormat(text);
+      // A reply (Codex, or a Claude workflow agent) is never read as a prompt, and the plugin's
+      // return-format footer is a Codex handoff thing, never parsed out of a Claude transcript.
+      var reply = actor === 'codex' || actor === 'claude-agent';
+      var parts = (reply || (session && session.source === 'claude')) ? { body: text, footer: '' } : splitReturnFormat(text);
       var prefix = answerPrefix(parts.body);
       var body = prefix.text;
-      var resume = actor !== 'codex' && !prefix.tag && isResumePrompt(body);
+      var resume = !reply && !prefix.tag && isResumePrompt(body);
       var tag = prefix.tag || (resume ? 'resume' : actor === 'claude' ? 'handoff' : '');
       var question = actor === 'codex' ? feedQuestion(text) : null;
       if (question) body = removeResultSection(body, 'Needs decision');
@@ -2606,16 +2830,18 @@
       return details;
     }
 
-    // Consecutive Codex work: one collapsed activity block on the teal rail.
-    function createWorkBlock(block, open) {
+    // Consecutive work: one collapsed activity block on the actor's rail (Codex work: teal,
+    // a Claude agent's work: orchid).
+    function createWorkBlock(block, open, actor) {
+      actor = actor || 'work';
       var details = document.createElement('details');
-      details.className = 'work actor-work';
+      details.className = 'work actor-' + actor;
       details.dataset.key = 'work|' + block.keys[0];
       details.open = !!open;
       if (open) details.dataset.autoOpen = '1'; // opened by default, not by the reader
       var last = block.items[block.items.length - 1];
-      var summary = summaryRow('Codex work', workSummary(block.items), last.ts);
-      summary.insertBefore(actorAvatar('work', true), summary.children[1]);
+      var summary = summaryRow(ACTORS[actor].name, workSummary(block.items), last.ts);
+      summary.insertBefore(actorAvatar(actor, true), summary.children[1]);
       var list = document.createElement('div');
       list.className = 'work-list';
       block.items.forEach(function (item, index) { list.appendChild(createEvent(item, block.keys[index])); });
@@ -2729,22 +2955,37 @@
 
     function renderFeed(preservePosition) {
       feedRenderPending = false; // this rebuild covers any batch still waiting for a frame
-      // showOverview() covers "no task open" too, so selected is always truthy past this point.
-      renderResultCard();
-      if (showOverview()) { renderHome(); return; }
+      // The Claude tab branches off before any Codex code: no result card, no Codex overview.
+      var claude = prefs.tab === 'CLAUDE';
+      if (claude) {
+        lastHomeSignature = ''; // the Now overview rebuilds on the way back
+        if (!prefs.claudeAgent) { renderClaudeOverview(); return; }
+      } else {
+        lastClaudeFeedSignature = '';
+        lastClaudeOverviewScope = null;
+        // showOverview() covers "no task open" too, so selected is always truthy past this point.
+        renderResultCard();
+        if (showOverview()) { renderHome(); return; }
+      }
+      var renderKey = feedScope();
+      var defaultLimit = 160;
+      var limit = renderLimits[renderKey] || defaultLimit;
+      if (claude) {
+        // /events frames call renderFeed every second; rebuild only when the transcript changed.
+        var claudeSignature = JSON.stringify([renderKey, claudeFeed.key, claudeFeed.events.length, claudeFeed.offset, claudeFeed.state, claudeFeed.error, claudeFeed.loaded, limit]);
+        if (claudeSignature === lastClaudeFeedSignature) return;
+        lastClaudeFeedSignature = claudeSignature;
+      }
       // Keyboard focus on a row survives the rebuild: same data-key, new element.
       var focusHost = feedInner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
       var focusKey = focusHost ? focusHost.dataset.key : null;
       feedInner.textContent = '';
-      var session = currentSession();
-      var rawEvents = store[selected] || [];
+      var session = claude ? CLAUDE_SESSION : currentSession();
+      var rawEvents = claude ? claudeFeed.events : store[selected] || [];
       var allEvents = groupFeed(rawEvents, session);
       // Keyed off the full, unpaged list so a row's key doesn't shift as
       // "Show earlier activity" changes which slice of it is on screen.
       var allKeys = assignEventKeys(allEvents);
-      var renderKey = String(selected || '');
-      var defaultLimit = 160;
-      var limit = renderLimits[renderKey] || defaultLimit;
       var hiddenCount = Math.max(0, allEvents.length - limit);
       var events = hiddenCount ? allEvents.slice(hiddenCount) : allEvents;
       var keys = hiddenCount ? allKeys.slice(hiddenCount) : allKeys;
@@ -2752,9 +2993,10 @@
         var empty = document.createElement('div');
         empty.className = 'feed-empty';
         var strong = document.createElement('strong');
-        strong.textContent = 'No activity yet';
+        strong.textContent = claude && claudeFeed.error ? 'Transcript unavailable' : claude && !claudeFeed.loaded ? 'Loading transcript…' : 'No activity yet';
         var detail = document.createElement('span');
-        detail.textContent = 'Codex has not written anything to this session yet.';
+        detail.textContent = claude ? claudeFeed.error || (claudeFeed.loaded ? 'This Claude agent has not written anything yet.' : '')
+          : 'Codex has not written anything to this session yet.';
         empty.append(strong, detail);
         feedInner.appendChild(empty);
       } else {
@@ -2773,21 +3015,26 @@
           });
           fragment.appendChild(earlier);
         }
-        // Consecutive Codex work folds into one activity block; everything else stands alone.
+        // Consecutive work (Codex's, or a Claude agent's) folds into one activity block; everything else stands alone.
         var blocks = [];
         events.forEach(function (event, idx) {
           var actor = messageActor(event, session);
+          var isWork = actor === 'work' || actor === 'claude-work';
           var last = blocks[blocks.length - 1];
-          if (actor === 'work' && last && last.work) { last.items.push(event); last.keys.push(keys[idx]); return; }
-          blocks.push(actor === 'work' ? { work: true, items: [event], keys: [keys[idx]] } : { event: event, key: keys[idx], actor: actor });
+          if (isWork && last && last.work) { last.items.push(event); last.keys.push(keys[idx]); return; }
+          blocks.push(isWork ? { work: true, actor: actor, items: [event], keys: [keys[idx]] } : { event: event, key: keys[idx], actor: actor });
         });
-        var row = selectedRow();
-        var lastRaw = rawEvents[rawEvents.length - 1];
-        // A session stays Running for 20 s after its last write; a finished turn is not "working".
-        var running = !!row && row.status === 'RUNNING' && !(lastRaw && lastRaw.kind === 'done');
+        var running;
+        if (claude) running = claudeFeed.state === 'running';
+        else {
+          var row = selectedRow();
+          var lastRaw = rawEvents[rawEvents.length - 1];
+          // A session stays Running for 20 s after its last write; a finished turn is not "working".
+          running = !!row && row.status === 'RUNNING' && !(lastRaw && lastRaw.kind === 'done');
+        }
         blocks.forEach(function (block, index) {
-          // The block Codex is working on right now starts open; older ones start collapsed.
-          if (block.work) fragment.appendChild(createWorkBlock(block, running && index === blocks.length - 1));
+          // The block being worked on right now starts open; older ones start collapsed.
+          if (block.work) fragment.appendChild(createWorkBlock(block, running && index === blocks.length - 1, block.actor));
           else if (block.actor === 'system') fragment.appendChild(createSystemGroup(block.event, block.key));
           else if (block.actor === 'status') fragment.appendChild(createMarker(block.event));
           else fragment.appendChild(createMessage(block.event, block.actor, block.key, session));
@@ -2796,13 +3043,19 @@
           var working = document.createElement('div');
           working.className = 'working';
           working.setAttribute('role', 'status');
-          working.append(document.createTextNode('Codex is working'), textSpan('working-text', '· ' + workingLine(rawEvents)));
+          working.append(document.createTextNode(claude ? 'Claude agent is working' : 'Codex is working'), textSpan('working-text', '· ' + workingLine(rawEvents)));
           fragment.appendChild(working);
+        }
+        if (claude && claudeFeed.error) {
+          var stopped = document.createElement('div');
+          stopped.className = 'feed-empty';
+          stopped.textContent = claudeFeed.error;
+          fragment.appendChild(stopped);
         }
         feedInner.appendChild(fragment);
       }
       feedInner.querySelectorAll('details[data-key]').forEach(function (d) {
-        var choice = feedOpenChoices[selected + '|' + d.dataset.key];
+        var choice = feedOpenChoices[renderKey + '|' + d.dataset.key];
         if (choice !== undefined) d.open = choice;
         if (d.dataset.key === focusKey) d.querySelector('summary').focus({ preventScroll: true });
       });
@@ -2823,6 +3076,346 @@
       renderHeader();
       renderFeed();
       if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
+    }
+
+    // -- Claude workflows: the Claude tab's list, header, run view and agent transcript. Every Claude
+    // surface carries the mark (orchid, flow icon, "Claude workflow"), so it never looks like Codex work.
+    function claudeRunById(id) { return claudeRuns.find(function (run) { return run.id === id; }) || null; }
+    function newClaudeFeed(key) {
+      return { key: key, events: [], offset: 0, tool: '', contextTokens: 0, state: '', error: '', loaded: false, busy: false, final: false, stopped: false };
+    }
+    function claudeMark() {
+      var mark = document.createElement('span');
+      mark.className = 'status CLAUDE_WF';
+      mark.title = 'A Claude Code workflow (Workflow tool), not a Codex task';
+      mark.append(flowIcon(), document.createTextNode('Claude workflow'));
+      return mark;
+    }
+    function textDiv(className, text) {
+      var div = document.createElement('div');
+      div.className = className;
+      div.textContent = text;
+      return div;
+    }
+
+    function renderClaudeCounter() {
+      var text = claudeCounterText(claudeRuns);
+      claudeCounter.hidden = !text;
+      if (claudeCounter.dataset.text === text) return;
+      claudeCounter.dataset.text = text;
+      claudeCounter.textContent = '';
+      if (text) claudeCounter.append(flowIcon(), document.createTextNode(text));
+    }
+    claudeCounter.addEventListener('click', function () {
+      var counts = claudeViewCounts(claudeRuns);
+      chooseView('CLAUDE', counts.ATTENTION > 0 && counts.RUNNING === 0 ? 'ATTENTION' : 'RUNNING');
+    });
+
+    // One run: a sidebar row, or a card in the feed when no run is open. 3 lines like a Codex row.
+    function claudeRunElement(run, card) {
+      var view = claudeStatusView(run.status);
+      var open = run.id === prefs.claudeRun;
+      var el = document.createElement('button');
+      el.type = 'button';
+      el.className = card ? 'home-card claude-card' : 'session claude-run' + (open ? ' selected' : '');
+      if (!card) el.setAttribute('aria-pressed', open ? 'true' : 'false');
+      else el.dataset.key = 'run:' + run.id; // renderClaudeOverview puts focus back by this key
+      el.title = [run.name, run.description, 'run ' + run.id,
+        run.legacy ? 'legacy format (older Claude Code): labels and phases from the finish record' : '',
+        run.error ? 'details unavailable' : ''].filter(Boolean).join('\n');
+      var top = document.createElement('div');
+      top.className = 'session-top';
+      top.append(statusChip(view.badge, view.label, view.help), claudeMark(), textSpan('session-time', relativeTime(run.updatedMs)));
+      var duration = claudeRunDuration(run, Date.now());
+      var meta = [run.project, 'session ' + run.session, claudeRunLine(run), duration ? formatDuration(duration) : ''].filter(Boolean).join(' · ');
+      el.append(top, textDiv('session-title', run.name || run.id), textDiv('session-project', meta));
+      el.addEventListener('click', function () { selectClaudeRun(run.id); });
+      el.addEventListener('contextmenu', function (event) { openClaudeContextMenu(event, run); });
+      return el;
+    }
+
+    function renderClaudeList() {
+      lastListSignature = ''; // the Codex list rebuilds on the way back
+      var query = String(prefs.query || '').trim();
+      var shown = claudeRuns.filter(function (run) { return claudeRunInView(run, prefs.chip) && claudeRunMatch(run, query); });
+      var signature = JSON.stringify([prefs.chip, query, prefs.claudeRun, claudeLoaded, Math.floor(Date.now() / 10000),
+        shown.map(function (run) { return [run.id, run.status, run.name, run.description, run.project, run.session, run.counts, Math.floor(run.updatedMs / 10000), run.durationMs, run.error, run.legacy]; })]);
+      if (signature === lastClaudeListSignature) return;
+      lastClaudeListSignature = signature;
+      list.textContent = '';
+      if (query) list.appendChild(textDiv('search-count', shown.length + (shown.length === 1 ? ' result' : ' results')));
+      shown.forEach(function (run) { list.appendChild(claudeRunElement(run, false)); });
+      if (!shown.length) {
+        list.appendChild(textDiv('empty-list', !claudeLoaded ? 'Loading Claude workflows…'
+          : !claudeRuns.length ? 'No Claude workflows in the last 24 hours.'
+          : query ? 'No workflows match this search.' : 'No workflows match this filter.'));
+      }
+    }
+
+    function selectClaudeRun(id) {
+      prefs.claudeRun = id;
+      prefs.claudeAgent = null;
+      savePrefs();
+      closeActionMenu();
+      syncClaudePoll();
+      renderList();
+      renderHeader();
+      renderFeed();
+      if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
+    }
+    function selectClaudeAgent(id) {
+      prefs.claudeAgent = id;
+      lastClaudeOverviewScope = null; // back to the run: its view opens at the top
+      savePrefs();
+      closeActionMenu();
+      syncClaudePoll();
+      renderHeader();
+      renderFeed();
+    }
+
+    function claudeMetaItem(text, title) {
+      var span = textSpan('meta-item', text);
+      span.title = title || text;
+      return span;
+    }
+    // Header: the Claude workflow badge always; then the run or the agent that is open.
+    function renderClaudeHeader() {
+      var run = claudeRunById(prefs.claudeRun);
+      var agentId = prefs.claudeRun ? prefs.claudeAgent : null;
+      var now = Date.now();
+      taskMeta.textContent = '';
+      taskHandoff.hidden = true;
+      taskFast.hidden = true;
+      resumeSessionButton.hidden = true;
+      autoOpenToggle.hidden = true;
+      taskClaude.hidden = false;
+      actionsButton.hidden = !run;
+      if (!run && !agentId) {
+        closeActionMenu();
+        taskStatus.hidden = true;
+        taskTitle.textContent = 'Claude workflows';
+        taskTitle.title = '';
+        taskMeta.appendChild(claudeMetaItem(!claudeLoaded ? 'Loading…' : claudeRuns.length + (claudeRuns.length === 1 ? ' run' : ' runs') + ' in the last 24 hours',
+          'Claude Code workflows (Workflow tool) found in ~/.claude/projects. Read only.'));
+        return;
+      }
+      taskStatus.hidden = false;
+      if (agentId) {
+        var agent = run ? (run.agents || []).find(function (entry) { return entry.id === agentId; }) : null;
+        var agentView = claudeAgentView(claudeFeed.state || (agent && agent.state) || 'ended');
+        taskStatus.className = 'status ' + agentView.badge;
+        taskStatus.textContent = agentView.label;
+        taskStatus.title = agentView.help;
+        taskTitle.textContent = agent ? agent.label : agentId;
+        taskTitle.title = taskTitle.textContent;
+        var back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'meta-item meta-button';
+        back.textContent = '‹ Run: ' + (run ? run.name : prefs.claudeRun);
+        back.title = 'Back to the run: all its agents by phase';
+        back.addEventListener('click', function () { selectClaudeAgent(null); });
+        taskMeta.appendChild(back);
+        if (agent) taskMeta.appendChild(claudeMetaItem('Phase: ' + agent.phase));
+        taskMeta.appendChild(claudeMetaItem('agent ' + agentId, 'Agent ID'));
+        if (agent && agent.lastWriteMs) taskMeta.appendChild(claudeMetaItem('last write ' + relativeTime(agent.lastWriteMs), 'Last write to its transcript'));
+        if (claudeFeed.tool) taskMeta.appendChild(claudeMetaItem(claudeFeed.tool, 'Tool it is running now'));
+        if (claudeFeed.contextTokens) taskMeta.appendChild(claudeMetaItem('Context ' + compactCount(claudeFeed.contextTokens) + ' tokens', claudeFeed.contextTokens.toLocaleString() + ' tokens in its context'));
+        return;
+      }
+      var view = claudeStatusView(run.status);
+      taskStatus.className = 'status ' + view.badge;
+      taskStatus.textContent = view.label;
+      taskStatus.title = view.help;
+      taskTitle.textContent = run.name || run.id;
+      taskTitle.title = [run.name, run.description].filter(Boolean).join('\n');
+      if (run.description) taskMeta.appendChild(claudeMetaItem(run.description));
+      taskMeta.appendChild(claudeMetaItem(run.project, 'Project'));
+      taskMeta.appendChild(claudeMetaItem('session ' + run.session, 'Claude Code session that started the workflow'));
+      taskMeta.appendChild(claudeMetaItem(claudeRunLine(run), 'Agents seen in the run journal'));
+      var duration = claudeRunDuration(run, now);
+      if (duration) taskMeta.appendChild(claudeMetaItem(formatDuration(duration), run.status === 'RUNNING' ? 'Running for' : 'Duration'));
+      if (run.totals) {
+        taskMeta.appendChild(claudeMetaItem([compactCount(run.totals.tokens) + ' tokens', (run.totals.toolCalls || 0).toLocaleString() + ' tool calls', run.totals.model].filter(Boolean).join(' · '), 'From the finish record'));
+      }
+      var reason = run.error ? 'Details unavailable: this run’s files are in a format this viewer does not know.'
+        : run.status === 'QUIET' ? 'Quiet for ' + formatDuration(now - run.updatedMs) + ', no finish record. May be paused, rate-limited or ended. Use /workflows in a terminal or Remote Control to check.'
+        : run.status === 'FAILED' ? 'The workflow reported failed.' : '';
+      if (reason) {
+        var reasonLine = claudeMetaItem(reason);
+        reasonLine.id = 'wait-reason';
+        reasonLine.className = 'meta-item STALE';
+        taskMeta.appendChild(reasonLine);
+      }
+    }
+
+    // One agent in the run view: state dot, label, last write, and while running its tool and context.
+    function claudeAgentRow(agent) {
+      var view = claudeAgentView(agent.state);
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'claude-agent';
+      button.dataset.key = 'agent:' + agent.id; // renderClaudeOverview puts focus back by this key
+      button.title = [agent.label, view.label + ': ' + view.help, 'agent ' + agent.id, 'Click to open its transcript'].join('\n');
+      var dot = document.createElement('span');
+      dot.className = 'state-dot ' + agent.state;
+      dot.title = view.label + ': ' + view.help;
+      var meta = [];
+      if (agent.state === 'running' && agent.tool) meta.push(agent.tool);
+      if (agent.state === 'running' && agent.contextTokens) meta.push(compactCount(agent.contextTokens) + ' context');
+      meta.push(agent.lastWriteMs ? 'last write ' + relativeTime(agent.lastWriteMs) : view.label);
+      button.append(dot, textSpan('agent-label mono', agent.label || agent.id), textSpan('agent-meta', meta.join(' · ')));
+      button.addEventListener('click', function () { selectClaudeAgent(agent.id); });
+      return button;
+    }
+
+    // The feed with no agent open: the open run's agents by phase, or every run as a card.
+    var lastClaudeOverviewScope = null;
+    function renderClaudeOverview() {
+      var run = claudeRunById(prefs.claudeRun);
+      var scope = run ? run.id : '';
+      var signature = JSON.stringify([scope, claudeLoaded, Math.floor(Date.now() / 10000), run || claudeRuns.map(function (entry) {
+        return [entry.id, entry.status, entry.name, entry.project, entry.counts, Math.floor(entry.updatedMs / 10000), entry.durationMs];
+      })]);
+      if (signature === lastClaudeFeedSignature) return;
+      lastClaudeFeedSignature = signature;
+      // Keyboard focus on a card or agent row survives the live rebuild, as in renderFeed.
+      var focusHost = feedInner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
+      var focusKey = focusHost ? focusHost.dataset.key : null;
+      feedInner.textContent = '';
+      jumpLatest.hidden = true;
+      var wrap = document.createElement('div');
+      wrap.id = 'home-view';
+      if (!run) {
+        if (claudeRuns.length) {
+          wrap.appendChild(textDiv('home-heading', 'Claude workflows (' + claudeRuns.length + ')'));
+          var grid = document.createElement('div');
+          grid.className = 'home-grid';
+          claudeRuns.forEach(function (entry) { grid.appendChild(claudeRunElement(entry, true)); });
+          wrap.appendChild(grid);
+        } else {
+          var empty = document.createElement('div');
+          empty.className = 'feed-empty';
+          var strong = document.createElement('strong');
+          strong.textContent = claudeLoaded ? 'No Claude workflows in the last 24 hours' : 'Loading Claude workflows…';
+          empty.append(strong, textSpan('', claudeLoaded ? 'Runs of the Workflow tool in Claude Code show here, each with its phases and agents.' : ''));
+          wrap.appendChild(empty);
+        }
+      } else {
+        if (run.totals) {
+          wrap.appendChild(textDiv('claude-totals', [claudeStatusView(run.status).label, compactCount(run.totals.tokens) + ' tokens',
+            (run.totals.toolCalls || 0).toLocaleString() + ' tool calls', run.totals.model, formatDuration(claudeRunDuration(run, Date.now()))].filter(Boolean).join(' · ')));
+        }
+        claudePhaseGroups(run).forEach(function (group) {
+          var heading = document.createElement('div');
+          heading.className = 'claude-phase';
+          heading.append(textSpan('', group.title), textSpan('phase-count', group.done + '/' + group.started + (group.failed ? ' · ' + group.failed + ' failed' : '')));
+          heading.title = group.done + ' done of ' + group.started + ' started';
+          wrap.appendChild(heading);
+          group.agents.forEach(function (agent) { wrap.appendChild(claudeAgentRow(agent)); });
+        });
+        if (run.agentsHidden) wrap.appendChild(textDiv('claude-note', '+ ' + run.agentsHidden + ' more agents not shown'));
+        wrap.appendChild(textDiv('claude-note', 'Queued agents, log() lines and the planned total are not on disk, so they are not shown.'));
+      }
+      feedInner.appendChild(wrap);
+      if (focusKey) wrap.querySelectorAll('[data-key]').forEach(function (el) { if (el.dataset.key === focusKey) el.focus({ preventScroll: true }); });
+      if (scope !== lastClaudeOverviewScope) feed.scrollTop = 0; // a new run opens at the top; live updates keep the place
+      lastClaudeOverviewScope = scope;
+    }
+
+    // The open agent's transcript: polled from /claude/agent (gated; never on /events) every 1.5 s
+    // while it runs. Each poll waits for the one before, and a reply for an agent no longer open is dropped.
+    function claudeWantKey() {
+      return prefs.tab === 'CLAUDE' && prefs.claudeRun && prefs.claudeAgent ? prefs.claudeRun + '/' + prefs.claudeAgent : '';
+    }
+    function syncClaudePoll() {
+      var want = claudeWantKey();
+      if (want !== claudeFeed.key) {
+        window.clearTimeout(claudePollTimer);
+        claudePollTimer = 0;
+        claudeFeed = newClaudeFeed(want);
+      }
+      if (want && !claudeFeed.busy && !claudePollTimer && !claudeFeed.stopped) pollClaudeAgent();
+    }
+    async function pollClaudeAgent() {
+      claudePollTimer = 0;
+      var state = claudeFeed;
+      if (!state.key || state.key !== claudeWantKey()) return;
+      var ids = state.key.split('/');
+      state.busy = true;
+      try {
+        var response = await fetch('/claude/agent?run=' + encodeURIComponent(ids[0]) + '&agent=' + encodeURIComponent(ids[1]) + '&offset=' + state.offset, { cache: 'no-store' });
+        if (response.status === 403) { state.error = await response.text(); state.stopped = true; }
+        else if (response.status === 404) { state.error = 'This run or agent is no longer tracked.'; state.stopped = true; }
+        else if (response.ok) {
+          var data = await response.json();
+          state.error = '';
+          state.loaded = true;
+          if (data.events && data.events.length) {
+            state.events.push.apply(state.events, data.events);
+            if (state.events.length > 500) state.events.splice(0, state.events.length - 500);
+          }
+          state.offset = data.offset || 0;
+          state.tool = data.tool || '';
+          state.contextTokens = data.contextTokens || 0;
+          state.state = data.state || '';
+          // Once the agent stops running, one more poll picks up its last lines, then polling ends.
+          if (state.state !== 'running') { if (state.final) state.stopped = true; state.final = true; }
+          else state.final = false;
+        }
+      } catch (_) {} // a network hiccup: the next poll tries again
+      state.busy = false;
+      if (state !== claudeFeed) return; // the reader moved on
+      state.loaded = state.loaded || !!state.error;
+      if (!state.stopped && state.key === claudeWantKey()) claudePollTimer = window.setTimeout(pollClaudeAgent, 1500);
+      requestFeedRender();
+      renderHeader();
+    }
+
+    // Copy-only menu for a run (the ... button and a row's right-click menu).
+    function fillClaudeMenu(container, run, agentId, onPick) {
+      container.dataset.signature = '';
+      container.textContent = '';
+      var group = null;
+      claudeMenuItems(run, agentId).forEach(function (entry) {
+        if (entry.group !== group) {
+          group = entry.group;
+          container.appendChild(textDiv('menu-group', group));
+        }
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('role', 'menuitem');
+        button.dataset.action = entry.id;
+        button.textContent = entry.label;
+        button.title = entry.title;
+        button.addEventListener('click', function () {
+          onPick(entry.id);
+          runClaudeMenuAction(entry.id, run, agentId, button);
+        });
+        container.appendChild(button);
+      });
+    }
+    async function runClaudeMenuAction(id, run, agentId, button) {
+      if (id === 'copy-run-id') { copyText(run.id, button, 'Run ID copied'); return; }
+      if (id === 'copy-agent-id') { copyText(agentId, button, 'Agent ID copied'); return; }
+      // Paths never ride /events: they come from the gated /claude/run.
+      var message;
+      try {
+        var response = await fetch('/claude/run?run=' + encodeURIComponent(run.id), { cache: 'no-store' });
+        if (response.ok) {
+          var data = await response.json();
+          var journal = id === 'copy-journal-path';
+          copyText(journal ? data.journal : data.resume, button, journal ? 'Journal path copied' : 'Resume hint copied');
+          return;
+        }
+        message = response.status === 404 ? 'This run is no longer tracked.' : await response.text();
+      } catch (error) {
+        message = 'Request failed: ' + error.message;
+      }
+      // Refused: say why in the button, copy nothing.
+      var old = button.textContent;
+      button.textContent = message;
+      button.title = message;
+      window.setTimeout(function () { button.textContent = old; }, 4000);
     }
 
     async function openHistorySession(id) {
@@ -2903,6 +3496,7 @@
     // #feed-inner and is rebuilt only when its content changes, so live feed updates
     // never touch it: a half-typed answer keeps its focus and cursor.
     function renderResultCard() {
+      if (prefs.tab === 'CLAUDE') return; // .codex-only hides the card there; it stays as it was for the way back
       var row = showOverview() ? null : selectedRow();
       var job = row && row.job;
       if (!job || job.status !== 'completed') {
@@ -3428,13 +4022,13 @@
     // toggle does not bubble: capture it. Rows restored by renderFeed fire it too, harmlessly.
     feedInner.addEventListener('toggle', function (event) {
       var row = event.target;
-      if (!row.dataset || !row.dataset.key || showOverview()) return;
-      var id = selected + '|' + row.dataset.key;
+      if (!row.dataset || !row.dataset.key || feedOverview()) return;
+      var id = feedScope() + '|' + row.dataset.key;
       if (row.open !== (row.dataset.autoOpen === '1')) feedOpenChoices[id] = row.open;
       else delete feedOpenChoices[id];
     }, true);
     feed.addEventListener('scroll', function () {
-      jumpLatest.hidden = showOverview() || nearBottom();
+      jumpLatest.hidden = feedOverview() || nearBottom();
     }, { passive: true });
 
     document.getElementById('hide-side').addEventListener('click', function () {
@@ -3478,6 +4072,14 @@
 
     actionsButton.addEventListener('click', function () {
       if (!actionMenu.hidden) { closeActionMenu(); return; }
+      if (prefs.tab === 'CLAUDE') {
+        var run = claudeRunById(prefs.claudeRun);
+        if (!run) return;
+        fillClaudeMenu(actionMenu, run, prefs.claudeAgent, actionMenuPick);
+        actionMenu.hidden = false;
+        actionsButton.setAttribute('aria-expanded', 'true');
+        return;
+      }
       var row = selectedRow();
       if (!row || !fillMenu(actionMenu, row, actionMenuPick)) return;
       actionMenu.hidden = false;
@@ -3576,6 +4178,14 @@
 
     function openContextMenu(event, row) {
       if (!row || !fillMenu(contextMenu, row, closeContextMenu)) return;
+      showContextMenuAt(event);
+    }
+    function openClaudeContextMenu(event, run) {
+      // Copy items keep the menu open so a refusal from /claude/run stays readable.
+      fillClaudeMenu(contextMenu, run, null, function (id) { if (id.indexOf('copy-') !== 0) closeContextMenu(); });
+      showContextMenuAt(event);
+    }
+    function showContextMenuAt(event) {
       event.preventDefault();
       contextMenu.hidden = false;
       var pad = 8;
@@ -3646,7 +4256,7 @@
     }
     function flushFeedRender() {
       feedRenderFrame = 0;
-      if (!feedRenderPending || showOverview()) return;
+      if (!feedRenderPending || feedOverview()) return;
       if (selectionInside(window.getSelection(), feedInner)) return; // selectionchange retries
       var shouldFollow = nearBottom();
       renderFeed(!shouldFollow);
@@ -3689,6 +4299,17 @@
         if (showOverview()) renderFeed();
         else if (selected === previousSelected && (selectedRow() || {}).status !== previousFeedStatus) requestFeedRender();
       }
+      if (data.type === 'claudeRuns') {
+        claudeRuns = data.runs || [];
+        claudeLoaded = true;
+        renderFilters();
+        renderClaudeCounter();
+        if (prefs.tab === 'CLAUDE') {
+          renderList();
+          renderHeader();
+          if (!prefs.claudeAgent) renderFeed();
+        }
+      }
       if (data.type === 'snapshot') {
         store[data.session] = data.events;
         // Through requestFeedRender, like new events: a reconnect keeps the reader's scroll and selection.
@@ -3719,13 +4340,15 @@
     Object.assign(prefs, savedView(prefs));
     delete prefs.filter;
     delete prefs.autoScroll; // dropped pref: auto-scroll is now always the follow-at-bottom behavior
+    taskClaude.prepend(flowIcon());
     applyPrefs();
     renderFilters();
     renderList();
     renderHeader();
     renderFeed();
+    syncClaudePoll();
     refreshJobs();
-    window.setInterval(function () { renderList(); renderHeader(); if (showOverview()) renderFeed(); }, 10000);
+    window.setInterval(function () { renderList(); renderHeader(); if (feedOverview()) renderFeed(); }, 10000);
     // Rows merge job state into every tab, so job liveness is polled everywhere.
     window.setInterval(refreshJobs, 5000);
   </script>

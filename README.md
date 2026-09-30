@@ -50,7 +50,7 @@ The dashboard classifies every job from ground truth (real PID + heartbeat), not
 | Stopped | Cancelled job or aborted turn | Nothing. Not an alarm. |
 | Finished | Completion event received | Read the result card: Summary, Changed files, Checks run. |
 
-Recovery is always flag-only: the dashboard marks, you click. It never resumes or kills anything on its own. Job workers are detached and the SessionEnd hook leaves them alone, so restarting Claude Code, or sending a new message under a host like CloudCLI that ends the session per turn, doesn't kill your handoffs. The next prompt brings back a short result for each finished job: its Summary, any question Codex asks, and the job id for the full text.
+Recovery is always flag-only: the dashboard marks, you click. It never resumes or kills anything on its own. Job workers are detached and nothing ends them when a session ends, so restarting Claude Code, or sending a new message under a host like CloudCLI that ends the session per turn, doesn't kill your handoffs. The next prompt brings back a short result for each finished job: its Summary, any question Codex asks, and the job id for the full text.
 
 On CloudCLI, where Claude always runs in one folder, `/codex:handoff --cwd <folder>` targets another project and its result still comes back to Claude's folder. Two limits: a resume started from the viewer is not reported through Claude's prompt hook (only a session in the job's own folder sees it), and `/codex:status` with no job id shows only the current folder's jobs (pass the id to see a `--cwd` job).
 
@@ -88,9 +88,10 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 
 **In the browser** (`localhost:8377`):
 
-- every Codex session on the machine, streaming live, however it was started, in one list with three tabs (Now, Handoffs, History) and filter chips instead of separate session/job views
+- every Codex session on the machine, streaming live, however it was started, in one list with tabs (Now, Handoffs, History) and filter chips instead of separate session/job views
 - a feed that shows who says what: your messages, Claude's handoff prompts and automatic answers, the plugin's return format, Codex's replies and questions, and Codex's work (thinking, commands, patches) in its own collapsed log, each actor in one color with a legend
 - a result card on every finished handoff (Summary, Changed files, Checks run, Needs decision) with an answer box that resumes the thread when Codex asked a question; "Show full result" opens the full result dialog and lists every run on the thread, newest first
+- a Claude tab for Claude Code workflows (runs of the Workflow tool): each run with its phases and agents, live, and the transcript of each agent. Claude work has its own label, icon and color, so it never looks like a Codex handoff. A "Claude: N running" counter in the header shows on every tab. The tab only reads the run files under `~/.claude/projects` and has no stop or resume buttons
 - one-click resume and cancel, with in-app confirmation
 - one job store shared with the CLI, so `/codex:status` and the dashboard always agree
 - search across all recorded sessions, effort/sandbox/token display, archived sessions, unread markers, saved layout
@@ -130,6 +131,8 @@ Remote access: `--host 0.0.0.0` (or `CODEX_VIEWER_HOST=0.0.0.0`, which the plugi
 
 Behind a reverse proxy (Nginx Proxy Manager, Caddy, Traefik): set `CODEX_VIEWER_ALLOWED_HOSTS` to the name you open in the browser, for example `viewer.example.com`. Put it in the `env` block of `~/.claude/settings.json` on the machine that runs the viewer, so the autostart uses it too. That one setting also makes the viewer listen on all addresses, because the proxy usually runs on another machine. If the proxy runs on the same machine, also set `CODEX_VIEWER_HOST=127.0.0.1`. Without the name, the page loads but every control is refused, and the header says "Controls blocked at this address". The proxy needs no special settings: the viewer sends a keep-alive line every 25 seconds, so live updates do not time out. Like LAN access, there is no token, so protect the proxy name if others can reach it.
 
+Claude workflow transcripts can hold text from every project on the machine. The viewer sends them only to a browser on the same machine that uses the `localhost` or `127.0.0.1` link, or to the tunnel link. The LAN link refuses them, also when you open it on the same machine. When `CODEX_VIEWER_ALLOWED_HOSTS` is set, only the tunnel link shows them, because the viewer cannot tell a browser behind the proxy from a local one. The run list, with phases and agent states, shows on every link. Limit: a proxy on the same machine that you did not put in `CODEX_VIEWER_ALLOWED_HOSTS`, with default settings (for example nginx `proxy_pass` without forwarding headers), still looks local. Always declare your proxy.
+
 </details>
 
 <details>
@@ -146,6 +149,7 @@ Behind a reverse proxy (Nginx Proxy Manager, Caddy, Traefik): set `CODEX_VIEWER_
 | `CODEX_VIEWER_ALLOWED_HOSTS` | (none) | Comma list of names a reverse proxy serves the dashboard under; when set, the default bind becomes `0.0.0.0` |
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state (CLI + dashboard) |
 | `CODEX_HOME` | `~/.codex` | Where Codex session files are read from |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | Where Claude workflow runs are read from (its `projects` folder) |
 | `CODEX_VIEWER_TRAY_PORT` | port + 1 | Tray single-instance lock |
 | `CODEX_VIEWER_NOTIFICATIONS` | `1` | `0` disables tray toasts |
 

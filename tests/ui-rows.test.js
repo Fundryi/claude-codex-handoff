@@ -144,11 +144,13 @@ test("child agents nest under the lead; counts skip children, dismissed and arch
   assert.deepEqual(counts, {
     NOW: { ALL: 1, RUNNING: 0, WAITING: 1, ATTENTION: 0, ANSWER: 0 },
     HANDOFFS: { ALL: 1, RUNNING: 0, ATTENTION: 0, ANSWER: 0, FINISHED: 1, STOPPED: 0 },
-    HISTORY: { FINISHED: 1, STOPPED: 0, ARCHIVED: 1, DISMISSED: 1, EVERYTHING: 4 }
+    HISTORY: { FINISHED: 1, STOPPED: 0, ARCHIVED: 1, DISMISSED: 1, EVERYTHING: 4 },
+    // Codex rows never show in the Claude tab (it lists Claude workflows only).
+    CLAUDE: { ALL: 0, RUNNING: 0, ATTENTION: 0, FINISHED: 0 }
   });
   // A tab's count is what clicking the tab shows: its first chip (History opens on Finished).
   const { tabCounts } = ctx();
-  assert.deepEqual(plain(tabCounts(counts)), { NOW: 1, HANDOFFS: 1, HISTORY: 1 });
+  assert.deepEqual(plain(tabCounts(counts)), { NOW: 1, HANDOFFS: 1, HISTORY: 1, CLAUDE: 0 });
   const gone = rows[1];
   assert.equal(rowInView(gone, "NOW", "RUNNING", ["gone"]), false);
   assert.equal(rowInView(gone, "HISTORY", "DISMISSED", ["gone"]), true);

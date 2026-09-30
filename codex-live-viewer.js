@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.17.0";
+const APP_VERSION = "2.18.0";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 const PID_FILE = path.join(os.tmpdir(), "codex-live-viewer-" + PORT + ".pid");
 function parseFlags(argv) {
@@ -42,7 +42,12 @@ function parseFlags(argv) {
 const FLAGS = parseFlags(process.argv.slice(2));
 // A proxy name usually means the proxy runs on another machine, so it opens the bind too.
 const HOST = FLAGS.host || process.env.CODEX_VIEWER_HOST || (process.env.CODEX_VIEWER_ALLOWED_HOSTS ? "0.0.0.0" : "127.0.0.1");
+// A declared reverse proxy can reach us from loopback with a loopback Host and no forwarding headers.
+const PROXY_DECLARED = !!process.env.CODEX_VIEWER_ALLOWED_HOSTS;
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+// Claude Code's own root. CLAUDE_CONFIG_DIR moves it (Claude Code settings docs). Read only, like CODEX_HOME.
+const CLAUDE_HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+const CLAUDE_PROJECTS = path.join(CLAUDE_HOME, "projects");
 // The viewer never writes under CODEX_HOME, so the token lives in the companion state root.
 // Older builds kept it in CODEX_HOME; that copy is only read, so old tunnel links keep working.
 const TOKEN_FILE = path.join(process.env.CODEX_COMPANION_STATE_ROOT
@@ -582,8 +587,6 @@ function resolveCompanionScript(baseDir) {
   return candidates[0];
 }
 const COMPANION_SCRIPT = resolveCompanionScript(__dirname);
-// Mirrored in plugin/scripts/lib/liveness.mjs - the server stays one file, so the
-// two copies are kept honest by tests/plugin-liveness.test.js instead of an import.
 const STUCK_AFTER_MS = 5 * 60 * 1000; // alive but no heartbeat this long => possibly stuck
 
 function classifyJobLiveness(job, pidIsAlive, now) {
@@ -672,6 +675,399 @@ function handleLaunch(res, body, args) {
     if (err || !parsed || !parsed.jobId) return jsonReply(res, 500, { ok: false, error: errText || "companion did not return a job id" });
     jsonReply(res, 200, { ok: true, jobId: parsed.jobId, logFile: parsed.logFile || "" });
   });
+}
+
+// ---------------- Claude workflows (read only) ----------------
+// Claude Code writes every Workflow tool run under CLAUDE_PROJECTS/<slug>/<session>/:
+//   subagents/workflows/<runId>/{journal.jsonl, agent-<id>.jsonl, agent-<id>.meta.json}
+//   workflows/<runId>.json (snapshot, written at run end), workflows/scripts/<name>-<runId>.js
+// Polled, never fs.watch'ed (GBs, and every transcript write would fire). Nothing here writes.
+// Only ids, labels, phases, states, counts, times, tool names and token counts reach /events;
+// transcript text goes out only through /claude/agent (claudeTranscriptAllowed).
+const CLAUDE_SCAN_MS = 5000;              // new runs appear within this
+const CLAUDE_MAX_RUNS = 20;               // newest runs tracked; running runs always kept on top
+const CLAUDE_KEEP_MS = 24 * 60 * 60 * 1000; // no activity this long => dropped from memory (files stay)
+const CLAUDE_TOOL_GRACE_MS = 30 * 60 * 1000; // an agent waiting on its own tool stays Running this long
+const CLAUDE_MAX_AGENTS_SENT = 150;       // per run in the frame; counts stay exact
+const CLAUDE_RUN_ID = /^wf_[A-Za-z0-9-]{3,40}$/;
+const CLAUDE_AGENT_ID = /^a[0-9a-f]{6,40}$/;
+const claudeRuns = new Map();             // runId -> run (claudeNewRun has the shape)
+let claudeFrameSig = "";
+let claudeFrame = { type: "claudeRuns", runs: [] };
+
+// One journal.jsonl line. The result text (up to 61 KB, an object on 2.1.210) is never kept.
+function claudeJournalEntry(line) {
+  let o;
+  try { o = JSON.parse(line); } catch { return null; }
+  if (!o || typeof o !== "object") return null;
+  if (o.type === "launched") return { type: "launched" };
+  if (o.type !== "started" && o.type !== "result" && o.type !== "failed") return null;
+  if (typeof o.agentId !== "string" || !o.agentId) return null;
+  return { type: o.type, agentId: o.agentId, label: typeof o.label === "string" ? o.label : "", phase: typeof o.phase === "string" ? o.phase : "" };
+}
+
+// The script's `export const meta = { ... }` literal, read as text. Never required, imported or eval'ed.
+function claudeScriptMeta(text) {
+  const block = (/export\s+const\s+meta\s*=\s*\{([\s\S]*?)\n\}/.exec(String(text || "")) || [])[1] || "";
+  const unq = (s) => s.replace(/\\(.)/g, "$1");
+  const str = (key) => { const m = new RegExp("\\b" + key + "[\"']?\\s*:\\s*(['\"`])((?:\\\\.|(?!\\1)[^\\\\])*?)\\1").exec(block); return m ? unq(m[2]) : ""; };
+  const phases = [...block.matchAll(/\btitle["']?\s*:\s*(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g)].map((m) => unq(m[2]));
+  return { name: str("name"), description: str("description"), phases };
+}
+
+// One agent-transcript line -> viewer feed events, in the Codex event shape so the UI feed code
+// works unchanged. kind "meta" carries context tokens and never reaches the feed.
+function claudeTranscriptEvents(line) {
+  let o;
+  try { o = JSON.parse(line); } catch { return []; }
+  if (!o || (o.type !== "user" && o.type !== "assistant")) return [];
+  const ts = o.timestamp || null;
+  const msg = o.message && typeof o.message === "object" ? o.message : {};
+  const content = msg.content;
+  const blocks = Array.isArray(content) ? content : [];
+  const out = [];
+  const userText = (text) => {
+    const ev = { kind: "user", ts, text };
+    if (o.isMeta || /^\s*<(?:system-reminder|command-|local-command-)/.test(text)) ev.internal = true;
+    return ev;
+  };
+  if (o.type === "user") {
+    if (typeof content === "string") return content.trim() ? [userText(content)] : [];
+    for (const b of blocks) {
+      if (!b) continue;
+      if (b.type === "tool_result") {
+        const c = b.content;
+        const text = typeof c === "string" ? c : Array.isArray(c) ? c.map((p) => (p && p.type === "text" && p.text) || "").join("\n") : "";
+        out.push({ kind: "out", ts, resultOf: String(b.tool_use_id || ""), text: (b.is_error ? "error: " : "") + text.slice(0, 1200) });
+      } else if (b.type === "text" && String(b.text || "").trim()) out.push(userText(b.text));
+    }
+    return out;
+  }
+  for (const b of blocks) {
+    if (!b) continue;
+    if (b.type === "text" && String(b.text || "").trim()) out.push({ kind: "agent", ts, text: b.text });
+    else if (b.type === "thinking" && String(b.thinking || "").trim()) out.push({ kind: "think", ts, text: String(b.thinking).slice(0, 500) });
+    else if (b.type === "tool_use") {
+      const input = b.input && typeof b.input === "object" ? b.input : {};
+      const name = String(b.name || "tool");
+      const head = String(input.command || input.file_path || input.notebook_path || input.description || input.pattern || JSON.stringify(input));
+      const preview = name + ": " + head.split(/\r?\n/)[0].slice(0, 90);
+      if (name === "Bash" || name === "PowerShell") out.push({ kind: "cmd", ts, callId: b.id, text: String(input.command || ""), preview });
+      else if (/^(?:Edit|Write|MultiEdit|NotebookEdit)$/.test(name)) out.push({ kind: "patch", ts, callId: b.id, text: String(input.file_path || input.notebook_path || "(edit)"), preview });
+      else out.push({ kind: "tool", ts, callId: b.id, text: name + " " + JSON.stringify(input).slice(0, 300), preview });
+    }
+  }
+  const u = msg.usage;
+  if (u && typeof u === "object") out.push({ kind: "meta", ts, tokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0) });
+  return out;
+}
+
+// Soft: the snapshot is the only finish record. Never "stopped" from a pid (a workflow can outlive
+// its Claude process). Quiet = may be paused, rate-limited or ended; a flag only, nothing acts on it.
+function claudeRunStatus(snapshotStatus, newestWriteMs, pendingSinceMs, now) {
+  if (snapshotStatus === "completed") return "DONE";
+  if (snapshotStatus === "failed") return "FAILED";
+  if (snapshotStatus === "killed") return "KILLED";
+  if (now - newestWriteMs < STUCK_AFTER_MS) return "RUNNING";
+  // An agent waiting on its own tool (a 10-minute test run) is not quiet.
+  // ponytail: capped at CLAUDE_TOOL_GRACE_MS so a run killed mid-tool without a snapshot does not read Running for a day.
+  if (pendingSinceMs && now - pendingSinceMs < CLAUDE_TOOL_GRACE_MS) return "RUNNING";
+  return "QUIET";
+}
+
+// ingest's byte-offset reader, reusable: complete lines appended since cursor.offset, the cut last
+// line carried as bytes. null on ENOENT/EBUSY with the cursor unchanged.
+function readAppended(file, cursor, maxBytes) {
+  let st;
+  try { st = fs.statSync(file); } catch { return null; }
+  if (st.size < cursor.size) { cursor.offset = 0; cursor.partial = Buffer.alloc(0); }
+  const from = cursor.offset;
+  if (st.size <= from) { cursor.size = st.size; return { lines: [], st }; }
+  const buf = Buffer.alloc(Math.min(st.size - from, maxBytes));
+  let fd, n = 0;
+  try { fd = fs.openSync(file, "r"); n = fs.readSync(fd, buf, 0, buf.length, from); }
+  catch { return null; }
+  finally { if (fd !== undefined) try { fs.closeSync(fd); } catch {} }
+  const data = Buffer.concat([cursor.partial, buf.subarray(0, n)]);
+  const cut = data.lastIndexOf(10) + 1;
+  cursor.partial = Buffer.from(data.subarray(cut));
+  cursor.offset = from + n;
+  cursor.size = st.size;
+  return { lines: data.toString("utf8", 0, cut).split("\n").filter((l) => l.trim()), st };
+}
+
+function claudeCursor() { return { offset: 0, size: 0, partial: Buffer.alloc(0) }; }
+
+function claudeReadHead(file, bytes) {
+  let fd;
+  try {
+    fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(bytes);
+    return buf.toString("utf8", 0, fs.readSync(fd, buf, 0, bytes, 0));
+  } catch { return ""; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch {} }
+}
+
+function claudeNewRun(id, c) {
+  const run = {
+    id, sessionDir: c.sDir, dir: path.join(c.sDir, "subagents", "workflows", id),
+    snapshotFile: path.join(c.sDir, "workflows", id + ".json"), sessionId: c.session, projectSlug: c.slug,
+    name: "", scriptName: "", description: "", phases: [], project: c.slug.replace(/^[a-z]--/i, ""), cwdFound: false,
+    journal: { ...claudeCursor(), mtimeMs: 0, birthtimeMs: 0 }, launchedSeen: false,
+    agents: new Map(), snapshot: null, snapAgents: new Map(), snapMtime: -1, snapBad: false, settledAt: -1,
+    status: "", error: "", lastActivityMs: c.activity,
+  };
+  try {
+    const scripts = path.join(c.sDir, "workflows", "scripts");
+    const file = fs.readdirSync(scripts).find((n) => n.endsWith("-" + id + ".js"));
+    if (file) Object.assign(run, claudeScriptMeta(claudeReadHead(path.join(scripts, file), 32 * 1024)));
+    run.scriptName = run.name;
+  } catch { /* no script folder: snapshot-only or foreign run */ }
+  return run;
+}
+
+// Agent ids come from Claude's own files but still end up in paths: CLAUDE_AGENT_ID only.
+function claudeAgent(run, id) {
+  let a = run.agents.get(id);
+  if (a || !CLAUDE_AGENT_ID.test(id)) return a;
+  a = { id, order: run.agents.size, label: "", phase: "", metaLabel: "", metaPhase: "", state: "running",
+    cursor: claudeCursor(), lastWriteMs: 0, pending: new Map(), toolName: "", toolPreview: "", toolSinceMs: 0, contextTokens: 0 };
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(run.dir, "agent-" + id + ".meta.json"), "utf8"));
+    if (typeof m.description === "string") a.metaLabel = m.description;
+    if (typeof m.workflowPhase === "string") a.metaPhase = m.workflowPhase;
+  } catch { /* 2.1.210 meta, or not written yet: the journal and snapshot labels cover it */ }
+  // One stat, so an agent that finished before the viewer started still has a last-write time.
+  try { a.lastWriteMs = fs.statSync(path.join(run.dir, "agent-" + id + ".jsonl")).mtimeMs; } catch {}
+  if (!run.cwdFound) {
+    // The first transcript line carries cwd after the prompt; attachment lines after it carry it too.
+    const m = /"cwd":"((?:\\.|[^"\\])*)"/.exec(claudeReadHead(path.join(run.dir, "agent-" + id + ".jsonl"), 64 * 1024));
+    if (m) { try { run.project = JSON.parse('"' + m[1] + '"').split(/[\\/]/).filter(Boolean).pop() || run.project; run.cwdFound = true; } catch {} }
+  }
+  run.agents.set(id, a);
+  return a;
+}
+
+// Only whitelisted fields: the snapshot also holds the script, result, logs, args and previews.
+function claudeSnapshot(j, mtimeMs) {
+  const s = (v) => typeof v === "string" ? v : "";
+  const n = (v) => typeof v === "number" && isFinite(v) ? v : 0;
+  const agents = new Map();
+  for (const r of Array.isArray(j.workflowProgress) ? j.workflowProgress : []) {
+    if (!r || typeof r.agentId !== "string") continue;
+    agents.set(r.agentId, {
+      label: s(r.label), phase: s(r.phaseTitle), lastMs: n(r.lastProgressAt),
+      state: r.state === "done" ? "done" : r.state === "failed" || r.state === "error" ? "failed" : "ended",
+    });
+  }
+  return {
+    mtimeMs, status: s(j.status), startTime: n(j.startTime), endMs: Date.parse(j.timestamp) || mtimeMs,
+    durationMs: n(j.durationMs), tokens: n(j.totalTokens), toolCalls: n(j.totalToolCalls), model: s(j.defaultModel),
+    workflowName: s(j.workflowName), phases: (Array.isArray(j.phases) ? j.phases : []).map((p) => s(p && p.title)).filter(Boolean), agents,
+  };
+}
+
+function claudeTickRun(run, now) {
+  const journalFile = path.join(run.dir, "journal.jsonl");
+  let jst = null, sst = null;
+  try { jst = fs.statSync(journalFile); } catch {}
+  try { sst = fs.statSync(run.snapshotFile); } catch {}
+  if (jst) { run.journal.mtimeMs = jst.mtimeMs; run.journal.birthtimeMs = jst.birthtimeMs; }
+  // A resumed run reuses the folder, so its old snapshot is stale once the journal moves on.
+  const fresh = !!sst && sst.mtimeMs >= run.journal.mtimeMs - 2000;
+  if (!fresh || sst.mtimeMs !== run.settledAt) {
+    if (!fresh) { run.snapshot = null; run.snapBad = false; run.snapMtime = -1; }
+    // Journal: one 4 MiB step per tick while running; all of it once a fresh snapshot ends the run.
+    for (let r; (r = readAppended(journalFile, run.journal, 4 * 1024 * 1024)) && r.lines.length;) {
+      for (const line of r.lines) {
+        const e = claudeJournalEntry(line);
+        if (!e) continue;
+        if (e.type === "launched") { run.launchedSeen = true; continue; }
+        const a = claudeAgent(run, e.agentId);
+        if (!a) continue;
+        if (e.type === "started") { a.state = "running"; if (e.label) a.label = e.label; if (e.phase) a.phase = e.phase; }
+        else a.state = e.type === "result" ? "done" : "failed";
+      }
+      if (!fresh || run.journal.offset >= run.journal.size) break;
+    }
+    if (fresh && sst.mtimeMs !== run.snapMtime) {
+      run.snapMtime = sst.mtimeMs;
+      try { run.snapshot = claudeSnapshot(JSON.parse(fs.readFileSync(run.snapshotFile, "utf8")), sst.mtimeMs); run.snapAgents = run.snapshot.agents; run.snapBad = false; }
+      catch { run.snapshot = null; run.snapBad = true; }
+    }
+    if (run.snapshot) {
+      for (const [id, s] of run.snapshot.agents) {
+        const a = claudeAgent(run, id);
+        if (a && a.state === "running") a.state = s.state;
+      }
+      run.settledAt = sst.mtimeMs; // finished: no more journal or transcript reads until the snapshot changes
+    } else {
+      // Live transcripts, running agents only (never stat a finished agent on a timer).
+      for (const a of run.agents.values()) {
+        if (a.state !== "running") continue;
+        const r = readAppended(path.join(run.dir, "agent-" + a.id + ".jsonl"), a.cursor, 2 * 1024 * 1024);
+        if (!r) continue;
+        let newest = r.st.mtimeMs;
+        for (const line of r.lines) {
+          for (const ev of claudeTranscriptEvents(line)) {
+            const t = Date.parse(ev.ts) || 0;
+            if (t > newest) newest = t;
+            if (ev.kind === "meta") { a.contextTokens = ev.tokens; continue; }
+            if (ev.callId) a.pending.set(ev.callId, { preview: ev.preview, since: t || now });
+            if (ev.resultOf) a.pending.delete(ev.resultOf);
+          }
+        }
+        a.lastWriteMs = Math.max(a.lastWriteMs, newest);
+        const last = [...a.pending.values()].pop();
+        a.toolPreview = last ? last.preview : "";
+        a.toolName = last ? last.preview.split(": ")[0] : "";
+        a.toolSinceMs = last ? last.since : 0;
+      }
+    }
+  }
+  const snap = run.snapshot;
+  run.name = run.scriptName || (snap && snap.workflowName) || run.id;
+  const running = [...run.agents.values()].filter((a) => a.state === "running");
+  const newestWrite = Math.max(run.journal.mtimeMs, ...running.map((a) => a.lastWriteMs));
+  const pendingSince = Math.max(0, ...running.map((a) => a.toolSinceMs));
+  run.status = claudeRunStatus(snap ? snap.status : "", newestWrite, pendingSince, now);
+  run.lastActivityMs = Math.max(newestWrite, snap ? snap.endMs : 0, ...[...run.agents.values()].map((a) => a.lastWriteMs));
+  run.error = run.snapBad ? "details unavailable" : "";
+}
+
+function claudeAgentState(run, a) {
+  return a.state === "running" && run.status !== "RUNNING" ? "ended" : a.state;
+}
+
+function claudeRunView(run) {
+  const snap = run.snapshot;
+  const all = [...run.agents.values()].map((a) => {
+    const s = run.snapAgents.get(a.id); // labels outlive a stale snapshot (a resumed legacy run has no others)
+    const state = claudeAgentState(run, a);
+    return {
+      id: a.id, order: a.order, label: a.label || a.metaLabel || (s && s.label) || a.id,
+      phase: a.phase || a.metaPhase || (s && s.phase) || "phase unknown", state,
+      lastWriteMs: Math.floor(a.lastWriteMs || (s && s.lastMs) || 0), tool: state === "running" ? a.toolName : "", contextTokens: a.contextTokens,
+    };
+  });
+  const counts = { started: all.length, running: 0, done: 0, failed: 0, ended: 0 };
+  const phaseMap = new Map();
+  for (const t of run.phases.length ? run.phases : snap ? snap.phases : []) phaseMap.set(t, { title: t, started: 0, done: 0, failed: 0 });
+  for (const a of all) {
+    counts[a.state]++;
+    if (a.phase === "phase unknown") continue;
+    if (!phaseMap.has(a.phase)) phaseMap.set(a.phase, { title: a.phase, started: 0, done: 0, failed: 0 });
+  }
+  if (all.some((a) => a.phase === "phase unknown")) phaseMap.set("phase unknown", { title: "phase unknown", started: 0, done: 0, failed: 0 });
+  for (const a of all) {
+    const p = phaseMap.get(a.phase);
+    p.started++;
+    if (a.state === "done") p.done++;
+    if (a.state === "failed") p.failed++;
+  }
+  // All running agents first, then the newest writes; sent in journal order.
+  const sent = all.length <= CLAUDE_MAX_AGENTS_SENT ? all
+    : all.slice().sort((x, y) => (y.state === "running") - (x.state === "running") || y.lastWriteMs - x.lastWriteMs)
+      .slice(0, CLAUDE_MAX_AGENTS_SENT).sort((x, y) => x.order - y.order);
+  return {
+    id: run.id, name: run.name, description: run.description, project: run.project, session: run.sessionId.slice(0, 8),
+    status: run.status, error: run.error, legacy: !run.launchedSeen,
+    startedMs: (snap && snap.startTime) || run.journal.birthtimeMs || run.journal.mtimeMs,
+    updatedMs: run.lastActivityMs, endedMs: snap ? snap.endMs : 0, durationMs: snap ? snap.durationMs : 0,
+    counts, phases: [...phaseMap.values()],
+    agents: sent.map(({ order, ...a }) => a), agentsHidden: all.length - sent.length,
+    totals: snap ? { tokens: snap.tokens, toolCalls: snap.toolCalls, model: snap.model } : null,
+  };
+}
+
+function claudeRunsFrame() {
+  const runs = [];
+  for (const run of claudeRuns.values()) { try { if (run.status) runs.push(claudeRunView(run)); } catch {} }
+  runs.sort((a, b) => (b.status === "RUNNING") - (a.status === "RUNNING") || b.updatedMs - a.updatedMs);
+  return { type: "claudeRuns", runs };
+}
+
+function claudeTick() {
+  const now = Date.now();
+  for (const run of claudeRuns.values()) {
+    // A format change degrades one run, never the timer.
+    try { claudeTickRun(run, now); } catch { run.error = "details unavailable"; if (!run.status) run.status = "QUIET"; }
+  }
+  const frame = claudeRunsFrame();
+  const sig = JSON.stringify(frame.runs);
+  if (sig === claudeFrameSig) return;
+  claudeFrameSig = sig;
+  claudeFrame = frame;
+  broadcast(frame);
+}
+
+// Full walk every CLAUDE_SCAN_MS: 52 project listings (~3.5 ms) plus one probe per session dir.
+// Paths come only from real readdir names, never from a slug or id seen inside a file.
+function claudeDiscover() {
+  try {
+    const now = Date.now();
+    const found = new Map();
+    const has = (p) => { try { return !!fs.statSync(p, { throwIfNoEntry: false }); } catch { return false; } };
+    let projects = [];
+    try { projects = fs.readdirSync(CLAUDE_PROJECTS, { withFileTypes: true }); } catch {}
+    for (const p of projects) {
+      if (!p.isDirectory()) continue;
+      const pDir = path.join(CLAUDE_PROJECTS, p.name);
+      let entries = [];
+      try { entries = fs.readdirSync(pDir, { withFileTypes: true }); } catch { continue; }
+      for (const s of entries) {
+        if (!s.isDirectory()) continue;
+        const sDir = path.join(pDir, s.name);
+        const ids = new Set();
+        // Most sessions never ran a workflow: one non-throwing stat each (~40 us on NTFS) skips them.
+        // Claude Code (2.1.210 and 2.1.284) saves the script to S/workflows/scripts/ at launch, so
+        // S/workflows exists from a run's first second; only then is S/subagents/workflows listed.
+        // ponytail: one probe per session dir per scan (~10 ms at 193); probe cold sessions less often if it grows.
+        const snapDir = path.join(sDir, "workflows");
+        if (!has(snapDir)) continue;
+        try { for (const e of fs.readdirSync(path.join(sDir, "subagents", "workflows"))) if (CLAUDE_RUN_ID.test(e)) ids.add(e); } catch {}
+        try { for (const e of fs.readdirSync(snapDir)) { const m = /^(wf_[A-Za-z0-9-]+)\.json$/.exec(e); if (m && CLAUDE_RUN_ID.test(m[1])) ids.add(m[1]); } } catch {}
+        for (const id of ids) {
+          let activity = (claudeRuns.get(id) || {}).lastActivityMs || 0;
+          for (const f of [path.join(sDir, "subagents", "workflows", id, "journal.jsonl"), path.join(sDir, "workflows", id + ".json")]) {
+            try { activity = Math.max(activity, fs.statSync(f).mtimeMs); } catch {}
+          }
+          if (now - activity < CLAUDE_KEEP_MS) found.set(id, { sDir, session: s.name, slug: p.name, activity });
+        }
+      }
+    }
+    const keep = new Set([...found.entries()].sort((a, b) => b[1].activity - a[1].activity).slice(0, CLAUDE_MAX_RUNS).map(([id]) => id));
+    for (const [id, run] of claudeRuns) if (run.status === "RUNNING" && found.has(id)) keep.add(id);
+    let added = false;
+    for (const id of keep) if (!claudeRuns.has(id)) { claudeRuns.set(id, claudeNewRun(id, found.get(id))); added = true; }
+    for (const id of claudeRuns.keys()) if (!keep.has(id)) claudeRuns.delete(id);
+    if (added) claudeTick();
+  } catch { /* the next scan retries */ }
+}
+
+// Up to 8 MiB of complete lines: from offset when the reader already has everything before it,
+// else the tail of the file (first partial line dropped). meta events stay out of the feed.
+function claudeTranscriptPage(file, offset) {
+  const CAP = 8 * 1024 * 1024;
+  const size = fs.statSync(file).size;
+  const from = offset > 0 && offset <= size ? offset : Math.max(0, size - CAP);
+  const buf = Buffer.alloc(Math.min(size - from, CAP));
+  let n = 0;
+  const fd = fs.openSync(file, "r");
+  try { n = fs.readSync(fd, buf, 0, buf.length, from); } finally { fs.closeSync(fd); }
+  const data = buf.subarray(0, n);
+  let skip = 0;
+  if (from > 0 && from !== offset) { const nl = data.indexOf(10); skip = nl === -1 ? data.length : nl + 1; }
+  const end = Math.max(skip, data.lastIndexOf(10) + 1);
+  let events = [], contextTokens = 0;
+  for (const line of data.toString("utf8", skip, end).split("\n")) {
+    if (!line.trim()) continue;
+    for (const ev of claudeTranscriptEvents(line)) {
+      if (ev.kind === "meta") contextTokens = ev.tokens;
+      else events.push(ev);
+    }
+  }
+  if (events.length > 500) events = events.slice(-500);
+  return { events, offset: from + end, size, contextTokens };
 }
 
 // ---------------- HTTP ----------------
@@ -984,6 +1380,7 @@ const server = http.createServer((req, res) => {
     // initial state: session list + full event snapshots
     const threadJobStatus = threadJobStatuses(listCompanionJobs());
     res.write("data: " + JSON.stringify({ type: "sessions", sessions: [...sessions.values()].map(s => sessionSummary(s, threadJobStatus)) }) + "\n\n");
+    res.write("data: " + JSON.stringify(claudeFrame) + "\n\n");
     for (const s of sessions.values())
       res.write("data: " + JSON.stringify({ type: "snapshot", session: s.id, events: s.events }) + "\n\n");
     req.on("close", () => sseClients.delete(res));
@@ -1034,7 +1431,8 @@ const server = http.createServer((req, res) => {
     });
   } else if (req.url === "/notify") {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
-    // no origin check: posted by the local companion process, not a browser
+    // Posted by the local companion process (127.0.0.1, Content-Type only, no Origin), never a browser.
+    if (!loopbackDirect(req) || req.headers.origin) return refuseUntrusted(req, res);
     readJsonBody(req, body => {
       if (body && body.jobId) {
         broadcast({ type: "job", jobId: body.jobId, status: body.status || "", title: String(body.title || "").slice(0, 120) }, notificationClients);
@@ -1042,6 +1440,31 @@ const server = http.createServer((req, res) => {
       }
       jsonReply(res, 200, { ok: true });
     });
+  } else if (/^\/claude\/(?:agent|run)(?:\?|$)/.test(req.url)) {
+    // Read only, so GET without an origin rule; the transcript gate is stricter than trustedControlOrigin.
+    if (req.method !== "GET") { res.writeHead(405); return res.end("GET only"); }
+    if (!claudeTranscriptAllowed(req)) {
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      return res.end("Claude transcripts are served only to a browser on this PC, or through the tunnel link.");
+    }
+    const u = new URL(req.url, "http://local");
+    const run = claudeRuns.get(u.searchParams.get("run") || "");
+    const agentId = u.searchParams.get("agent") || "";
+    const noStore = (code, obj) => { res.setHeader("Cache-Control", "no-store"); jsonReply(res, code, obj); };
+    if (!run) return noStore(404, { ok: false, error: "run not tracked" });
+    if (u.pathname === "/claude/run") {
+      return noStore(200, { ok: true, journal: path.join(run.dir, "journal.jsonl"), snapshot: run.snapshotFile,
+        resume: "Resume Claude workflow " + run.id + " (Workflow tool, resumeFromRunId: \"" + run.id + "\")" });
+    }
+    // The path is built from the server-owned run.dir and a validated id, never from query text.
+    const agent = CLAUDE_AGENT_ID.test(agentId) && run.agents.get(agentId);
+    if (!agent) return noStore(404, { ok: false, error: "agent not tracked" });
+    let page;
+    try { page = claudeTranscriptPage(path.join(run.dir, "agent-" + agent.id + ".jsonl"), Math.max(0, parseInt(u.searchParams.get("offset"), 10) || 0)); }
+    catch { return noStore(404, { ok: false, error: "transcript not found" }); }
+    const state = claudeAgentState(run, agent);
+    noStore(200, { ok: true, events: page.events, offset: page.offset, size: page.size,
+      tool: state === "running" ? agent.toolPreview : "", contextTokens: agent.contextTokens || page.contextTokens, state });
   } else {
     res.writeHead(404); res.end("not found");
   }
@@ -1091,10 +1514,32 @@ function trustedControlOrigin(req) {
   try { return hosts.has(new URL(origin).host); } catch { return false; }
 }
 
+// A request straight from this PC: loopback socket, no proxy in between, a loopback Host
+// (a DNS-rebound page in a local browser passes the socket check but not this).
+// ponytail: a local proxy that adds no forwarding headers (nginx's default proxy_pass sets Host to the
+// upstream and adds none) looks exactly like the browser. claudeTranscriptAllowed refuses when a proxy is
+// declared (CODEX_VIEWER_ALLOWED_HOSTS); an undeclared proxy of that shape still passes, that is the ceiling.
+function loopbackDirect(req) {
+  const h = req.headers || {};
+  if (h["x-forwarded-for"] || h.forwarded || h["x-real-ip"] || h["cf-connecting-ip"]) return false;
+  const ip = (req.socket && req.socket.remoteAddress) || "";
+  if (ip !== "127.0.0.1" && ip !== "::1" && ip !== "::ffff:127.0.0.1") return false;
+  return h.host === "127.0.0.1:" + PORT || h.host === "localhost:" + PORT || h.host === "[::1]:" + PORT;
+}
+
+// Claude transcripts cover every project on this PC: only this PC's browser, or the tunnel link.
+// Tunnel traffic carries cf-connecting-ip AND X-Forwarded-For; tunnelAuthDecision has already
+// checked its token before any route runs, so that branch comes first.
+function claudeTranscriptAllowed(req) {
+  if (FLAGS.tunnel && req.headers["cf-connecting-ip"]) return trustedControlOrigin(req);
+  if (PROXY_DECLARED) return false; // proxied remote clients are indistinguishable from this PC's browser
+  return loopbackDirect(req) && trustedControlOrigin(req);
+}
+
 function serve() {
-  if (!fs.existsSync(SESSIONS_DIR)) {
-    console.error("[X] Sessions dir not found: " + SESSIONS_DIR);
-    console.error("    Run any codex command once, or set CODEX_HOME.");
+  if (!fs.existsSync(SESSIONS_DIR) && !fs.existsSync(CLAUDE_PROJECTS)) {
+    console.error("[X] Neither Codex sessions (" + SESSIONS_DIR + ") nor Claude projects (" + CLAUDE_PROJECTS + ") found.");
+    console.error("    Run any codex or claude command once, or set CODEX_HOME / CLAUDE_CONFIG_DIR.");
     process.exit(1);
   }
   let retries = 0;
@@ -1114,9 +1559,16 @@ function serve() {
     try { fs.writeFileSync(PID_FILE, String(process.pid)); } catch {}
     process.on("exit", () => { try { if (fs.readFileSync(PID_FILE, "utf8").trim() === String(process.pid)) fs.unlinkSync(PID_FILE); } catch {} });
     console.log("[OK] Watching: " + SESSIONS_DIR);
+    if (fs.existsSync(CLAUDE_PROJECTS)) console.log("[OK] Claude workflows: " + CLAUDE_PROJECTS);
     tick();
     watchSessions();
     setInterval(tick, POLL_MS);
+    // Own timers, so a Claude error never stalls Codex updates.
+    // ponytail: poll only (1 s reads, 5 s discovery). A PostToolUse(Workflow) kick hook (scope graft 10) only if 5 s feels slow.
+    claudeDiscover();
+    claudeTick();
+    setInterval(claudeDiscover, CLAUDE_SCAN_MS);
+    setInterval(claudeTick, POLL_MS);
     setTimeout(buildSearchIndex, 50);
     setInterval(buildSearchIndex, 30000);
     // A proxy cuts a stream that stays silent (nginx: 60 s). A comment line keeps both streams open.

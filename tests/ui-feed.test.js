@@ -57,6 +57,17 @@ test("messageActor: who sent each message, by originator and prefix", () => {
   for (const kind of ["done", "err", "sys"]) assert.equal(messageActor({ kind, text: "x" }, HANDOFF), "status", kind);
 });
 
+test("a Claude workflow transcript never shows a Codex actor or route", () => {
+  const { messageActor, messageRoute } = lib();
+  const CLAUDE = { source: "claude" };
+  assert.equal(messageActor({ kind: "user", text: "[Workflow harness] Scout the files" }, CLAUDE), "workflow-script");
+  assert.equal(messageActor({ kind: "agent", text: "Done." }, CLAUDE), "claude-agent");
+  assert.equal(messageActor({ kind: "user", text: "<system-reminder>x", internal: true }, CLAUDE), "system");
+  for (const kind of ["cmd", "out", "patch", "tool", "think", "thinkgroup"]) assert.equal(messageActor({ kind, text: "x" }, CLAUDE), "claude-work", kind);
+  assert.deepEqual(plain(messageRoute("workflow-script", CLAUDE)), { from: "workflow-script", to: "claude-agent" });
+  assert.deepEqual(plain(messageRoute("claude-agent", CLAUDE)), { from: "claude-agent", to: "workflow-script" });
+});
+
 test("splitReturnFormat splits the plugin footer off a handoff prompt", () => {
   const { splitReturnFormat } = lib();
   assert.deepEqual(plain(splitReturnFormat("<goal>\nPick a name\n</goal>\n\n" + FOOTER)), { body: "<goal>\nPick a name\n</goal>", footer: FOOTER });
