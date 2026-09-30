@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.17.0
+
+A cleanup release from a full review of the plugin by six Codex agents. Every change was checked twice for side effects before it was made.
+
+- **The shared broker is gone.** Every command now starts its own short Codex process, as handoffs and reviews already did. `/codex:setup` and `/codex:status` show "private per job". A broker left running by an older version is asked to stop when a session ends. That step waits at most 1 second and never ends a process by its id.
+- **Windows paths keep their backslashes.** Commands such as `/codex:result`, `/codex:status` and `/codex:cancel` removed every backslash from a path. Now a backslash only escapes a quote character.
+- **An option value keeps everything after the first `=`.** `--base=feature/auth=v2` was cut to `feature/auth`.
+- **A background job never starts before its record is saved.** Two jobs launched at the same moment could start a worker that found no record.
+- **No result is lost when several jobs finish at once.** The prompt hook shows at most three results in full. It marked the others as delivered too, so they never came back. Now only the results it showed are marked.
+- **A cancel never overwrites a finished job.** Job files now use the same lock as the state file.
+- **Finished work is never marked cancelled.** A run that ended successfully stays completed, even when a stop was sent at the same moment.
+- **Reviews can be cancelled cleanly.** `/codex:cancel` now stops `/codex:review` and `/codex:adversarial-review` the same safe way as a handoff.
+- **A failed `/codex:review` says why.** It used to report "Review completed" with no reason.
+- **A question that starts with "None" is still a question.** "None of these fit. Should I keep the API?" was taken as "no question". A "Needs decision" heading inside a code block is no longer taken as a question. The plugin and the viewer read results the same way.
+- **`CODEX_PLUGIN_FAST_TIER` accepts only letters, digits, `-` and `_`.** Any other value falls back to `priority` with a warning, so nothing unexpected reaches a Windows shell.
+- **The viewer survives bad input.** A malformed search or open request, an odd record in a session file, or a file that disappears while it is read no longer stops the viewer. Text with accents or emoji that was split between two reads is no longer garbled.
+- **The viewer's status is more exact.** A session shows DONE only when its latest turn has finished. Agents started by a child agent get their own row. The open feed updates when its job fails. A reconnect keeps your place in the feed. Search no longer lists a child session twice.
+- **The Resume dialog has no "Allow writes" box.** It never changed what Codex may do; the Sandbox setting does that. `--write` stays as a label for edit tasks.
+- **The standalone tray downloads include the companion script,** so Resume and Cancel work in them.
+- **Less code.** Unused functions, styles and duplicate code were removed: about 550 lines fewer.
+
 ## 2.16.1
 
 - **Two jobs at the same time no longer lose a result.** Jobs in one project share one state file, and each job rewrote it with no lock. When two jobs ran at once, one write could replace the other. A finished job then stayed `running`, and the dead-job check marked it failed with "Worker process exited without recording a result". Every change to the state file now waits for a lock. The file is written to a temporary file first and then renamed, so a process that stops mid-write leaves the old file intact.
