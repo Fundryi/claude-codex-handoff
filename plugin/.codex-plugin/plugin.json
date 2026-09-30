@@ -1,6 +1,6 @@
 {
   "name": "codex",
-  "version": "2.16.0",
+  "version": "2.16.1",
   "description": "Codex manifest for the Claude Code plugin. Codex loads its skills only: the empty hooks object stops the fallback to hooks/hooks.json, whose Claude hooks must not run inside Codex.",
   "author": {
     "name": "Fundryi"

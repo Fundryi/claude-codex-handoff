@@ -13,11 +13,14 @@ const jobControlUrl = pathToFileURL(
 ).href;
 
 let seq = 0;
+const roots = [];
+test.after(() => roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true })));
 
 // Each test gets its own state root so ordering never matters.
 function freshRoot() {
   const root = path.join(os.tmpdir(), `clv-reconcile-${process.pid}-${seq++}`);
   fs.rmSync(root, { recursive: true, force: true });
+  roots.push(root);
   process.env.CODEX_COMPANION_STATE_ROOT = root;
   return root;
 }
@@ -115,4 +118,67 @@ test("a reconciled job is no longer cancelable", async () => {
     () => jobControl.resolveCancelableJob(process.cwd(), "task-gone"),
     /No job found/
   );
+});
+
+test("a finished run whose state.json write was lost stays finished", async () => {
+  freshRoot();
+  const state = await loadState();
+  // The 2026-09-30 incident: the job file holds the completed run, state.json still
+  // says running (another worker's save clobbered the completion), the pid is gone.
+  const finished = jobRecord({
+    id: "review-done", status: "completed", phase: "done", completedAt: "2026-09-30T10:00:00.000Z",
+    exitCode: 0, diedReason: null, pid: null, result: { ok: true }, rendered: "all good"
+  });
+  state.writeJobFile(process.cwd(), finished.id, finished);
+  state.upsertJob(process.cwd(), { ...finished, status: "running", phase: "reviewing", completedAt: null, exitCode: null });
+  const jobFile = state.resolveJobFile(process.cwd(), finished.id);
+  const before = fs.readFileSync(jobFile, "utf8");
+
+  assert.deepEqual(state.reconcileDeadJobs(process.cwd()), ["review-done"]);
+  assert.equal(fs.readFileSync(jobFile, "utf8"), before, "the job file must not be rewritten");
+  const entry = state.loadState(process.cwd()).jobs.find((job) => job.id === "review-done");
+  assert.equal(entry.status, "completed");
+  assert.equal(entry.phase, "done");
+  assert.equal(entry.exitCode, 0);
+  assert.equal(entry.completedAt, "2026-09-30T10:00:00.000Z");
+  assert.equal(entry.diedReason, null, "a real completion write carries diedReason: null");
+});
+
+test("concurrent updateState calls from separate processes lose no update", async () => {
+  freshRoot();
+  const state = await loadState();
+  const WORKERS = 6;
+  const ROUNDS = 40;
+  for (let i = 0; i < WORKERS; i += 1) {
+    state.upsertJob(process.cwd(), jobRecord({ id: `job-${i}`, status: "completed", count: 0 }));
+  }
+
+  // Each child bumps its own job's counter; a save built on a stale load drops
+  // another child's bump. The shared start time makes the children overlap.
+  const startAt = Date.now() + 1500;
+  const child = `
+    const { updateState } = await import(process.env.STATE_URL);
+    while (Date.now() < Number(process.env.START_AT)) {}
+    for (let i = 0; i < ${ROUNDS}; i += 1) {
+      updateState(process.cwd(), (s) => { s.jobs.find((job) => job.id === process.env.JOB_ID).count += 1; });
+    }
+  `;
+  const { spawn } = require("node:child_process");
+  const exits = Array.from({ length: WORKERS }, (_, i) => new Promise((resolve) => {
+    const proc = spawn(process.execPath, ["--input-type=module", "-e", child], {
+      env: { ...process.env, STATE_URL: stateUrl, START_AT: String(startAt), JOB_ID: `job-${i}` },
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+    let stderr = "";
+    proc.stderr.on("data", (chunk) => { stderr += chunk; });
+    proc.on("exit", (code) => resolve({ code, stderr }));
+  }));
+  for (const { code, stderr } of await Promise.all(exits)) {
+    assert.equal(code, 0, stderr);
+  }
+
+  const counts = Object.fromEntries(state.loadState(process.cwd()).jobs.map((job) => [job.id, job.count]));
+  for (let i = 0; i < WORKERS; i += 1) {
+    assert.equal(counts[`job-${i}`], ROUNDS, `job-${i} lost updates: ${JSON.stringify(counts)}`);
+  }
 });

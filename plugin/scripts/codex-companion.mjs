@@ -460,7 +460,8 @@ async function executeReviewRun(request) {
     result: parsed.parsed,
     rawOutput: parsed.rawOutput,
     parseError: parsed.parseError,
-    reasoningSummary: result.reasoningSummary
+    reasoningSummary: result.reasoningSummary,
+    modelWarning: result.modelWarning ?? null
   };
 
   return {
@@ -547,7 +548,8 @@ async function executeTaskRun(request) {
     touchedFiles: result.touchedFiles,
     reasoningSummary: result.reasoningSummary,
     agents: result.agents,
-    needsDecision
+    needsDecision,
+    modelWarning: result.modelWarning ?? null
   };
 
   return {

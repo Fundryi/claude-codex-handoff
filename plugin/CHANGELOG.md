@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.16.1
+
+- **Two jobs at the same time no longer lose a result.** Jobs in one project share one state file, and each job rewrote it with no lock. When two jobs ran at once, one write could replace the other. A finished job then stayed `running`, and the dead-job check marked it failed with "Worker process exited without recording a result". Every change to the state file now waits for a lock. The file is written to a temporary file first and then renamed, so a process that stops mid-write leaves the old file intact.
+- **A finished job is never marked dead.** If the job's own file already records the end of the run, the dead-job check copies that result and does not mark the job failed.
+- **`--resume-last` finds the thread again when no Claude session id is known.** The fallback asked Codex for threads from the wrong source and found none.
+- **The retirement warning shows everywhere.** It is now also on the first line of `/codex:result`, `result --wait` and the prompt hook, not only in the first output.
+- **The job log shows model reroutes and Codex notices.** When Codex moves a run to another model, the log says from which model to which, and why. Deprecation notices and general warnings from Codex are logged too.
+
 ## 2.16.0
 
 Checked against Codex CLI 0.159.2.

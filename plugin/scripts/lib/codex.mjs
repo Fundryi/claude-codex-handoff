@@ -438,6 +438,10 @@ export function scheduleInferredCompletion(state) {
 }
 
 function belongsToTurn(state, message) {
+  // Server-wide notices carry no thread id; log them with the running turn.
+  if (message.method === "deprecationNotice" || (message.method === "warning" && !message.params?.threadId)) {
+    return true;
+  }
   const messageThreadId = extractThreadId(message);
   if (!messageThreadId || !state.threadIds.has(messageThreadId)) {
     return false;
@@ -594,6 +598,20 @@ function applyTurnNotification(state, message) {
         state.error = error;
         completeTurn(state, { id: turnId ?? state.turnId, status: "failed", error });
       }
+      break;
+    }
+    case "model/rerouted": {
+      const { fromModel, toModel, reason } = message.params;
+      emitProgress(state.onProgress, `Model rerouted: ${fromModel} -> ${toModel} (${reason})`);
+      break;
+    }
+    case "deprecationNotice":
+    case "warning": {
+      const { summary, details, message: text } = message.params ?? {};
+      emitProgress(
+        state.onProgress,
+        message.method === "warning" ? `Codex warning: ${text}` : `Codex deprecation notice: ${summary}${details ? ` ${details}` : ""}`
+      );
       break;
     }
     case "turn/completed":
@@ -1326,7 +1344,8 @@ export async function findLatestTaskThread(cwd) {
       cwd,
       limit: 20,
       sortKey: "updated_at",
-      sourceKinds: ["appServer"],
+      // No sourceKinds: Codex 0.159 stores companion threads as source "vscode", so
+      // ["appServer"] matched none. The name prefix below already excludes reviews.
       searchTerm: TASK_THREAD_PREFIX
     });
 

@@ -14,9 +14,9 @@ import {
   resolveJobFile,
   resolveJobsDir,
   resolveStateDir,
+  updateJobPointers,
   updateState,
-  writeJobFile,
-  writeJobPointers
+  writeJobFile
 } from "./lib/state.mjs";
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
@@ -45,6 +45,9 @@ export function shortResult(stored) {
   const preface = summary ? extractPreface(raw).split(/\r?\n/).slice(0, MAX_PREFACE_LINES).join("\n") : "";
   let text = [preface, summary || raw].filter(Boolean).join("\n").split(/\r?\n/).slice(0, MAX_LINES).join("\n");
   if (text.length > MAX_CHARS) text = `${text.slice(0, MAX_CHARS)} [cut]`;
+  // rendered already starts with the warning; rawOutput does not.
+  const warning = stored?.result?.rawOutput && stored.result.modelWarning;
+  if (warning) text = `Warning: ${warning}\n${text}`;
   return text.split("\n");
 }
 
@@ -133,9 +136,9 @@ function pointedJobs(workspaceRoot, ownIds) {
   }
   if (dead.size) {
     try {
-      // Re-read right before writing: a launch since the first read may have
-      // added a pointer, and only the dead ids may go.
-      writeJobPointers(workspaceRoot, readJobPointers(workspaceRoot).filter((pointer) => !dead.has(pointer.jobId)));
+      // Re-read under the lock: a launch since the first read may have added a
+      // pointer, and only the dead ids may go.
+      updateJobPointers(workspaceRoot, (pointers) => pointers.filter((pointer) => !dead.has(pointer.jobId)));
     } catch {
       // Pruning is housekeeping; the next prompt tries again.
     }

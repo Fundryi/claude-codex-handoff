@@ -453,7 +453,8 @@ export function renderStoredJobResult(job, storedJob) {
     "";
   if (rawOutput) {
     const edits = formatRecordedEdits(storedJob?.result?.touchedFiles);
-    const output = `${rawOutput.trimEnd()}${edits ? `\n\n${edits}` : ""}\n`;
+    const warning = storedJob?.result?.modelWarning ? `Warning: ${storedJob.result.modelWarning}\n\n` : "";
+    const output = `${warning}${rawOutput.trimEnd()}${edits ? `\n\n${edits}` : ""}\n`;
     if (!threadId) {
       return output;
     }
