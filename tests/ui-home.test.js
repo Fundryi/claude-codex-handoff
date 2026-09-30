@@ -6,8 +6,7 @@ const vm = require("node:vm");
 
 const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-// Slice from firstLine through homeCards: homeCards calls firstLine (the question) and
-// jobDetailLine (the detail line), both defined ahead of it.
+// Slice from firstLine through homeCard/homeCards.
 const slice = script.match(/function firstLine[\s\S]*?function homeCards[\s\S]*?\n    \}/)[0];
 
 function ctx() { const c = {}; vm.runInNewContext(slice, c); return c; }
@@ -66,7 +65,7 @@ test("recently finished stays capped at 5, order preserved (newest first, as bui
   assert.deepEqual(plain(cards.finished.map(c => c.id)), ["f0", "f1", "f2", "f3", "f4"]);
 });
 
-test("a card keeps the row's data fields, and a needs-answer card carries the question (via firstLine)", () => {
+test("a card keeps the row's data fields", () => {
   const { homeCards } = ctx();
   const job = {
     id: "j1", title: "Job one", model: "sol", effort: "high", fast: true,
@@ -88,12 +87,7 @@ test("a card keeps the row's data fields, and a needs-answer card carries the qu
   assert.equal(card.fast, true);
   assert.equal(card.agents, 1);
   assert.equal(card.lastMs, NOW);
-  assert.equal(card.model, "sol");
-  assert.equal(card.effort, "high");
-  assert.equal(card.tokens, 123);
   assert.equal(card.needsAnswer, true);
-  // firstLine collapses whitespace/newlines into one line, same as the row's '?' chip tooltip.
-  assert.equal(card.question, "Should I deploy? More detail here.");
 });
 
 test("a job-only row (no session) still becomes a card with no sessionId", () => {

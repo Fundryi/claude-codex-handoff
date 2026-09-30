@@ -322,9 +322,14 @@ function escapeRegExp(text) {
 export function extractSection(text, heading) {
   const lines = String(text ?? "").split(/\r?\n/);
   const name = escapeRegExp(heading);
-  const start = lines.findIndex((line) =>
-    new RegExp(`^(?:#{2,3}\\s*${name}\\s*:?|\\*\\*${name}\\s*:?\\s*\\*\\*\\s*:?)\\s*$`, "i").test(line.trim())
-  );
+  const startRe = new RegExp(`^(?:#{2,3}\\s*${name}\\s*:?|\\*\\*${name}\\s*:?\\s*\\*\\*\\s*:?)\\s*$`, "i");
+  // A heading inside a code fence (a Markdown example) is not the section.
+  let start = -1;
+  let fenced = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s{0,3}```/.test(lines[i])) fenced = !fenced;
+    else if (!fenced && startRe.test(lines[i].trim())) { start = i; break; }
+  }
   if (start === -1) return null;
   // A section ends at a real heading or at one of the four return headings in bold.
   // Other bold lines ("**Keep the old API?**", "**Options:**") belong to the body.

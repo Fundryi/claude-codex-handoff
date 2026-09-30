@@ -1594,27 +1594,23 @@
     }
     // One row -> one overview card. Rows already carry everything a card needs (Task 3/4's
     // unified row model), so the overview agrees with the list instead of recomputing.
-    function homeCard(row, now) {
+    function homeCard(row) {
       var session = row.session || {};
-      var job = row.job || {};
       return {
         id: row.id, sessionId: session.id || null, title: row.title, project: row.project,
         fast: row.fast, agents: row.children.length, status: row.status, lastMs: row.updatedMs,
-        model: session.model || job.model || '', effort: job.effort || session.effort || '',
-        tokens: session.tokensUsed || 0, detail: jobDetailLine(job, now) || session.lastEvent || '',
-        needsAnswer: row.needsAnswer, question: row.needsAnswer ? firstLine(job.needsDecision, 200) : ''
-        // (firstLine collapses whitespace/newlines, same convention as the row's '?' chip tooltip)
+        needsAnswer: row.needsAnswer
       };
     }
     // Now overview sections: Needs answer, Needs attention, Running, Recently finished (5, newest
     // first - rows already arrive newest first from buildRows). Dismissed and archived rows are
     // never shown, same as the list.
-    function homeCards(rows, dismissedIds, now) {
+    function homeCards(rows, dismissedIds) {
       var dismissed = dismissedIds || [];
       var answer = [], attention = [], running = [], finished = [];
       (rows || []).forEach(function (row) {
         if (dismissed.indexOf(row.id) !== -1 || row.status === 'ARCHIVED') return;
-        var card = homeCard(row, now);
+        var card = homeCard(row);
         if (row.status === 'ANSWER') answer.push(card);
         else if (row.status === 'ATTENTION') attention.push(card);
         else if (row.status === 'RUNNING') running.push(card);
@@ -2320,13 +2316,10 @@
       return element;
     }
 
-    // The open task's row (child agents included). A session the list does not draw
-    // (a grandchild agent) still gets a row of its own.
+    // The open task's row (child agents included; buildRows draws every session).
     function selectedRow() {
-      var session = currentSession();
-      if (!session) return null;
-      // By id, never [0]: a newer job on another thread can sort first in the one-session build.
-      return rowById(currentRows(), session.id) || rowById(buildRows([session], jobs), session.id);
+      var s = currentSession();
+      return s ? rowById(currentRows(), s.id) : null;
     }
 
     function closeActionMenu() {
@@ -2679,13 +2672,13 @@
     }
 
     function renderHome() {
-      var data = homeCards(currentRows(), prefs.dismissed, Date.now());
+      var data = homeCards(currentRows(), prefs.dismissed);
       // stable card fields plus a 10s bucket so relative times still refresh
       var signature = JSON.stringify([
         Math.floor(Date.now() / 10000),
         data.answer.concat(data.attention, data.running, data.finished).map(function (card) {
           return [card.id, card.sessionId, card.status, card.title, card.project,
-            card.fast, card.model, card.effort, card.tokens, card.lastMs, card.question];
+            card.fast, card.lastMs];
         })
       ]);
       if (signature === lastHomeSignature) return;

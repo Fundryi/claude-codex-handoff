@@ -363,7 +363,8 @@ test("the UI section parser and the plugin's parser agree (ruling R3 drift guard
     "## Needs decision\nKeep the old API?\n**Options:**\n- keep\n- delete\n**Summary**\nx",
     ...["None", "none.", "-", "N/A", "", "None - all clear.", "No decision needed.", "No questions."].map((e) => `## Summary\nok\n## Needs decision\n${e}`),
     "No headings at all.", `## Needs decision\n${"q".repeat(3000)}`,
-    "## Summary\nDid it.\n**Changed files:**\n- a.js\n# Top\nx", "**Checks run**:\nnpm test", null, undefined, ""
+    "## Summary\nDid it.\n**Changed files:**\n- a.js\n# Top\nx", "**Checks run**:\nnpm test", null, undefined, "",
+    "Template:\n```md\n## Needs decision\nPick one\n```\n\n## Summary\nDone\n\n## Needs decision\nNone"
   ];
   for (const text of inputs) {
     const label = String(JSON.stringify(text)).slice(0, 60);
