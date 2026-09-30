@@ -2,7 +2,7 @@
   "name": "claude-codex-handoff",
   "version": "2.18.0",
   "private": true,
-  "description": "Claude Code -> Codex handoffs that don't get stuck: bundled codex plugin fork + live web dashboard to watch, resume and cancel headless Codex runs.",
+  "description": "Delegate coding tasks from Claude Code to the OpenAI Codex CLI and get the results back. Codex plugin fork with jobs that survive restarts, plus a live dashboard to watch, resume and cancel Codex runs.",
   "main": "codex-live-viewer.js",
   "scripts": {
     "start": "node codex-live-viewer.js serve",
@@ -30,5 +30,5 @@
   },
   "homepage": "https://github.com/Fundryi/claude-codex-handoff#readme",
   "bugs": "https://github.com/Fundryi/claude-codex-handoff/issues",
-  "license": "UNLICENSED"
+  "license": "SEE LICENSE IN LICENSE"
 }

@@ -10,6 +10,7 @@
 - **Job reports to the viewer must come from this machine.** The viewer accepts a finished-job report only from a direct local connection without a browser origin. The plugin's own reports still arrive.
 - **The tab row fits narrow screens.** The tabs now take the width of their names. In a sidebar under 300 px the counts hide, so all four tab names stay readable. On phones the header title wraps under the badges instead of shrinking to nothing.
 - **The old broker cleanup is gone.** 2.17.0 removed the shared broker. Its session-end cleanup, the SessionEnd hook and two broker files are now deleted as well. If you update from a version older than 2.17.0 straight to 2.18.0, an idle old broker process can stay until you restart the computer. It does nothing.
+- **New license: Apache 2.0 with the Commons Clause.** You may use, change, fork and share the project, but not sell it. Code that comes unchanged from openai/codex-plugin-cc stays plain Apache 2.0. Releases up to 2.17.0 keep plain Apache 2.0.
 - **Removed test:** `tests/plugin-session-end.test.js`. It checked that the SessionEnd hook left running jobs alone. That hook no longer exists, so nothing runs at session end.
 
 ## 2.17.0

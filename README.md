@@ -5,11 +5,14 @@
 <h1 align="center">Claude Codex Handoff</h1>
 
 <p align="center">
-  Hand coding tasks from <a href="https://claude.com/claude-code">Claude Code</a> to the <a href="https://github.com/openai/codex">OpenAI Codex CLI</a> without losing them.<br>
-  A reliability-first fork of the official <code>codex</code> plugin, plus a live dashboard to watch, resume, and cancel runs.
+  Delegate coding tasks from <a href="https://claude.com/claude-code">Claude Code</a> to the <a href="https://github.com/openai/codex">OpenAI Codex CLI</a> and get the results back.<br>
+  Claude plans, Codex does the work. A fork of the official <code>codex</code> plugin where jobs survive restarts, plus a live dashboard to watch, resume, and cancel Codex runs.<br>
+  Works in the terminal and in VS Code.
 </p>
 
 <p align="center">
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/Fundryi/claude-codex-handoff" alt="latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0_%2B_Commons_Clause-blue" alt="license: Apache 2.0 + Commons Clause"></a>
   <img src="https://img.shields.io/badge/npm_dependencies-0-brightgreen" alt="zero npm dependencies">
   <img src="https://img.shields.io/badge/node-%3E%3D22-blue" alt="node >= 22">
   <img src="https://img.shields.io/badge/platforms-win%20%7C%20linux%20%7C%20mac-8A2BE2" alt="platforms">
@@ -34,9 +37,25 @@ From your next Claude Code session on:
 - the **dashboard starts itself** in the background (open it with `/codex:viewer`)
 - the plugin **checks for updates** once a day and prints the update command when there is one
 
+## Who this is for
+
+- You work in Claude Code most of the time, in the terminal or the VS Code extension, and want Claude to delegate the heavy coding to Codex. Claude stays the orchestrator: it plans the work, writes the handoff, and checks what comes back.
+- You want a second opinion. Codex reviews Claude's changes (`/codex:review`) or argues against a design (`/codex:adversarial-review`).
+- You run long Codex jobs in the background and want to know when one is stuck, has failed, or waits for an answer.
+
 ## Why this exists
 
 Handoffs to Codex run headless: no terminal, no window. When one silently died or hung, you found out an hour later, and there was no way to see why or continue it. This project makes the whole thing observable and recoverable.
+
+## Compared with the official plugin
+
+This is a fork of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc). The command names are the same, so you type the same commands after you switch. What is different:
+
+- **Jobs survive restarts.** Every Codex run is detached from Claude. Restarting Claude Code or closing the chat does not end it.
+- **Results come back by themselves.** Your next message to Claude brings back the result of each finished job, from any session in the same folder.
+- **A live dashboard** shows every Codex session on the machine, marks jobs that are stuck or dead, and lets you resume or cancel them.
+- **Better defaults.** Effort defaults to `xhigh`, you can set effort and fast mode per job, and short model names such as `sol` and `astra` work.
+- **Full access by default,** because the sandbox breaks on many Windows setups. See the warning above.
 
 ## Never lose a job again
 
@@ -160,7 +179,7 @@ Claude workflow transcripts can hold text from every project on the machine. The
 
 - `codex-live-viewer.js`: Node server, CLI, rollout parser, control endpoints (one file, no dependencies)
 - `viewer-ui.html`: the whole frontend (one file)
-- `plugin/`: the Claude Code plugin, forked from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (keeps its Apache-2.0 `LICENSE` and `NOTICE`)
+- `plugin/`: the Claude Code plugin, forked from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (keeps OpenAI's Apache-2.0 `LICENSE` and `NOTICE`; the changes fall under the root [LICENSE](LICENSE))
 - `plugin/.codex-plugin/plugin.json`: the manifest Codex reads when the plugin is installed there. Its empty `hooks` object keeps the Claude hooks out of Codex sessions; Codex loads only the skills. Keep its version equal to `plugin/.claude-plugin/plugin.json`
 - `plugin/viewer/`: bundled dashboard copies, refreshed by `npm run sync:viewer`, drift-guarded by tests
 - `handoff/`: ready-to-copy handoff contract templates
@@ -175,3 +194,13 @@ Claude workflow transcripts can hold text from every project on the machine. The
 - Listens on `127.0.0.1` by default. State-changing endpoints are POST-only, origin-guarded, and confirmed in-app.
 - Never edits Codex session files or `~/.codex`. It spawns Codex only through the bundled companion, and only when you act.
 - The convenience came from dropping the sandbox. That is a real decision, not a default to forget about.
+
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. For questions, use [Discussions](../../discussions).
+
+## License
+
+[Apache 2.0 with the Commons Clause](LICENSE). You may use, change, fork and share this project, also at work, and publish your own better version. You may not sell it, or sell a service that is built mainly on it.
+
+The plugin started as [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc). Code that comes unchanged from there stays under OpenAI's plain Apache 2.0 license. The plugin in releases up to v2.17.0 was published under plain Apache 2.0, and those copies keep that license.

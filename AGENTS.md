@@ -24,6 +24,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 - Nothing depends on the Claude process staying alive. Hosts like CloudCLI end it on every new message, and the session id can change. Every result must reach Claude through the prompt hook on the next message, so the hook's scope is the whole workspace, never one session.
 - Every companion run is detached. Codex is never a child of the calling process, so no harness timeout can end a run. `--background` returns a job id; the default follows the detached job and hands back a job id if it outlives the follow budget.
 - Every companion connection spawns its own `codex app-server`; there is no shared broker. Never reintroduce one: a SessionEnd in any Claude session of the workspace used to shut it down and abort every turn on it.
+- License: Apache 2.0 + Commons Clause (root `LICENSE`: use, change, fork and share, never sell). `plugin/` came from openai/codex-plugin-cc under Apache 2.0, so `plugin/LICENSE` stays byte-identical to upstream and `plugin/NOTICE` keeps OpenAI's notice, with our addendum and the Commons Clause text at its end (the installed plugin holds only `plugin/`, so the clause travels in NOTICE). Release zips carry the root `LICENSE` beside `plugin/LICENSE` and `plugin/NOTICE`.
 
 ## Env vars
 
@@ -54,6 +55,7 @@ node scripts/upstream-diff.mjs   # diff plugin/ against upstream (--full for who
 
 - Feature work follows spec → plan → TDD implementation; plans live in `docs/superpowers/plans/` with checkbox steps.
 - Commit style: conventional commits (`feat(server):`, `feat(ui):`, `feat(plugin):`, `docs:`, `chore(release):`).
+- Every release gets a hand-written `plugin/CHANGELOG.md` entry; nothing generates it. The GitHub release notes are that entry, cut from the file. Style: plain ASD-STE100 English, a bold lead sentence per bullet, and every removed test named with its reason.
 - Every plugin release: sweep for stale facts before the version bump. Facts: model aliases and defaults, effort lists (`max`/`ultra`), the checked Codex CLI version, command options, file paths, versions. Places: `README.md`, `plugin/skills/`, `plugin/commands/`, `plugin/agents/`, `plugin/CHANGELOG.md` (new entry only), the viewer, `docs/superpowers/STATUS.md`, the KB pages in `../knowledge-base/wiki/projects/claude-handoff-improvment/`, auto-memory, and routing tables in other projects that quote the plugin. One owner per fact (the code for aliases and efforts, the README effort table for users, the runtime skill for Claude); other places link to it. A model whose Codex retirement date (`upgrade.retirement_at` in `codex debug models`) is less than 3 months away is removed from the docs, aliases and skills; no shortcut ever points at it.
 - Windows dev machine; paths in tests use `\\`. Shell scripts must work in both PowerShell and Git Bash contexts.
 

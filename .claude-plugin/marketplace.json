@@ -1,11 +1,14 @@
 {
   "name": "fundryi",
   "owner": { "name": "Fundryi" },
+  "metadata": {
+    "description": "The codex plugin: delegate work from Claude Code to the OpenAI Codex CLI, with a live dashboard for the jobs."
+  },
   "plugins": [
     {
       "name": "codex",
       "source": "./plugin",
-      "description": "Codex handoffs with full-access sandbox, reliable job tracking, and the Codex Live Viewer web control panel."
+      "description": "Delegate coding tasks and reviews to the OpenAI Codex CLI and get the results back. Jobs survive restarts, and the Codex Live Viewer dashboard shows, resumes and cancels them."
     }
   ]
 }
