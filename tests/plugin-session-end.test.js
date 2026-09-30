@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const { spawn, spawnSync } = require("node:child_process");
+const { once } = require("node:events");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -31,10 +32,10 @@ test("SessionEnd leaves running jobs and their workers alone", async () => {
     });
     assert.equal(run.status, 0, run.stderr);
 
-    // spawnSync blocks the event loop, so worker.exitCode cannot change here; ask the OS instead.
-    let alive = true;
-    try { process.kill(worker.pid, 0); } catch (err) { alive = err?.code === "EPERM"; }
-    assert.ok(alive, "worker was killed");
+    // spawnSync blocked the event loop, so let it run and watch for an exit. kill(pid, 0) is no
+    // proof on POSIX (a killed, unreaped child is a zombie), and a kill by signal leaves exitCode null.
+    const died = await Promise.race([once(worker, "exit").then(() => true), new Promise((r) => setTimeout(() => r(false), 200))]);
+    assert.equal(died, false, "worker was killed");
     const jobs = loadState(workspace).jobs;
     assert.equal(jobs.length, 1, "job record was deleted");
     assert.equal(jobs[0].status, "running", "job status was changed");

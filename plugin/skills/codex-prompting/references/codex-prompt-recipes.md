@@ -4,7 +4,7 @@ Use these as starting templates for Codex task prompts or other Codex prompt con
 Copy the smallest recipe that fits the task, then trim anything you do not need.
 Every task handoff uses the four blocks from the skill. The recipes show `<goal>` and `<done_when>`; add `<rules>` and `<files>` for the task at hand.
 Do not add an output contract to a task handoff. The companion appends the return format (Summary, Changed files, Checks run, Needs decision), so put what the answer must contain in `<done_when>`.
-In `codex:codex-rescue`, run diagnosis and fix-oriented recipes with `--write` (edit-task label) by default unless the user explicitly asked for read-only behavior.
+In `codex:codex-rescue`, run diagnosis and fix-oriented recipes with `--write` (edit-task label) by default. For read-only requests, put "do not edit files" in `<rules>`; leaving out `--write` does not restrict permissions.
 
 ## Diagnosis
 
