@@ -3270,7 +3270,7 @@
       stopModalBody.appendChild(modalRow('Command', String(proc.cmd || '(unknown command line)'), true));
       if (warnings.shared) {
         stopModalBody.appendChild(modalWarning('red',
-          'Shared Codex process (app-server / MCP). It can host several tasks at once — stopping it stops ALL of them, not just this one.'));
+          'Possibly shared Codex process (app-server / MCP). A Codex Desktop or VS Code one can host several tasks, and stopping it stops ALL of them; a plugin job’s app-server serves only that job.'));
       }
       if (warnings.timeMatch) {
         stopModalBody.appendChild(modalWarning('ok', 'Process start time matches this task’s start time.'));

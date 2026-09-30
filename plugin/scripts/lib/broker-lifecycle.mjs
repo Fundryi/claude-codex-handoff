@@ -48,15 +48,9 @@ export function clearBrokerSession(cwd) {
   }
 }
 
-export function teardownBrokerSession({ endpoint = null, pidFile, logFile, sessionDir = null, pid = null, killProcess = null }) {
-  if (Number.isFinite(pid) && killProcess) {
-    try {
-      killProcess(pid);
-    } catch {
-      // Ignore missing or already-exited broker processes.
-    }
-  }
-
+// No pid kill: a live pre-2.17 broker exits itself on broker/shutdown, and a
+// leftover pid from a dead one may already belong to an unrelated process.
+export function teardownBrokerSession({ endpoint = null, pidFile, logFile, sessionDir = null }) {
   if (pidFile && fs.existsSync(pidFile)) {
     fs.unlinkSync(pidFile);
   }

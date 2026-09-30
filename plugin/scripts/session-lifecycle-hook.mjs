@@ -8,7 +8,6 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { terminateProcessTree } from "./lib/process.mjs";
 import {
   clearBrokerSession,
   loadBrokerSession,
@@ -206,9 +205,7 @@ async function handleSessionEnd(input) {
     endpoint: broker.endpoint ?? null,
     pidFile: broker.pidFile ?? null,
     logFile: broker.logFile ?? null,
-    sessionDir: broker.sessionDir ?? null,
-    pid: broker.pid ?? null,
-    killProcess: terminateProcessTree
+    sessionDir: broker.sessionDir ?? null
   });
   clearBrokerSession(cwd);
 }

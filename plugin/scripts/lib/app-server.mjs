@@ -69,7 +69,6 @@ class AppServerClientBase {
     this.exitError = null;
     /** @type {AppServerNotificationHandler | null} */
     this.notificationHandler = null;
-    this.transport = "unknown";
 
     this.exitPromise = new Promise((resolve) => {
       this.resolveExit = resolve;
@@ -187,11 +186,6 @@ class AppServerClientBase {
 }
 
 class SpawnedCodexAppServerClient extends AppServerClientBase {
-  constructor(cwd, options = {}) {
-    super(cwd, options);
-    this.transport = "direct";
-  }
-
   async initialize() {
     const shell = process.platform === "win32" ? (process.env.SHELL || true) : false;
     const args = buildAppServerArgs(this.options.configOverrides);
