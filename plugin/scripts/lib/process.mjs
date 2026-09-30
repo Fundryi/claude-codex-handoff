@@ -2,14 +2,19 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 export function runCommand(command, args = [], options = {}) {
-  const result = spawnSync(command, args, {
+  const shell = options.shell ?? (process.platform === "win32" ? (process.env.SHELL || true) : false);
+  // One command string when a shell is used: Node joins file and args that way
+  // anyway, and a non-empty args array with a shell trips DEP0190.
+  // ponytail: shell-routed callers pass constant tokens (no spaces/metachars);
+  // quote them if a user-supplied arg ever reaches a shell spawn.
+  const result = spawnSync(shell ? [command, ...args].join(" ") : command, shell ? [] : args, {
     cwd: options.cwd,
     env: options.env,
     encoding: "utf8",
     input: options.input,
     maxBuffer: options.maxBuffer,
     stdio: options.stdio ?? "pipe",
-    shell: options.shell ?? (process.platform === "win32" ? (process.env.SHELL || true) : false),
+    shell,
     windowsHide: true
   });
 

@@ -78,7 +78,7 @@ const REVIEW_SCHEMA = path.join(ROOT_DIR, "schemas", "review-output.schema.json"
 const VALID_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
 const MODEL_ALIASES = new Map([
   ["astra", "gpt-6-astra"],
-  ["sol", "gpt-6-sol"],
+  ["sol", "gpt-6.1-sol"],
   ["terra", "gpt-5.6-terra"],
   ["luna", "gpt-6-luna"],
   ["daybreak-blue", "gpt-daybreak-blue-latest"]
@@ -91,7 +91,7 @@ function printUsage() {
       "Usage:",
       "  node scripts/codex-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--json]",
       "  node scripts/codex-companion.mjs review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>]",
-      "  node scripts/codex-companion.mjs adversarial-review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]",
+      "  node scripts/codex-companion.mjs adversarial-review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>] [--effort <low|medium|high|xhigh|max|ultra>] [focus text]",
       "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|astra|sol|terra|luna|daybreak-blue>] [--effort <low|medium|high|xhigh|max|ultra>] [prompt]",
       "  node scripts/codex-companion.mjs transfer [--source <claude-jsonl>] [--json]",
       "  node scripts/codex-companion.mjs status [job-id] [--all] [--json]",
@@ -123,6 +123,12 @@ function outputAndMarkDelivered(value, asJson, job, stored) {
   });
 }
 
+// A model Codex plans to retire is named on the first line of the result, where
+// Claude and the user read it.
+function withModelWarning(result, rendered) {
+  return result.modelWarning ? `Warning: ${result.modelWarning}\n\n${rendered}` : rendered;
+}
+
 function normalizeRequestedModel(model) {
   if (model == null) {
     return null;
@@ -150,9 +156,9 @@ function normalizeReasoningEffort(effort) {
   return normalized;
 }
 
-// Codex's own defaults are too low for handoffs (gpt-6-astra defaults to
-// "medium", gpt-5.6-sol to "low"). Every model supports xhigh; max and ultra
-// stay opt-in.
+// Codex's own defaults are too low for handoffs (gpt-6.1-sol, the Codex
+// default, and gpt-5.6-sol use "low"). Every model supports xhigh; max and
+// ultra stay opt-in.
 const DEFAULT_REASONING_EFFORT = "xhigh";
 
 function normalizeArgv(argv) {
@@ -421,11 +427,16 @@ async function executeReviewRun(request) {
   const result = await runAppServerTurn(context.repoRoot, {
     prompt,
     model: request.model,
+    effort: request.effort,
     fast: request.fast,
     detached: true,
     sandbox: companionSandbox(),
     outputSchema: readOutputSchema(REVIEW_SCHEMA),
-    onProgress: request.onProgress
+    onProgress: request.onProgress,
+    // Persisted so the viewer can follow it live. The name must not start with
+    // TASK_THREAD_PREFIX, or --resume-last would pick up a review thread.
+    persistThread: true,
+    threadName: `Codex Companion Review: ${context.target.label}`
   });
   const parsed = parseStructuredOutput(result.finalMessage, {
     status: result.status,
@@ -457,11 +468,11 @@ async function executeReviewRun(request) {
     threadId: result.threadId,
     turnId: result.turnId,
     payload,
-    rendered: renderReviewResult(parsed, {
+    rendered: withModelWarning(result, renderReviewResult(parsed, {
       reviewLabel: reviewName,
       targetLabel: context.target.label,
       reasoningSummary: result.reasoningSummary
-    }),
+    })),
     summary: parsed.parsed?.summary ?? parsed.parseError ?? firstMeaningfulLine(result.finalMessage, `${reviewName} finished.`),
     jobTitle: `Codex ${reviewName}`,
     jobClass: "review",
@@ -509,13 +520,13 @@ async function executeTaskRun(request) {
     onProgress: request.onProgress,
     shouldCancel: request.shouldCancel,
     persistThread: true,
-    threadName: resumeThreadId ? null : buildPersistentTaskThreadName(request.prompt || DEFAULT_CONTINUE_PROMPT)
+    threadName: resumeThreadId ? null : buildPersistentTaskThreadName(taskTitleFromPrompt(request.prompt) || request.prompt || DEFAULT_CONTINUE_PROMPT)
   });
 
   const rawOutput = typeof result.finalMessage === "string" ? result.finalMessage : "";
   const failureMessage = result.error?.message ?? result.stderr ?? "";
   const needsDecision = readNeedsDecision(rawOutput);
-  const rendered = renderTaskResult(
+  const rendered = withModelWarning(result, renderTaskResult(
     {
       rawOutput,
       failureMessage,
@@ -528,7 +539,7 @@ async function executeTaskRun(request) {
       threadId: result.threadId,
       touchedFiles: result.touchedFiles
     }
-  );
+  ));
   const payload = {
     status: result.status,
     threadId: result.threadId,
@@ -877,7 +888,10 @@ function enqueueBackgroundTask(cwd, job, request) {
 
 async function handleReviewCommand(argv, config) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["base", "scope", "model", "cwd"],
+    // review/start takes no effort (ReviewStartParams: threadId, target, delivery),
+    // so only the adversarial review accepts --effort. On the native review it
+    // lands in the focus text, and validateNativeReviewRequest points there.
+    valueOptions: ["base", "scope", "model", "cwd", ...(config.reviewName === "Review" ? [] : ["effort"])],
     booleanOptions: ["json", "background", "wait", "fast"],
     aliasMap: {
       m: "model"
@@ -893,6 +907,8 @@ async function handleReviewCommand(argv, config) {
   });
 
   config.validateRequest?.(target, focusText);
+  const model = normalizeRequestedModel(options.model);
+  const effort = config.reviewName === "Review" ? null : normalizeReasoningEffort(options.effort) ?? DEFAULT_REASONING_EFFORT;
   const metadata = buildReviewJobMetadata(config.reviewName, target);
   const job = createCompanionJob({
     prefix: "review",
@@ -901,7 +917,8 @@ async function handleReviewCommand(argv, config) {
     workspaceRoot,
     jobClass: "review",
     summary: metadata.summary,
-    model: options.model ?? null,
+    model,
+    effort,
     fast: Boolean(options.fast)
   });
   ensureCodexAvailable(cwd);
@@ -909,7 +926,8 @@ async function handleReviewCommand(argv, config) {
     cwd,
     base: options.base ?? null,
     scope: options.scope ?? null,
-    model: options.model ?? null,
+    model,
+    effort,
     focusText,
     reviewName: config.reviewName,
     fast: Boolean(options.fast)

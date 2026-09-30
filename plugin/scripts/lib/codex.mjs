@@ -99,7 +99,10 @@ function buildResumeParams(threadId, cwd, options = {}) {
     cwd,
     model: options.model ?? null,
     approvalPolicy: options.approvalPolicy ?? "never",
-    sandbox: options.sandbox ?? companionSandbox()
+    sandbox: options.sandbox ?? companionSandbox(),
+    // Nothing reads the returned turns, and Codex deprecates full-history
+    // hydration for paginated threads.
+    excludeTurns: true
   };
 }
 
@@ -283,7 +286,7 @@ function describeStartedItem(state, item) {
         phase: looksLikeVerificationCommand(item.command) ? "verifying" : "running"
       };
     case "fileChange":
-      return { message: `Applying ${item.changes.length} file change(s).`, phase: "editing" };
+      return { message: `Applying ${item.changes?.length ?? 0} file change(s).`, phase: "editing" };
     case "mcpToolCall":
       return { message: `Calling ${item.server}/${item.tool}.`, phase: "investigating" };
     case "dynamicToolCall":
@@ -575,10 +578,24 @@ function applyTurnNotification(state, message) {
         emitProgress(state.onProgress, update?.message, update?.phase ?? null);
       }
       break;
-    case "error":
-      state.error = message.params.error;
-      emitProgress(state.onProgress, `Codex error: ${message.params.error.message}`, "failed");
+    case "error": {
+      // A retryable stream error is not a failure: the turn goes on, and a
+      // failed phase or a kept state.error would outlive the recovery. A
+      // non-retryable root error ends the turn here: Codex 0.159 can send it
+      // (e.g. a failed review merge-base) with no turn/completed after it, and
+      // a late turn/completed is a no-op once the turn is settled.
+      const { error, willRetry, threadId, turnId } = message.params;
+      if (willRetry) {
+        emitProgress(state.onProgress, `Codex retrying: ${error?.message ?? "transient error"}`);
+        break;
+      }
+      emitProgress(state.onProgress, `Codex error: ${error?.message}`, "failed");
+      if ((threadId ?? state.threadId) === state.threadId) {
+        state.error = error;
+        completeTurn(state, { id: turnId ?? state.turnId, status: "failed", error });
+      }
       break;
+    }
     case "turn/completed":
       if ((message.params.threadId ?? null) !== state.threadId) {
         state.activeSubagentTurns.delete(message.params.threadId);
@@ -1097,7 +1114,7 @@ export async function runAppServerReview(cwd, options = {}) {
       reviewText: turnState.reviewText,
       reasoningSummary: turnState.reasoningSummary,
       turn: turnState.finalTurn,
-      error: turnState.error,
+      error: turnState.error ?? turnState.finalTurn?.error ?? null,
       stderr: cleanCodexStderr(client.stderr)
     };
   }, turnConnectOptions(options));
@@ -1189,16 +1206,34 @@ export async function runAppServerTurn(cwd, options = {}) {
 
   return withAppServer(cwd, async (client) => {
     let threadId;
+    let modelWarning = null;
 
-    // Daybreak models are verification-gated per account. Fail fast with a
-    // clear message instead of letting the turn die on an opaque API error.
-    // If model/list itself fails, skip the check and let the run proceed.
-    if (typeof options.model === "string" && options.model.startsWith("gpt-daybreak")) {
-      const models = await client.request("model/list", {}).catch(() => null);
-      if (models?.data && !models.data.some((m) => m.id === options.model || m.model === options.model)) {
+    // An explicit model is checked against this account's catalog, so a model
+    // the account lacks (Daybreak is verification-gated, 6.1 still rolling out)
+    // or an effort it does not offer fails fast with a clear message instead of
+    // an opaque API error. If model/list itself fails, skip the check. With no
+    // --model the configured model is unknown here, so nothing is checked.
+    if (typeof options.model === "string" && options.model) {
+      const models = await client.request("model/list", { includeHidden: true }).catch(() => null);
+      const entry = models?.data?.find((m) => m.id === options.model || m.model === options.model);
+      if (models?.data && !entry && !models.nextCursor) {
+        const reason = options.model.startsWith("gpt-daybreak") ? " (Daybreak access is verification-gated)" : "";
         throw new Error(
-          `Model ${options.model} is not available to this Codex account (Daybreak access is verification-gated). Use another model or leave the model unset.`
+          `Model ${options.model} is not available to this Codex account${reason}. Use another model or leave the model unset.`
         );
+      }
+      const efforts = (entry?.supportedReasoningEfforts ?? []).map((option) => option.reasoningEffort);
+      if (options.effort && efforts.length > 0 && !efforts.includes(options.effort)) {
+        throw new Error(`Model ${options.model} does not support effort "${options.effort}". Use one of: ${efforts.join(", ")}.`);
+      }
+      // A model Codex plans to retire only warns: once retired it drops out of
+      // model/list and the "not available" error above takes over.
+      const upgrade = entry?.upgradeInfo?.model ?? entry?.upgrade ?? null;
+      if (upgrade) {
+        const retiresAt = entry.upgradeInfo?.retirementAt;
+        const when = retiresAt ? ` retires on ${new Date(retiresAt * 1000).toISOString().slice(0, 10)}.` : " is being replaced.";
+        modelWarning = `${options.model}${when} Codex suggests ${upgrade}.`;
+        emitProgress(options.onProgress, `Warning: ${modelWarning}`, "starting");
       }
     }
 
@@ -1269,12 +1304,13 @@ export async function runAppServerTurn(cwd, options = {}) {
       finalMessage: turnState.lastAgentMessage,
       reasoningSummary: turnState.reasoningSummary,
       turn: turnState.finalTurn,
-      error: turnState.error,
+      error: turnState.error ?? turnState.finalTurn?.error ?? null,
       stderr: cleanCodexStderr(client.stderr),
       fileChanges: turnState.fileChanges,
       touchedFiles: collectTouchedFiles(turnState.fileChanges),
       commandExecutions: turnState.commandExecutions,
-      agents: collectAgentLabels(turnState)
+      agents: collectAgentLabels(turnState),
+      modelWarning
     };
   }, turnConnectOptions(options));
 }

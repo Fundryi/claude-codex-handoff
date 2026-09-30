@@ -1381,7 +1381,7 @@
     function isInternal(event) {
       if (event.internal) return true;
       // The same list as the server's (codex-live-viewer.js simplify); a test keeps them equal.
-      var INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits|subagent_notification)(?=[\s>/])|# AGENTS\.md instructions\b)/;
+      var INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits|subagent_notification)(?=[\s>/])|# AGENTS\.md instructions\b|The following is the Codex agent history (?:added since your last approval assessment|whose request action you are assessing)\b)/;
       if (event.kind !== 'agent' && event.kind !== 'user') return false;
       var body = String(event.text || '');
       if (INJECTED_BLOCK.test(body)) return true;
@@ -1467,7 +1467,7 @@
       var value = String((session && session.originator) || '').trim();
       if (!value) return null;
       if (value === 'Claude Code') return { actor: 'claude', label: 'Claude (handoff)' };
-      var names = { codex_cli_rs: 'Codex CLI', codex_exec: 'Codex CLI', codex_vscode: 'VS Code', 'Codex Desktop': 'Codex Desktop' };
+      var names = { codex_cli_rs: 'Codex CLI', codex_exec: 'Codex CLI', 'codex-tui': 'Codex CLI', codex_sdk_ts: 'Codex SDK', codex_vscode: 'VS Code', 'Codex Desktop': 'Codex Desktop', codex_work_desktop: 'Codex Desktop' };
       return { actor: 'you', label: 'you (' + (Object.prototype.hasOwnProperty.call(names, value) ? names[value] : value) + ')' };
     }
     // The two texts a Resume sends when no prompt is typed: the viewer's (DEFAULT_RESUME_PROMPT in
@@ -1483,7 +1483,7 @@
       for (var i = list.length - 1; i >= 0; i--) {
         var event = list[i];
         if (event.kind === 'sys' || event.kind === 'done' || event.kind === 'err' || isInternal(event)) continue;
-        if (event.kind === 'cmd') return 'running ' + firstLine(event.text, 90);
+        if (event.kind === 'cmd') return (event.done ? 'ran ' : 'running ') + firstLine(event.text, 90);
         if (event.kind === 'patch') return 'editing ' + firstLine(event.text, 90);
         if (event.kind === 'think') return 'thinking';
         if (event.kind === 'tool') return 'using ' + String(event.text || '').trim().split(/\s/)[0];
@@ -1658,8 +1658,9 @@
       if (session.status !== 'IDLE' && session.status !== 'STALE') return '';
       var text = firstLine(session.lastText, 80);
       var phrase = ({
-        cmd: 'running command "' + text + '"',
+        cmd: (session.lastDone ? 'ran' : 'running') + ' command "' + text + '"',
         out: 'processing command output',
+        patch: 'editing "' + text + '"',
         think: 'thinking (reasoning summary in progress)',
         tool: 'tool call "' + text + '"',
         user: 'prompt sent, no agent response yet',

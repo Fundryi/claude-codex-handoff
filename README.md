@@ -75,16 +75,16 @@ On CloudCLI, where Claude always runs in one folder, `/codex:handoff --cwd <fold
 | `medium` | Quick tweaks; simple browser-testing checklists |
 | `high` | Browser testing and live verification runs, larger mechanical work |
 | `xhigh` | The everyday default: bugfixes, features, reviews, designs, root-cause hunts |
-| `max` | The hardest problems (GPT-6, GPT-5.6, and Daybreak models) |
-| `ultra` | Max reasoning plus automatic task delegation (`gpt-6-astra`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-daybreak-blue-latest`) |
+| `max` | The hardest problems (GPT-6.1, GPT-6, GPT-5.6, and Daybreak models) |
+| `ultra` | Max reasoning plus automatic task delegation (`gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-daybreak-blue-latest`; the Luna models stop at `max`) |
 
-When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo. If you set no effort, the plugin applies `xhigh` instead of Codex's own low default. `max` and `ultra` are never applied on their own; ask for them.
+When in doubt, go one tier up. A smarter run costs a little more time and quota; a dumber run costs a redo. If you set no effort, the plugin applies `xhigh` instead of Codex's own low default. `/codex:review` is the exception: it takes no `--effort` (Codex's review request has no effort field) and runs at the effort in your Codex config; `/codex:adversarial-review` takes `--effort`. `max` and `ultra` are never applied on their own; ask for them.
 
-**Model shortcuts:** `--model astra`, `sol`, `terra`, `luna`, and `daybreak-blue` expand to `gpt-6-astra`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-6-luna`, and `gpt-daybreak-blue-latest`. There is no GPT-6 Terra, so `terra` stays on GPT-5.6. Pass a full name such as `gpt-5.6-sol` to pick an older model. Leave the model unset to get the default from your Codex config (`gpt-6-astra` on a fresh install). `astra` is GPT-6 Astra, the top model in the Codex catalog. `max` works on every GPT-6, GPT-5.6, and Daybreak model, but not on `gpt-5.5`. `ultra` needs `astra`, `sol`, `terra`, `daybreak-blue`, or `gpt-5.6-sol`. The Luna models stop at `max`.
+**Model shortcuts:** `--model astra`, `sol`, `terra`, `luna`, and `daybreak-blue` expand to `gpt-6-astra`, `gpt-6.1-sol`, `gpt-5.6-terra`, `gpt-6-luna`, and `gpt-daybreak-blue-latest`. There is no GPT-6 Terra, so `terra` stays on GPT-5.6. Pass a full name such as `gpt-6-sol` or `gpt-5.6-sol` to pick an older model. Leave the model unset to get the default from your Codex config; without a model in the config, Codex uses its catalog default, `gpt-6.1-sol` (since Codex 0.159.1). `astra` is GPT-6 Astra, the most capable model. A `--model` that Codex has scheduled for retirement still runs. Handoffs and `/codex:adversarial-review` then put a warning with the retirement date and the model Codex suggests on the first line of the result and in the job log. `/codex:review` gives no warning. The effort table above says which models take `max` and `ultra`.
 
 `daybreak-blue` is Daybreak Blue, the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work. Daybreak access is verification-gated per account, so the plugin checks availability before starting a Daybreak run; without access the run fails immediately with a clear message instead of an opaque API error.
 
-`--fast` is orthogonal: it buys priority processing (faster turnaround, more quota) at whatever effort you chose, and never changes the effort tier. Use it when you are actively waiting on the result; it is always opt-in, never the default.
+`--fast` is orthogonal: it buys the `priority` service tier (faster turnaround, more quota; the Codex catalog lists about 2x speed on `gpt-6.1-sol` and `gpt-6-astra`, 1.5x on most other models) at whatever effort you chose, and never changes the effort tier. Use it when you are actively waiting on the result; it is always opt-in, never the default.
 
 **In the browser** (`localhost:8377`):
 
@@ -157,6 +157,7 @@ Behind a reverse proxy (Nginx Proxy Manager, Caddy, Traefik): set `CODEX_VIEWER_
 - `codex-live-viewer.js`: Node server, CLI, rollout parser, control endpoints (one file, no dependencies)
 - `viewer-ui.html`: the whole frontend (one file)
 - `plugin/`: the Claude Code plugin, forked from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (keeps its Apache-2.0 `LICENSE` and `NOTICE`)
+- `plugin/.codex-plugin/plugin.json`: the manifest Codex reads when the plugin is installed there. Its empty `hooks` object keeps the Claude hooks out of Codex sessions; Codex loads only the skills. Keep its version equal to `plugin/.claude-plugin/plugin.json`
 - `plugin/viewer/`: bundled dashboard copies, refreshed by `npm run sync:viewer`, drift-guarded by tests
 - `handoff/`: ready-to-copy handoff contract templates
 - `scripts/upstream-diff.mjs`: diff `plugin/` against upstream for selective, manual cherry-picks

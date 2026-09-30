@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.15.7";
+const APP_VERSION = "2.16.0";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 const PID_FILE = path.join(os.tmpdir(), "codex-live-viewer-" + PORT + ".pid");
 function parseFlags(argv) {
@@ -43,18 +43,32 @@ const FLAGS = parseFlags(process.argv.slice(2));
 // A proxy name usually means the proxy runs on another machine, so it opens the bind too.
 const HOST = FLAGS.host || process.env.CODEX_VIEWER_HOST || (process.env.CODEX_VIEWER_ALLOWED_HOSTS ? "0.0.0.0" : "127.0.0.1");
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
-const TOKEN_FILE = path.join(CODEX_HOME, "live-viewer-token");
+// The viewer never writes under CODEX_HOME, so the token lives in the companion state root.
+// Older builds kept it in CODEX_HOME; that copy is only read, so old tunnel links keep working.
+const TOKEN_FILE = path.join(process.env.CODEX_COMPANION_STATE_ROOT
+  || path.join(os.homedir(), ".codex-companion", "state"), "live-viewer-token");
+const LEGACY_TOKEN_FILE = path.join(CODEX_HOME, "live-viewer-token");
 
 function loadToken() {
   if (FLAGS.token) return FLAGS.token;
   if (process.env.CODEX_VIEWER_TOKEN) return process.env.CODEX_VIEWER_TOKEN;
-  try {
-    const t = fs.readFileSync(TOKEN_FILE, "utf8").trim();
-    if (t) return t;
-  } catch {}
+  for (const file of [TOKEN_FILE, LEGACY_TOKEN_FILE]) {
+    try {
+      const t = fs.readFileSync(file, "utf8").trim();
+      if (!t) continue;
+      if (file !== TOKEN_FILE) saveToken(t);
+      return t;
+    } catch {}
+  }
   const t = crypto.randomBytes(16).toString("hex");
-  try { fs.writeFileSync(TOKEN_FILE, t, { mode: 0o600 }); } catch {}
+  saveToken(t);
   return t;
+}
+function saveToken(t) {
+  try {
+    fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true });
+    fs.writeFileSync(TOKEN_FILE, t, { mode: 0o600 });
+  } catch {}
 }
 const TOKEN = FLAGS.tunnel ? loadToken() : null;
 
@@ -128,8 +142,12 @@ const searchIndex = new Map(); // file -> { file, id, threadId, title, cwd, mtim
 const pinnedFiles = new Map(); // file -> last-open timestamp (LRU, max 10)
 const MAX_PINNED = 10;
 let searchIndexReady = false;
+const rolloutMtimes = new Map(); // file -> mtimeMs from the last stat
 
-function collectRolloutFiles() {
+// full: restat every file (the 30 s index rebuild). Otherwise (the 1 s tick) stat only new
+// and tracked files: stat is ~90% of this walk, ~120 ms for 2,600 rollouts.
+// ponytail: an untracked old rollout that grows again sorts up within 30 s, not 1 s.
+function collectRolloutFiles(full) {
   const out = [];
   const walk = (dir, depth) => {
     let entries;
@@ -142,9 +160,16 @@ function collectRolloutFiles() {
   };
   walk(SESSIONS_DIR, 0);
   walk(ARCHIVED_DIR, 0);
-  out.sort((a, b) => {
-    try { return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs; } catch { return 0; }
-  });
+  // One stat per file; stat inside the comparator cost ~60k stats per call (every tick).
+  // A tracked session also sorts by its newest record: Codex 0.146+ pins mtime at creation
+  // on Windows, so a long run would drop out of the top 40 while it is still writing.
+  if (full) rolloutMtimes.clear();
+  const mtime = new Map(out.map(p => {
+    let m = rolloutMtimes.get(p);
+    if (m === undefined || sessions.has(p)) { m = 0; try { m = fs.statSync(p).mtimeMs; } catch {} rolloutMtimes.set(p, m); }
+    return [p, Math.max(m, sessions.get(p)?.lastGrow || 0)];
+  }));
+  out.sort((a, b) => mtime.get(b) - mtime.get(a));
   return out;
 }
 
@@ -163,7 +188,8 @@ function simplify(line) {
   // session metadata
   if (t === "session_meta" || p.cwd && p.id && !p.type) {
     return { kind: "meta", ts, cwd: p.cwd || "", id: p.id || "", model: p.model || (p.turn_context && p.turn_context.model) || "",
-      parentThreadId: p.parent_thread_id || "", agentNickname: p.agent_nickname || "", originator: p.originator || "", instructions: undefined };
+      parentThreadId: p.parent_thread_id || "", agentNickname: p.agent_nickname || "", agentPath: p.agent_path || "", originator: p.originator || "", instructions: undefined,
+      guardian: p.source?.subagent?.other === "guardian" };
   }
   // event_msg wrapper (agent messages, token counts, etc.)
   if (t === "event_msg") {
@@ -178,6 +204,31 @@ function simplify(line) {
     if (et === "task_started") return { kind: "sys", ts, text: "task started" };
     if (et === "task_complete") return { kind: "done", ts, text: "task complete" };
     if (et === "turn_aborted") return { kind: "err", ts, text: "turn aborted" };
+    // What Codex ran. Since code mode (0.148+) these items are the only record of
+    // commands, file edits, MCP calls and web searches. AgentMessage, Reasoning and
+    // UserMessage items repeat response_items and stay dropped.
+    if (et === "item_completed") {
+      const item = p.item || {};
+      if (item.type === "CommandExecution") {
+        // 0.124-0.128 logged the same command as function_call shell too (source "agent").
+        if (item.source === "agent") return null;
+        const text = (item.parsed_cmd || []).map(c => c && c.cmd).filter(Boolean).join(" && ")
+          || (Array.isArray(item.command) ? item.command.join(" ") : String(item.command || ""));
+        const exit = item.exit_code == null ? "" : "\n\nexit " + item.exit_code;
+        // done: logged once the command finished (function_call shell is logged as it starts).
+        return { kind: "cmd", ts, text, done: true, detail: (text + exit + "\n" + String(item.aggregated_output || "")).slice(0, 4000) };
+      }
+      if (item.type === "FileChange") {
+        const changes = item.changes || {};
+        const files = Object.keys(changes);
+        const detail = files.map(f => (changes[f].type || "update") + " " + f + "\n" + (changes[f].unified_diff || changes[f].content || "")).join("\n\n");
+        return { kind: "patch", ts, text: files.length ? files.join(", ") : "(patch)", detail: detail.slice(0, 4000) };
+      }
+      // 0.124-0.155 also logged a direct MCP call as function_call with the same id; ingest keeps one.
+      if (item.type === "McpToolCall") return { kind: "tool", ts, callId: item.id, text: item.server + "." + item.tool + " " + JSON.stringify(item.arguments || {}).slice(0, 300) };
+      if (item.type === "Extension" && item.kind === "web.search") return { kind: "tool", ts, text: "web.search " + (item.query || "") };
+      return null;
+    }
     return null;
   }
   // response_item wrapper (model I/O, tool calls)
@@ -194,7 +245,7 @@ function simplify(line) {
       // Prompts that open with any other tag (<goal>, <task>, <role>) are speech.
       // Keep in step with INJECTED_BLOCK in viewer-ui.html (tests/ui-feed.test.js checks).
       if (role === "user") {
-        const INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits|subagent_notification)(?=[\s>/])|# AGENTS\.md instructions\b)/;
+        const INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits|subagent_notification)(?=[\s>/])|# AGENTS\.md instructions\b|The following is the Codex agent history (?:added since your last approval assessment|whose request action you are assessing)\b)/;
         return INJECTED_BLOCK.test(text) ? { kind: "user", ts, text, internal: true } : { kind: "user", ts, text };
       }
       if (role === "developer") return { kind: "agent", ts, text, internal: true };
@@ -212,7 +263,7 @@ function simplify(line) {
         const files = [...String(patch).matchAll(/^\*\*\* (?:Update|Add|Delete) File: (.+)$/gm)].map(m => m[1]);
         return { kind: "patch", ts, text: files.length ? files.join(", ") : "(patch)", detail: String(patch).slice(0, 4000) };
       }
-      return { kind: "tool", ts, text: p.name + " " + String(p.arguments || "").slice(0, 300) };
+      return { kind: "tool", ts, callId: p.call_id, text: p.name + " " + String(p.arguments || "").slice(0, 300) };
     }
     if (it === "function_call_output") {
       let out = p.output;
@@ -256,7 +307,8 @@ function indexEntry(file) {
   let st;
   try { st = fs.statSync(file); } catch { return null; }
   const cached = searchIndex.get(file);
-  if (cached && cached.mtimeMs === st.mtimeMs) return cached;
+  // Size too: Codex 0.146+ pins a rollout's mtime at creation on Windows while it grows.
+  if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) return cached;
   const entry = {
     file,
     id: path.basename(file, ".jsonl"),
@@ -264,32 +316,49 @@ function indexEntry(file) {
     title: "",
     cwd: "",
     mtimeMs: st.mtimeMs,
+    size: st.size,
     archived: file.startsWith(ARCHIVED_DIR),
   };
   try {
+    // The first real prompt sits behind injected context (220-400 KB on Codex 0.155+):
+    // read 64 KB chunks up to 1 MB, carrying the cut last line, until all three are found.
     const fd = fs.openSync(file, "r");
-    const buf = Buffer.alloc(Math.min(st.size, 64 * 1024));
-    fs.readSync(fd, buf, 0, buf.length, 0);
-    fs.closeSync(fd);
-    for (const line of buf.toString("utf8").split("\n")) {
-      if (!line.trim()) continue;
-      const ev = simplify(line);
-      if (!ev) continue;
-      if (ev.kind === "meta") {
-        if (ev.cwd) entry.cwd = ev.cwd;
-        if (ev.id && !entry.threadId) entry.threadId = ev.id;
-      } else if (ev.kind === "user" && !ev.internal && !entry.title) {
-        entry.title = promptTitle(ev.text);
+    const buf = Buffer.alloc(64 * 1024);
+    let pos = 0, carry = Buffer.alloc(0), child = false;
+    try {
+      while (pos < st.size && pos < 1024 * 1024 && !(entry.title && entry.threadId && entry.cwd)) {
+        const n = fs.readSync(fd, buf, 0, buf.length, pos);
+        if (!n) break;
+        pos += n;
+        const data = Buffer.concat([carry, buf.subarray(0, n)]);
+        const cut = pos < st.size ? data.lastIndexOf(10) + 1 : data.length;
+        carry = data.subarray(cut);
+        for (const line of data.toString("utf8", 0, cut).split("\n")) {
+          if (!line.trim()) continue;
+          const ev = simplify(line);
+          if (!ev) continue;
+          if (ev.kind === "meta") {
+            if (ev.cwd) entry.cwd = ev.cwd;
+            if (ev.id && !entry.threadId) {
+              entry.threadId = ev.id;
+              // A child agent's rollout opens with the parent's history, so its first prompt is the parent's.
+              child = !!ev.parentThreadId;
+              if (child) entry.title = [ev.agentNickname && "Agent " + ev.agentNickname, ev.agentPath].filter(Boolean).join(" · ") || (ev.guardian ? "Guardian review" : "");
+            }
+          } else if (ev.kind === "user" && !ev.internal && !entry.title && !child) {
+            entry.title = promptTitle(ev.text);
+          }
+          if (entry.title && entry.threadId && entry.cwd) break;
+        }
       }
-      if (entry.title && entry.threadId && entry.cwd) break;
-    }
+    } finally { fs.closeSync(fd); }
   } catch { /* unreadable file - keep the bare entry so it is still findable by id */ }
   searchIndex.set(file, entry);
   return entry;
 }
 
 function buildSearchIndex() {
-  const files = collectRolloutFiles();
+  const files = collectRolloutFiles(true);
   const live = new Set(files);
   for (const f of files) indexEntry(f);
   for (const key of searchIndex.keys()) if (!live.has(key)) searchIndex.delete(key);
@@ -308,10 +377,10 @@ function ingest(file) {
   try { st = fs.statSync(file); } catch { return; }
   let s = sessions.get(file);
   if (!s) {
-    s = { id: path.basename(file, ".jsonl"), file, offset: 0, partial: "", meta: {}, events: [], lastGrow: st.mtimeMs, size: 0 };
+    s = { id: path.basename(file, ".jsonl"), file, offset: 0, partial: "", meta: {}, events: [], callIds: new Set(), lastGrow: st.mtimeMs, size: 0 };
     sessions.set(file, s);
   }
-  if (st.size < s.size) { s.offset = 0; s.partial = ""; s.events = []; } // truncated/rotated
+  if (st.size < s.size) { s.offset = 0; s.partial = ""; s.events = []; s.callIds.clear(); } // truncated/rotated
   s.size = st.size;
   if (st.size <= s.offset) return;
 
@@ -321,20 +390,28 @@ function ingest(file) {
   fs.readSync(fd, buf, 0, buf.length, s.offset);
   fs.closeSync(fd);
   s.offset += buf.length;
-  // mtime, not Date.now(): initial backfill of old files must not look like live growth
-  s.lastGrow = st.mtimeMs;
 
   const chunk = s.partial + buf.toString("utf8");
   const lines = chunk.split("\n");
   s.partial = lines.pop() || "";
   const fresh = [];
+  let newest = 0;
   for (const line of lines) {
     if (!line.trim()) continue;
+    // lastGrow is the newest record time, not the file mtime (Codex 0.146+ pins that at
+    // creation on Windows) and not Date.now() (a backfill of an old file is not live growth).
+    const stamp = Date.parse((line.match(/^\{"timestamp":"([^"]+)"/) || [])[1]);
+    if (stamp > newest) newest = stamp;
     const ev = simplify(line);
     if (!ev) continue;
-    // rollouts log each message twice (event_msg + response_item) - drop consecutive duplicates
+    // rollouts log each message twice (event_msg + response_item) - drop consecutive duplicates.
+    // Messages only: the same command twice in a row is a real re-run.
     const prevEv = s.events[s.events.length - 1];
-    if (prevEv && prevEv.kind === ev.kind && prevEv.text === ev.text && ev.kind !== "meta") continue;
+    if (prevEv && prevEv.kind === ev.kind && prevEv.text === ev.text && (ev.kind === "user" || ev.kind === "agent")) continue;
+    if (ev.callId) {
+      if (s.callIds.has(ev.callId)) continue;
+      s.callIds.add(ev.callId);
+    }
     if (ev.kind === "meta") {
       if (ev.cwd) s.meta.cwd = ev.cwd;
       if (ev.model) s.meta.model = ev.model;
@@ -344,17 +421,23 @@ function ingest(file) {
       // First session_meta wins. A child agent's rollout repeats the parent's
       // session_meta after its own; taking the last one made the child carry the
       // parent's thread id and become its own parent.
-      if (ev.id && !s.meta.threadId) s.meta.threadId = ev.id;
+      if (ev.id && !s.meta.threadId) {
+        s.meta.threadId = ev.id;
+        // A child agent's rollout opens with the parent's history, so its first
+        // prompt is the parent's: title it by its own agent name and path instead.
+        if (ev.parentThreadId) s.meta.title = [ev.agentNickname && "Agent " + ev.agentNickname, ev.agentPath].filter(Boolean).join(" · ") || (ev.guardian ? "Guardian review" : "");
+      }
       if (ev.parentThreadId && !s.meta.parentThreadId) s.meta.parentThreadId = ev.parentThreadId;
       if (ev.agentNickname && !s.meta.agentNickname) s.meta.agentNickname = ev.agentNickname;
       if (ev.originator && !s.meta.originator) s.meta.originator = ev.originator;
       continue;
     }
-    if (ev.kind === "user" && !ev.internal && !s.meta.title) s.meta.title = promptTitle(ev.text);
+    if (ev.kind === "user" && !ev.internal && !s.meta.title && !s.meta.parentThreadId) s.meta.title = promptTitle(ev.text);
     s.events.push(ev);
     fresh.push(ev);
     if (s.events.length > MAX_EVENTS_KEPT) s.events.splice(0, s.events.length - MAX_EVENTS_KEPT);
   }
+  s.lastGrow = Math.max(s.lastGrow, newest || st.mtimeMs); // mtime only for files without timestamps
   if (fresh.length) {
     broadcast({ type: "events", session: s.id, events: fresh });
     if (fresh.some(event => event.kind === "done")) {
@@ -403,6 +486,7 @@ function sessionSummary(s, threadJobStatus) {
     lastGrow: s.lastGrow,
     quietMs: quiet,
     lastKind: last ? last.kind : "",
+    lastDone: !!(last && last.done), // a command that already finished
     lastText: last ? String(last.text).slice(0, 120) : "",
     lastEvent: last ? (last.kind + ": " + String(last.text).slice(0, 90)) : "",
     eventCount: s.events.length,

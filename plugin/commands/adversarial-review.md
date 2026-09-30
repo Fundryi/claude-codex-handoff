@@ -1,6 +1,6 @@
 ---
 description: Run a Codex review that challenges the implementation approach and design choices
-argument-hint: '[--background] [--base <ref>] [--scope auto|working-tree|branch] [--model <model>] [--fast] [--cwd <folder>] [focus ...]'
+argument-hint: '[--background] [--base <ref>] [--scope auto|working-tree|branch] [--model <model>] [--effort <low|medium|high|xhigh|max|ultra>] [--fast] [--cwd <folder>] [focus ...]'
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash(node:*), Bash(git:*)
 ---
@@ -38,3 +38,4 @@ Argument handling:
 - It supports working-tree review, branch review, and `--base <ref>`.
 - It does not support `--scope staged` or `--scope unstaged`.
 - Unlike `/codex:review`, it can still take extra focus text after the flags.
+- `--effort` sets the reasoning effort. Without it the review runs at `xhigh`, the same default as a handoff.

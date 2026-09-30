@@ -1,6 +1,6 @@
 # Prompt Blocks
 
-Use these blocks selectively when composing Codex prompts (GPT-5.4 through the GPT-6 family).
+Use these blocks selectively when composing Codex prompts.
 Wrap each block in the XML tag shown in its heading.
 
 ## Core Wrapper

@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.16.0
+
+Checked against Codex CLI 0.159.2.
+
+- **`sol` now runs GPT-6.1 Sol.** `--model sol` expands to `gpt-6.1-sol`, the new Codex default model. GPT-6 Sol is still available by its full name, `--model gpt-6-sol`. `max` and `ultra` work on `gpt-6.1-sol`.
+- **The reviews expand model shortcuts.** `/codex:review --model sol` and `/codex:adversarial-review --model sol` now send `gpt-6.1-sol`. Before, they sent the word `sol` as the model name.
+- **`/codex:adversarial-review` takes `--effort`.** Without it, the review runs at `xhigh`, the same default as a handoff. Before, it used the effort from your Codex config or the model default. `/codex:review` takes no `--effort`: Codex's review request has no effort field, so it runs at the effort in your Codex config. If you pass `--effort`, it is refused and you are pointed to `/codex:adversarial-review --effort`.
+- **A wrong model or effort fails before the run starts.** For handoffs and `/codex:adversarial-review`, when you pass `--model`, the plugin checks it against the models of your Codex account. An unknown model stops with a clear message. An effort that the model does not take stops and names the efforts it does take. If Codex cannot list its models, the run starts as before.
+- **A model that Codex plans to retire gets a warning.** For handoffs and `/codex:adversarial-review`, when `--model` names a model that Codex plans to replace, the run still starts. The first line of the result names the retirement date and the model Codex suggests, and the job log has the same line. `/codex:review` gives no warning.
+- **A retry is not a failure.** When Codex says it will retry, the job shows "Codex retrying" and keeps running. Before, the job could show as failed while Codex was still working.
+- **Terminal control text no longer breaks the connection to Codex.** Some shells put escape codes or plain text in front of the Codex output. The plugin now skips them. Before, this stopped the run with a protocol error.
+- **Every failure reason reaches the result.** When Codex reports the error only at the end of the turn, the result now shows it.
+- **Codex does not wait for an answer during a run.** The return format tells Codex that no one can answer during the run. Codex must not use a tool that asks the user. It puts each question under "Needs decision" instead.
+- **The adversarial review thread is saved.** Its name is "Codex Companion Review: <target>". `--resume-last` never picks it up.
+- **Task threads get a short name.** A new task thread is named after the task title, not after the start of the full prompt.
+- **No Node warning about shell arguments.** Newer Node versions printed a DEP0190 warning when the plugin started Codex through a shell. The warning is gone. The command that runs is the same.
+- **The tunnel token moved out of `~/.codex`.** It is stored in `~/.codex-companion/state/live-viewer-token`, so the viewer no longer writes under `~/.codex`. An existing `~/.codex/live-viewer-token` is copied over on first start, so old tunnel links keep working. To rotate the token, edit or delete the new file.
+- **The viewer shows LIVE on Windows again.** The last-activity time now comes from the newest record in the session file. Before, it came from the file's change time, which on Windows can stay at the time the file was made, so a running session did not show as LIVE.
+- **Commands and file changes are back in the feed.** Codex 0.159 writes them in a new record format that the viewer did not read. The feed now shows each command with its exit code and output, each changed file with its diff, MCP tool calls and web searches. A command that some older Codex versions wrote twice shows once.
+- **Sub-agent sessions have their own title.** A session that a Codex agent started is named "Agent <name> · <path>". Before, it showed the parent's prompt as its title.
+- **History and search show titles for almost all sessions.** The viewer reads further into each session file to find the title. Before, most new sessions had no title. The session list also builds about three times faster.
+- **Session sources have clear names.** A session shows "Codex CLI", "Codex SDK" or "Codex Desktop". The text that Codex adds before an approval check shows as internal text, not as a user message.
+- **Installed in Codex, the plugin loads only its skills.** A new `.codex-plugin/plugin.json` manifest stops Codex from running the Claude hooks. The old leftover `plugin.json` (version 1.0.6) is removed.
+
 ## 2.15.7
 
 - **The viewer works behind a reverse proxy.** Set `CODEX_VIEWER_ALLOWED_HOSTS` to the name the proxy serves it under, for example in the `env` block of `~/.claude/settings.json`. Before, every control request through a proxy was refused as "untrusted origin", so jobs never showed. The name can be bare, carry a port, or be the full URL. Setting it also makes the viewer listen on all addresses, unless `CODEX_VIEWER_HOST` says otherwise.

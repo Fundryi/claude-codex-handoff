@@ -47,6 +47,10 @@ const DEFAULT_CAPABILITIES = {
   ]
 };
 
+// CSI and OSC escape sequences. A raw ESC cannot occur inside valid JSON, so
+// stripping these never changes a real protocol line.
+const ESCAPE_SEQUENCE_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+
 function buildJsonRpcError(code, message, data) {
   return data === undefined ? { code, message } : { code, message, data };
 }
@@ -126,9 +130,23 @@ class AppServerClientBase {
       return;
     }
 
+    // On Windows stdout passes through a shell, so stray bytes (bracketed-paste
+    // escapes, localized taskkill output) can reach it, alone or glued to the
+    // front of a real message. Read from the first "{"; keep a line with no JSON
+    // in stderr, where an exit error will show it, instead of dropping the
+    // connection. A line that has a "{" and still fails to parse is fatal.
+    const cleaned = line.replace(ESCAPE_SEQUENCE_PATTERN, "");
+    const start = cleaned.indexOf("{");
+    if (start === -1) {
+      if (cleaned.trim()) {
+        this.stderr += `[non-JSON stdout] ${cleaned}\n`;
+      }
+      return;
+    }
+
     let message;
     try {
-      message = JSON.parse(line);
+      message = JSON.parse(cleaned.slice(start));
     } catch (error) {
       this.handleExit(createProtocolError(`Failed to parse codex app-server JSONL: ${error.message}`, { line }));
       return;
@@ -193,11 +211,17 @@ class SpawnedCodexAppServerClient extends AppServerClientBase {
   }
 
   async initialize() {
-    this.proc = spawn("codex", buildAppServerArgs(this.options.configOverrides), {
+    const shell = process.platform === "win32" ? (process.env.SHELL || true) : false;
+    const args = buildAppServerArgs(this.options.configOverrides);
+    // One command string when a shell is used: Node joins file and args that way
+    // anyway, and a non-empty args array with a shell trips DEP0190.
+    // ponytail: args are constant except the service tier from
+    // CODEX_PLUGIN_FAST_TIER; quote them if user-supplied text ever reaches this spawn.
+    this.proc = spawn(shell ? ["codex", ...args].join(" ") : "codex", shell ? [] : args, {
       cwd: this.cwd,
       env: this.options.env ?? process.env,
       stdio: ["pipe", "pipe", "pipe"],
-      shell: process.platform === "win32" ? (process.env.SHELL || true) : false,
+      shell,
       windowsHide: true
     });
 
@@ -251,9 +275,9 @@ class SpawnedCodexAppServerClient extends AppServerClientBase {
       this.proc.stdin.end();
       setTimeout(() => {
         if (this.proc && !this.proc.killed && this.proc.exitCode === null) {
-          // On Windows with shell: true, the direct child is cmd.exe.
-          // Use terminateProcessTree to kill the entire tree including
-          // the grandchild node process.
+          // On Windows the direct child is the shell (cmd.exe, or $SHELL
+          // when set). Use terminateProcessTree to kill the entire tree
+          // including the grandchild codex process.
           if (process.platform === "win32") {
             try {
               terminateProcessTree(this.proc.pid);

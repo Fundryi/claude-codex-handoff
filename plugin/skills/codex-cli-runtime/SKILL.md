@@ -24,7 +24,7 @@ Execution rules:
 - Do not rewrite the handoff. Main Claude wrote it with context you do not have.
 - Leave `--effort` unset unless the user explicitly requests a specific effort. The helper then defaults to `xhigh`, never Codex's low built-in default. Use `max` or `ultra` only when the user asks for them.
 - Leave model unset by default. Add `--model` only when the user explicitly asks for one.
-- Model shortcuts: `astra` → `--model gpt-6-astra`, `sol` → `--model gpt-6-sol`, `terra` → `--model gpt-5.6-terra`, `luna` → `--model gpt-6-luna`, `daybreak-blue` → `--model gpt-daybreak-blue-latest`. The GPT-5.6 Sol and Luna models are still reachable by their full names. Daybreak Blue is the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work. Daybreak access is verification-gated per account; the helper checks availability before starting the run and fails fast with a clear message if the account has no access, so do not pre-test access yourself. (A Red variant exists but is not available here.)
+- Model shortcuts: `astra` → `--model gpt-6-astra`, `sol` → `--model gpt-6.1-sol`, `terra` → `--model gpt-5.6-terra`, `luna` → `--model gpt-6-luna`, `daybreak-blue` → `--model gpt-daybreak-blue-latest`. GPT-6 Sol (`gpt-6-sol`) and the GPT-5.6 Sol and Luna models are still reachable by their full names. Daybreak Blue is the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work. Daybreak access is verification-gated per account; the helper checks availability before starting the run and fails fast with a clear message if the account has no access, so do not pre-test access yourself. (A Red variant exists but is not available here.)
 - Default to a write-capable Codex run by adding `--write` unless the user explicitly asks for read-only behavior or only wants review, diagnosis, or research without edits.
 
 Command selection:
@@ -39,7 +39,7 @@ Command selection:
 - If the forwarded request includes `--fresh`, strip that token from the task text and do not add `--resume-last`.
 - `--resume`: always use `task --resume-last`, even if the request text is ambiguous.
 - `--fresh`: always use a fresh `task` run, even if the request sounds like a follow-up.
-- `--effort`: accepted values are `low`, `medium`, `high`, `xhigh`, `max`, `ultra`. `max` needs a GPT-6, GPT-5.6, or Daybreak model (not `gpt-5.5`); `ultra` needs `gpt-6-astra`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-daybreak-blue-latest`. The Luna models stop at `max`.
+- `--effort`: accepted values are `low`, `medium`, `high`, `xhigh`, `max`, `ultra`. `max` needs a GPT-6.1, GPT-6, GPT-5.6, or Daybreak model; `ultra` needs `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-daybreak-blue-latest`. The Luna models stop at `max`.
 - `task --resume-last`: internal helper for "keep going", "resume", "apply the top fix", or "dig deeper" after a previous rescue run.
 
 Safety rules:

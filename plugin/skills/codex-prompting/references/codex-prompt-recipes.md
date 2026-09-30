@@ -1,6 +1,6 @@
 # Codex Prompt Recipes
 
-Use these as starting templates for Codex task prompts or other Codex prompt construction (GPT-5.4 through the GPT-6 family).
+Use these as starting templates for Codex task prompts or other Codex prompt construction.
 Copy the smallest recipe that fits the task, then trim anything you do not need.
 Every task handoff uses the four blocks from the skill. The recipes show `<goal>` and `<done_when>`; add `<rules>` and `<files>` for the task at hand.
 Do not add an output contract to a task handoff. The companion appends the return format (Summary, Changed files, Checks run, Needs decision), so put what the answer must contain in `<done_when>`.
@@ -116,7 +116,7 @@ Prefer primary sources.
 
 ```xml
 <goal>
-Diagnose why this existing prompt is underperforming and propose the smallest high-leverage changes to improve it for Codex (GPT-5.4 through the GPT-6 family).
+Diagnose why this existing prompt is underperforming and propose the smallest high-leverage changes to improve it for Codex.
 </goal>
 
 <done_when>

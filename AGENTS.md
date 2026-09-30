@@ -53,6 +53,7 @@ node scripts/upstream-diff.mjs   # diff plugin/ against upstream (--full for who
 
 - Feature work follows spec → plan → TDD implementation; plans live in `docs/superpowers/plans/` with checkbox steps.
 - Commit style: conventional commits (`feat(server):`, `feat(ui):`, `feat(plugin):`, `docs:`, `chore(release):`).
+- Every plugin release: sweep for stale facts before the version bump. Facts: model aliases and defaults, effort lists (`max`/`ultra`), the checked Codex CLI version, command options, file paths, versions. Places: `README.md`, `plugin/skills/`, `plugin/commands/`, `plugin/agents/`, `plugin/CHANGELOG.md` (new entry only), the viewer, `docs/superpowers/STATUS.md`, the KB pages in `../knowledge-base/wiki/projects/claude-handoff-improvment/`, auto-memory, and routing tables in other projects that quote the plugin. One owner per fact (the code for aliases and efforts, the README effort table for users, the runtime skill for Claude); other places link to it. A model whose Codex retirement date (`upgrade.retirement_at` in `codex debug models`) is less than 3 months away is removed from the docs, aliases and skills; no shortcut ever points at it.
 - Windows dev machine; paths in tests use `\\`. Shell scripts must work in both PowerShell and Git Bash contexts.
 
 ## Shared knowledge base

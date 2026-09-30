@@ -32,8 +32,8 @@ test("job records carry model, effort, sandbox", () => {
   assert.match(src, /model,\s*\n?\s*effort,/);
 });
 
-// Codex's built-in default effort is low on gpt-5.6-sol; an unset --effort must
-// never fall through to it. max and ultra stay opt-in.
+// Codex's built-in default effort is low on gpt-6.1-sol (the Codex default) and
+// gpt-5.6-sol; an unset --effort must never fall through to it. max and ultra stay opt-in.
 test("unset effort falls back to xhigh", () => {
   assert.match(src, /DEFAULT_REASONING_EFFORT = "xhigh"/);
   assert.match(src, /normalizeReasoningEffort\(options\.effort\) \?\? DEFAULT_REASONING_EFFORT/);
@@ -41,11 +41,12 @@ test("unset effort falls back to xhigh", () => {
   assert.equal(/VALID_REASONING_EFFORTS = new Set\(\[[^\]]*"none"/.test(src), false, "none is not a real Codex effort");
 });
 
-// Aliases track the Codex catalog: sol and luna moved to GPT-6, terra has no
-// GPT-6 model yet, and spark was retired (the API rejects it).
+// Aliases track the Codex catalog: sol moved to GPT-6.1 (gpt-6-sol stays
+// reachable by its full id), luna to GPT-6, terra has no GPT-6 model yet, and
+// spark was retired (the API rejects it).
 test("model aliases cover astra, sol, terra, luna, daybreak-blue", () => {
   assert.match(src, /\["astra", "gpt-6-astra"\]/);
-  assert.match(src, /\["sol", "gpt-6-sol"\]/);
+  assert.match(src, /\["sol", "gpt-6\.1-sol"\]/);
   assert.match(src, /\["terra", "gpt-5\.6-terra"\]/);
   assert.match(src, /\["luna", "gpt-6-luna"\]/);
   assert.match(src, /\["daybreak-blue", "gpt-daybreak-blue-latest"\]/);

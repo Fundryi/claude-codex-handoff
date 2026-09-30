@@ -33,3 +33,4 @@ Argument handling:
 - `--wait` is accepted for compatibility and does nothing.
 - `/codex:review` is native-review only. It does not support staged-only review, unstaged-only review, or extra focus text.
 - If the user needs custom review instructions or more adversarial framing, they should use `/codex:adversarial-review`.
+- `/codex:review` takes no `--effort`. The built-in reviewer runs at the reasoning effort in the user's Codex config (or the model's default when the config sets none). For a set effort, use `/codex:adversarial-review --effort <level>`.

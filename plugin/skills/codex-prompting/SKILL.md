@@ -1,12 +1,12 @@
 ---
 name: codex-prompting
-description: Internal guidance for composing Codex prompts (GPT-5.4 through the GPT-6 family) for coding, review, diagnosis, and research tasks inside the Codex Claude Code plugin
+description: Internal guidance for composing Codex prompts for coding, review, diagnosis, and research tasks inside the Codex Claude Code plugin
 user-invocable: false
 ---
 
 # Codex Prompting
 
-Use this skill when you write a Codex handoff for `/codex:handoff` (or its original name `/codex:rescue`) or the `codex:codex-rescue` agent. The guidance was written against GPT-5.4 and applies to the GPT-6 models (astra, sol, luna) and the GPT-5.6 models (sol, terra, luna).
+Use this skill when you write a Codex handoff for `/codex:handoff` (or its original name `/codex:rescue`) or the `codex:codex-rescue` agent. The guidance was written against GPT-5.4 and applies to GPT-6.1 Sol, the GPT-6 models (astra, sol, luna) and the GPT-5.6 models (sol, terra, luna).
 
 Prompt Codex like an operator, not a collaborator. Keep prompts compact and block-structured with XML tags. State the task, the follow-through defaults, and the small set of extra constraints that matter.
 
