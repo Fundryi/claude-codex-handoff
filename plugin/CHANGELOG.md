@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.18.0
+
+- **The viewer shows Claude Code workflows live.** A new Claude tab lists each run of the Workflow tool with its phases and agents. It shows which agent runs, its current tool and its context size. Click an agent to follow its transcript live. Finished runs show their totals.
+- **Claude work never looks like Codex work.** Claude runs have their own label ("Claude workflow"), their own icon and their own color. They never appear in the Now, Handoffs or History lists, and Codex jobs never appear in the Claude tab. The feed names the actors "Workflow script", "Claude agent" and "Agent work".
+- **A header counter shows running Claude workflows on every tab.** It reads "Claude: N running", plus a count of runs that need attention. Click it to open the Claude tab.
+- **The Claude tab only reads.** It reads the run files under `~/.claude/projects` every few seconds and never writes there. It never runs a workflow script. Its menu only copies the run ID, the journal path, a resume hint and the agent ID. There is no stop, pause or resume.
+- **Transcripts stay on your machine.** Agent transcripts can hold text from every project, so the viewer sends them only to a browser on the same machine that uses the `localhost` link, or to the tunnel link. When `CODEX_VIEWER_ALLOWED_HOSTS` is set, only the tunnel link shows them.
+- **Job reports to the viewer must come from this machine.** The viewer accepts a finished-job report only from a direct local connection without a browser origin. The plugin's own reports still arrive.
+- **The tab row fits narrow screens.** The tabs now take the width of their names. In a sidebar under 300 px the counts hide, so all four tab names stay readable. On phones the header title wraps under the badges instead of shrinking to nothing.
+- **The old broker cleanup is gone.** 2.17.0 removed the shared broker. Its session-end cleanup, the SessionEnd hook and two broker files are now deleted as well. If you update from a version older than 2.17.0 straight to 2.18.0, an idle old broker process can stay until you restart the computer. It does nothing.
+- **Removed test:** `tests/plugin-session-end.test.js`. It checked that the SessionEnd hook left running jobs alone. That hook no longer exists, so nothing runs at session end.
+
 ## 2.17.0
 
 A cleanup release from a full review of the plugin by six Codex agents. Every change was checked twice for side effects before it was made.
