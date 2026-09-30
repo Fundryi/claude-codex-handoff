@@ -682,7 +682,7 @@ function handleLaunch(res, body, args) {
 //   subagents/workflows/<runId>/{journal.jsonl, agent-<id>.jsonl, agent-<id>.meta.json}
 //   workflows/<runId>.json (snapshot, written at run end), workflows/scripts/<name>-<runId>.js
 // Polled, never fs.watch'ed (GBs, and every transcript write would fire). Nothing here writes.
-// Only ids, labels, phases, states, counts, times, tool names and token counts reach /events;
+// Only ids, labels, phases, states, counts, times, tool names, token counts, models and efforts reach /events;
 // transcript text goes out only through /claude/agent (claudeTranscriptAllowed).
 const CLAUDE_SCAN_MS = 5000;              // new runs appear within this
 const CLAUDE_MAX_RUNS = 20;               // newest runs tracked; running runs always kept on top
@@ -758,8 +758,27 @@ function claudeTranscriptEvents(line) {
     }
   }
   const u = msg.usage;
-  if (u && typeof u === "object") out.push({ kind: "meta", ts, tokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0) });
+  // model and effort ride every assistant line; "<synthetic>" (an API error line) is no model.
+  const model = typeof msg.model === "string" && /^claude-/.test(msg.model) ? msg.model : "";
+  if (u && typeof u === "object") out.push({ kind: "meta", ts, tokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+    model, effort: typeof o.effort === "string" ? o.effort : "" });
   return out;
+}
+
+// Model and effort from a transcript's tail (the first assistant line sits ~220 KB in, after the
+// prompt and attachments, so the head never has it). Newest assistant line wins; its first line is
+// dropped when the text starts mid-file.
+function claudeLastModel(text, midFile) {
+  const lines = String(text || "").split("\n");
+  if (midFile) lines.shift();
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].includes('"assistant"')) continue;
+    let o;
+    try { o = JSON.parse(lines[i]); } catch { continue; }
+    const m = o && o.type === "assistant" && o.message && o.message.model;
+    if (typeof m === "string" && /^claude-/.test(m)) return { model: m, effort: typeof o.effort === "string" ? o.effort : "" };
+  }
+  return { model: "", effort: "" };
 }
 
 // Soft: the snapshot is the only finish record. Never "stopped" from a pid (a workflow can outlive
@@ -807,6 +826,18 @@ function claudeReadHead(file, bytes) {
   } catch { return ""; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch {} }
 }
 
+// The last `bytes` of a file; midFile when the read did not start at byte 0.
+function claudeReadTail(file, bytes) {
+  let fd;
+  try {
+    fd = fs.openSync(file, "r");
+    const size = fs.fstatSync(fd).size;
+    const from = Math.max(0, size - bytes);
+    const buf = Buffer.alloc(size - from);
+    return { text: buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, from)), midFile: from > 0 };
+  } catch { return { text: "", midFile: false }; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch {} }
+}
+
 function claudeNewRun(id, c) {
   const run = {
     id, sessionDir: c.sDir, dir: path.join(c.sDir, "subagents", "workflows", id),
@@ -830,7 +861,7 @@ function claudeAgent(run, id) {
   let a = run.agents.get(id);
   if (a || !CLAUDE_AGENT_ID.test(id)) return a;
   a = { id, order: run.agents.size, label: "", phase: "", metaLabel: "", metaPhase: "", state: "running",
-    cursor: claudeCursor(), lastWriteMs: 0, pending: new Map(), toolName: "", toolPreview: "", toolSinceMs: 0, contextTokens: 0 };
+    cursor: claudeCursor(), lastWriteMs: 0, pending: new Map(), toolName: "", toolPreview: "", toolSinceMs: 0, contextTokens: 0, model: "", effort: "" };
   try {
     const m = JSON.parse(fs.readFileSync(path.join(run.dir, "agent-" + id + ".meta.json"), "utf8"));
     if (typeof m.description === "string") a.metaLabel = m.description;
@@ -838,6 +869,9 @@ function claudeAgent(run, id) {
   } catch { /* 2.1.210 meta, or not written yet: the journal and snapshot labels cover it */ }
   // One stat, so an agent that finished before the viewer started still has a last-write time.
   try { a.lastWriteMs = fs.statSync(path.join(run.dir, "agent-" + id + ".jsonl")).mtimeMs; } catch {}
+  // Once, here: a finished agent is never read again. A running agent's live lines update it.
+  const tail = claudeReadTail(path.join(run.dir, "agent-" + id + ".jsonl"), 64 * 1024);
+  Object.assign(a, claudeLastModel(tail.text, tail.midFile));
   if (!run.cwdFound) {
     // The first transcript line carries cwd after the prompt; attachment lines after it carry it too.
     const m = /"cwd":"((?:\\.|[^"\\])*)"/.exec(claudeReadHead(path.join(run.dir, "agent-" + id + ".jsonl"), 64 * 1024));
@@ -855,7 +889,7 @@ function claudeSnapshot(j, mtimeMs) {
   for (const r of Array.isArray(j.workflowProgress) ? j.workflowProgress : []) {
     if (!r || typeof r.agentId !== "string") continue;
     agents.set(r.agentId, {
-      label: s(r.label), phase: s(r.phaseTitle), lastMs: n(r.lastProgressAt),
+      label: s(r.label), phase: s(r.phaseTitle), lastMs: n(r.lastProgressAt), model: s(r.model),
       state: r.state === "done" ? "done" : r.state === "failed" || r.state === "error" ? "failed" : "ended",
     });
   }
@@ -911,7 +945,7 @@ function claudeTickRun(run, now) {
           for (const ev of claudeTranscriptEvents(line)) {
             const t = Date.parse(ev.ts) || 0;
             if (t > newest) newest = t;
-            if (ev.kind === "meta") { a.contextTokens = ev.tokens; continue; }
+            if (ev.kind === "meta") { a.contextTokens = ev.tokens; if (ev.model) a.model = ev.model; if (ev.effort) a.effort = ev.effort; continue; }
             if (ev.callId) a.pending.set(ev.callId, { preview: ev.preview, since: t || now });
             if (ev.resultOf) a.pending.delete(ev.resultOf);
           }
@@ -947,8 +981,16 @@ function claudeRunView(run) {
       id: a.id, order: a.order, label: a.label || a.metaLabel || (s && s.label) || a.id,
       phase: a.phase || a.metaPhase || (s && s.phase) || "phase unknown", state,
       lastWriteMs: Math.floor(a.lastWriteMs || (s && s.lastMs) || 0), tool: state === "running" ? a.toolName : "", contextTokens: a.contextTokens,
+      model: a.model || (s && s.model) || "", effort: a.effort,
     };
   });
+  // The run's model and effort: the most common across all its agents (a script can override per agent).
+  const mostCommon = (key) => {
+    const n = new Map();
+    let best = "", top = 0;
+    for (const a of all) if (a[key]) { const c = (n.get(a[key]) || 0) + 1; n.set(a[key], c); if (c > top) { top = c; best = a[key]; } }
+    return best;
+  };
   const counts = { started: all.length, running: 0, done: 0, failed: 0, ended: 0 };
   const phaseMap = new Map();
   for (const t of run.phases.length ? run.phases : snap ? snap.phases : []) phaseMap.set(t, { title: t, started: 0, done: 0, failed: 0 });
@@ -970,12 +1012,13 @@ function claudeRunView(run) {
       .slice(0, CLAUDE_MAX_AGENTS_SENT).sort((x, y) => x.order - y.order);
   return {
     id: run.id, name: run.name, description: run.description, project: run.project, session: run.sessionId.slice(0, 8),
+    model: mostCommon("model") || (snap && snap.model) || "", effort: mostCommon("effort"),
     status: run.status, error: run.error, legacy: !run.launchedSeen,
     startedMs: (snap && snap.startTime) || run.journal.birthtimeMs || run.journal.mtimeMs,
     updatedMs: run.lastActivityMs, endedMs: snap ? snap.endMs : 0, durationMs: snap ? snap.durationMs : 0,
     counts, phases: [...phaseMap.values()],
     agents: sent.map(({ order, ...a }) => a), agentsHidden: all.length - sent.length,
-    totals: snap ? { tokens: snap.tokens, toolCalls: snap.toolCalls, model: snap.model } : null,
+    totals: snap ? { tokens: snap.tokens, toolCalls: snap.toolCalls } : null,
   };
 }
 
@@ -1464,7 +1507,8 @@ const server = http.createServer((req, res) => {
     catch { return noStore(404, { ok: false, error: "transcript not found" }); }
     const state = claudeAgentState(run, agent);
     noStore(200, { ok: true, events: page.events, offset: page.offset, size: page.size,
-      tool: state === "running" ? agent.toolPreview : "", contextTokens: agent.contextTokens || page.contextTokens, state });
+      tool: state === "running" ? agent.toolPreview : "", contextTokens: agent.contextTokens || page.contextTokens, state,
+      model: agent.model || (run.snapAgents.get(agent.id) || {}).model || "", effort: agent.effort });
   } else {
     res.writeHead(404); res.end("not found");
   }

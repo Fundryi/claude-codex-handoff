@@ -430,6 +430,19 @@
       white-space: nowrap;
     }
     #task-meta { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    /* Project, model, effort: neutral chips under the title. The accent (icon, project border) is the
+       actor color of whose task it is: Codex teal, Claude clay. Never a status color. */
+    #task-facts { --fact-accent: var(--codex); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 7px; min-width: 0; }
+    #task-facts.claude { --fact-accent: var(--claude); }
+    #task-facts + #task-meta { margin-top: 6px; }
+    .fact { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 22px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 11px; white-space: nowrap; }
+    .fact .fact-key { color: var(--muted); }
+    .fact-project { border-color: color-mix(in srgb, var(--fact-accent) 50%, var(--border)); font-size: 12px; }
+    .fact-project b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+    .fact-project svg { flex: none; width: 13px; height: 13px; color: var(--fact-accent); }
+    .row-project { color: var(--fg); font-weight: 600; }
+    #claude-panel-meta .panel-model { color: var(--fg); }
+    .agent-tag { flex: none; border: 1px solid color-mix(in srgb, var(--claude) 45%, var(--border)); border-radius: 5px; padding: 0 5px; color: var(--claude); font-size: 10px; white-space: nowrap; }
     .meta-item { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .meta-button {
       border: 0;
@@ -963,6 +976,7 @@
         <button id="show-side" class="icon-button" type="button" title="Show session list" aria-label="Show session list">&#x2630;</button>
         <div id="task-copy">
           <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-handoff" class="status HANDOFF" hidden>Handoff</span><span id="task-claude" class="status CLAUDE_WF claude-only" title="A Claude Code workflow (Workflow tool), not a Codex task" hidden>Claude workflow</span><span id="task-fast" class="status FAST" title="Priority processing (fast tier)" hidden>FAST</span><span id="task-title">Select a task</span></div>
+          <div id="task-facts" hidden></div>
           <div id="task-meta"><span class="meta-item">Running tasks are selected automatically</span></div>
         </div>
         <div id="header-actions">
@@ -1127,6 +1141,7 @@
     var claudePanelMeta = document.getElementById('claude-panel-meta');
     var claudePanelClose = document.getElementById('claude-panel-close');
     var taskMeta = document.getElementById('task-meta');
+    var taskFacts = document.getElementById('task-facts');
     var actionMenu = document.getElementById('action-menu');
     var contextMenu = document.getElementById('context-menu');
     var actionsButton = document.getElementById('actions-button');
@@ -1642,11 +1657,12 @@
       if (minutes < 60) return minutes + 'm ' + (seconds % 60) + 's';
       return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
     }
-    function sessionMetaLine(meta) {
+    // short: without path, model and effort (the header shows those as chips above the line).
+    function sessionMetaLine(meta, short) {
       if (!meta) return '';
-      var parts = [meta.cwd || meta.id || ''];
-      parts.push('model: ' + (meta.model || '?'));
-      if (meta.effort) parts.push('effort: ' + meta.effort);
+      var parts = short ? [] : [meta.cwd || meta.id || ''];
+      if (!short) parts.push('model: ' + (meta.model || '?'));
+      if (meta.effort && !short) parts.push('effort: ' + meta.effort);
       if (meta.sandbox) parts.push('sandbox: ' + meta.sandbox);
       if (meta.tokensUsed) parts.push('tokens: ' + meta.tokensUsed.toLocaleString());
       parts.push('thread: ' + (meta.threadId || '?'));
@@ -2163,6 +2179,11 @@
       var c = (run && run.counts) || {};
       return (c.started || 0) + ' started, ' + (c.done || 0) + ' done' + (c.failed ? ', ' + c.failed + ' failed' : '');
     }
+    // "claude-opus-5-5" -> "Opus 5.5", "claude-haiku-4-5-20251001" -> "Haiku 4.5". Anything else unchanged.
+    function modelShortName(id) {
+      var m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(String(id || ''));
+      return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) + ' ' + m[2] + (m[3] ? '.' + m[3] : '') : String(id || '');
+    }
     // Phases in the run's order with their agents. The counts come from run.phases (exact) because
     // run.agents is capped for big runs. Agents whose phase is not listed get their own group last.
     function claudePhaseGroups(run) {
@@ -2473,7 +2494,7 @@
           title.textContent = entry.title || 'Untitled Codex task';
           var project = document.createElement('div');
           project.className = 'session-project';
-          project.textContent = projectName(entry.cwd);
+          project.appendChild(textSpan('row-project', projectName(entry.cwd)));
           project.title = entry.cwd || '';
           row.append(top, title, project);
           row.addEventListener('click', function () { openHistorySession(entry.id); });
@@ -2529,7 +2550,10 @@
       title.textContent = row.title;
       var meta = document.createElement('div');
       meta.className = 'session-project';
-      meta.textContent = rowMetaLine(row);
+      // rowMetaLine always starts with the project name: that part in bold.
+      var metaText = rowMetaLine(row);
+      var projectLabel = projectName(row.project);
+      meta.append(textSpan('row-project', projectLabel), document.createTextNode(metaText.slice(projectLabel.length)));
       open.append(top, title, meta);
       if (hint) {
         var matched = document.createElement('div');
@@ -2570,7 +2594,8 @@
       actionsButton.setAttribute('aria-expanded', 'false');
     }
 
-    // Line 1: status, Handoff, FAST, title. Line 2: meta (click copies the thread id), time.
+    // Line 1: status, Handoff, FAST, title. Then the project, model and effort chips.
+    // Line 2: meta (click copies the thread id), time.
     // Line 3: the reason line, only when there is one.
     function renderHeader() {
       renderClaudeCounter();
@@ -2583,6 +2608,7 @@
       actionsButton.hidden = !row;
       if (!row) {
         closeActionMenu();
+        taskFacts.hidden = true;
         taskStatus.hidden = true;
         taskHandoff.hidden = true;
         taskFast.hidden = true;
@@ -2607,6 +2633,8 @@
       taskTitle.textContent = row.title;
       taskTitle.title = row.title;
       resumeSessionButton.hidden = !resumeTarget(row);
+      var job = row.job || {};
+      renderTaskFacts('codex', row.project ? projectName(row.project) : '', row.project, session.model || job.model, job.effort || session.effort);
 
       var origin = startedBy(session);
       if (origin) {
@@ -2621,10 +2649,8 @@
       var metadata = document.createElement(session.threadId ? 'button' : 'span');
       if (session.threadId) metadata.type = 'button';
       metadata.className = 'meta-item' + (session.threadId ? ' meta-button' : '');
-      // Narrow screens show the project name, not the full path; the tooltip keeps the full line.
-      var narrow = window.matchMedia('(max-width: 760px)').matches;
-      // No cwd: keep sessionMetaLine's own fallback (the session id), never "Unknown project".
-      metadata.textContent = sessionMetaLine(narrow && session.cwd ? Object.assign({}, session, { cwd: projectName(session.cwd) }) : session);
+      // Path, model and effort are the chips above; the tooltip keeps the full line.
+      metadata.textContent = sessionMetaLine(session, true);
       metadata.title = sessionMetaLine(session) + (session.threadId ? '\nClick to copy the thread ID' : '');
       if (session.threadId) metadata.addEventListener('click', function () { copyText(session.threadId, metadata, 'Thread copied'); });
       taskMeta.appendChild(metadata);
@@ -2705,6 +2731,47 @@
         svg.appendChild(line);
       });
       return svg;
+    }
+    function folderIcon() {
+      var ns = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 16 16');
+      svg.setAttribute('aria-hidden', 'true');
+      var shape = document.createElementNS(ns, 'path');
+      shape.setAttribute('d', 'M1.5 3.5a1 1 0 0 1 1-1h3.6l1.6 1.6h5.8a1 1 0 0 1 1 1v7.4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z');
+      shape.setAttribute('fill', 'none');
+      shape.setAttribute('stroke', 'currentColor');
+      shape.setAttribute('stroke-width', '1.4');
+      shape.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(shape);
+      return svg;
+    }
+    // The chips under the header title: project (the most visible), model, effort. owner 'claude' or 'codex'.
+    function renderTaskFacts(owner, project, projectTitle, model, effort) {
+      taskFacts.textContent = '';
+      taskFacts.className = owner;
+      taskFacts.hidden = !project && !model && !effort;
+      if (project) {
+        var chip = document.createElement('span');
+        chip.className = 'fact fact-project';
+        chip.title = projectTitle || project;
+        var name = document.createElement('b');
+        name.textContent = project;
+        chip.append(folderIcon(), name);
+        taskFacts.appendChild(chip);
+      }
+      if (model) {
+        var modelChip = textSpan('fact', modelShortName(model));
+        modelChip.title = 'Model: ' + model;
+        taskFacts.appendChild(modelChip);
+      }
+      if (effort) {
+        var effortChip = document.createElement('span');
+        effortChip.className = 'fact';
+        effortChip.title = 'Reasoning effort: ' + effort;
+        effortChip.append(textSpan('fact-key', 'effort'), document.createTextNode(effort));
+        taskFacts.appendChild(effortChip);
+      }
     }
 
     function actorName(actor) {
@@ -3182,15 +3249,19 @@
       el.className = card ? 'home-card claude-card' : 'session claude-run' + (open ? ' selected' : '');
       if (!card) el.setAttribute('aria-pressed', open ? 'true' : 'false');
       else el.dataset.key = 'run:' + run.id; // renderClaudeOverview puts focus back by this key
-      el.title = [run.name, run.description, 'run ' + run.id,
+      el.title = [run.name, run.description, 'Project: ' + run.project, run.model ? 'Model: ' + run.model + (run.effort ? ' · effort ' + run.effort : '') : '',
+        'run ' + run.id + ' · session ' + run.session,
         run.legacy ? 'legacy format (older Claude Code): labels and phases from the finish record' : '',
         run.error ? 'details unavailable' : ''].filter(Boolean).join('\n');
       var top = document.createElement('div');
       top.className = 'session-top';
       top.append(statusChip(view.badge, view.label, view.help), claudeMark(), textSpan('session-time', relativeTime(run.updatedMs)));
       var duration = claudeRunDuration(run, Date.now());
-      var meta = [run.project, 'session ' + run.session, claudeRunLine(run), duration ? formatDuration(duration) : ''].filter(Boolean).join(' · ');
-      el.append(top, textDiv('session-title', run.name || run.id), textDiv('session-project', meta));
+      var rest = [modelShortName(run.model), run.effort, claudeRunLine(run), duration ? formatDuration(duration) : ''].filter(Boolean).join(' · ');
+      var meta = document.createElement('div');
+      meta.className = 'session-project';
+      meta.append(textSpan('row-project', run.project), document.createTextNode(' · ' + rest));
+      el.append(top, textDiv('session-title', run.name || run.id), meta);
       el.addEventListener('click', function () { selectClaudeRun(run.id); });
       el.addEventListener('contextmenu', function (event) { openClaudeContextMenu(event, run); });
       return el;
@@ -3201,7 +3272,7 @@
       var query = String(prefs.query || '').trim();
       var shown = claudeRuns.filter(function (run) { return claudeRunInView(run, prefs.chip) && claudeRunMatch(run, query); });
       var signature = JSON.stringify([prefs.chip, query, prefs.claudeRun, claudeLoaded, Math.floor(Date.now() / 10000),
-        shown.map(function (run) { return [run.id, run.status, run.name, run.description, run.project, run.session, run.counts, Math.floor(run.updatedMs / 10000), run.durationMs, run.error, run.legacy]; })]);
+        shown.map(function (run) { return [run.id, run.status, run.name, run.description, run.project, run.model, run.effort, run.session, run.counts, Math.floor(run.updatedMs / 10000), run.durationMs, run.error, run.legacy]; })]);
       if (signature === lastClaudeListSignature) return;
       lastClaudeListSignature = signature;
       list.textContent = '';
@@ -3267,6 +3338,7 @@
       actionsButton.hidden = !run;
       if (!run) {
         closeActionMenu();
+        taskFacts.hidden = true;
         taskStatus.hidden = true;
         taskTitle.textContent = 'Claude workflows';
         taskTitle.title = '';
@@ -3281,8 +3353,8 @@
       taskStatus.title = view.help;
       taskTitle.textContent = run.name || run.id;
       taskTitle.title = [run.name, run.description].filter(Boolean).join('\n');
+      renderTaskFacts('claude', run.project, 'Project: ' + run.project, run.model, run.effort);
       if (run.description) taskMeta.appendChild(claudeMetaItem(run.description)).classList.add('claude-desc');
-      taskMeta.appendChild(claudeMetaItem(run.project, 'Project'));
       taskMeta.appendChild(claudeMetaItem('session ' + run.session, 'Claude Code session that started the workflow'));
       var started = run.startedMs ? new Date(run.startedMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
       var duration = claudeRunDuration(run, now);
@@ -3303,7 +3375,7 @@
 
     // One agent in the run view: state dot, label, last write, and while running its tool and context.
     // The open agent's row is highlighted (its transcript is in the side panel); running rows get a faint blue.
-    function claudeAgentRow(agent) {
+    function claudeAgentRow(agent, run) {
       var view = claudeAgentView(agent.state);
       var open = agent.id === prefs.claudeAgent;
       var button = document.createElement('button');
@@ -3319,7 +3391,16 @@
       if (agent.state === 'running' && agent.tool) meta.push(agent.tool);
       if (agent.state === 'running' && agent.contextTokens) meta.push(compactCount(agent.contextTokens) + ' context');
       meta.push(agent.lastWriteMs ? 'last write ' + relativeTime(agent.lastWriteMs) : view.label);
-      button.append(dot, textSpan('agent-label mono', agent.label || agent.id), textSpan('agent-meta', meta.join(' · ')));
+      button.append(dot, textSpan('agent-label mono', agent.label || agent.id));
+      // A script can run one agent on another model or effort: tag only what differs from the run.
+      var differs = [agent.model && run.model && agent.model !== run.model ? modelShortName(agent.model) : '',
+        agent.effort && run.effort && agent.effort !== run.effort ? agent.effort : ''].filter(Boolean);
+      if (differs.length) {
+        var tag = textSpan('agent-tag', differs.join(' · '));
+        tag.title = 'This agent runs on ' + [agent.model, agent.effort ? 'effort ' + agent.effort : ''].filter(Boolean).join(', ') + ' (the run: ' + [run.model, run.effort].filter(Boolean).join(', ') + ')';
+        button.appendChild(tag);
+      }
+      button.appendChild(textSpan('agent-meta', meta.join(' · ')));
       button.addEventListener('click', function () { openClaudeAgent(agent.id); });
       return button;
     }
@@ -3338,6 +3419,12 @@
       claudePanelTitle.title = claudePanelTitle.textContent;
       claudePanelMeta.textContent = '';
       if (agent) claudePanelMeta.appendChild(claudeMetaItem('Phase: ' + agent.phase));
+      var model = (agent && agent.model) || claudeFeed.model;
+      var effort = (agent && agent.effort) || claudeFeed.effort;
+      if (model || effort) {
+        claudePanelMeta.appendChild(claudeMetaItem([modelShortName(model), effort ? 'effort ' + effort : ''].filter(Boolean).join(' · '),
+          [model ? 'Model: ' + model : '', effort ? 'Reasoning effort: ' + effort : ''].filter(Boolean).join('\n'))).classList.add('panel-model');
+      }
       claudePanelMeta.appendChild(claudeMetaItem('agent ' + agentId, 'Agent ID'));
       if (agent && agent.lastWriteMs) claudePanelMeta.appendChild(claudeMetaItem('last write ' + relativeTime(agent.lastWriteMs), 'Last write to its transcript'));
       if (claudeFeed.tool) claudePanelMeta.appendChild(claudeMetaItem(claudeFeed.tool, 'Tool it is running now'));
@@ -3375,7 +3462,7 @@
       if (c.failed) line.appendChild(textSpan('', c.failed + ' failed'));
       if (c.ended) line.appendChild(claudeMetaItem(c.ended + ' ended', 'No end record: the run ended or went quiet'));
       if (run.totals) {
-        line.appendChild(claudeMetaItem([compactCount(run.totals.tokens) + ' tokens', (run.totals.toolCalls || 0).toLocaleString() + ' tool calls', run.totals.model].filter(Boolean).join(' · '), 'From the finish record'));
+        line.appendChild(claudeMetaItem(compactCount(run.totals.tokens) + ' tokens · ' + (run.totals.toolCalls || 0).toLocaleString() + ' tool calls', 'From the finish record'));
       }
       box.append(line, claudeBar(c.done || 0, c.failed || 0, c.started || 0));
       var running = (run.agents || []).filter(function (agent) { return agent.state === 'running'; });
@@ -3436,11 +3523,11 @@
       var scope = run ? run.id : '';
       // An open run counts only what the run view shows, coarsely: each agent write would otherwise
       // rebuild the rows the user is about to click. The 10 s tick refreshes the relative times.
-      var signature = JSON.stringify([scope, prefs.claudeAgent, claudeLoaded, Math.floor(Date.now() / 10000), run ? [run.status, run.counts, run.totals, run.phases, run.agentsHidden,
+      var signature = JSON.stringify([scope, prefs.claudeAgent, claudeLoaded, Math.floor(Date.now() / 10000), run ? [run.status, run.counts, run.totals, run.phases, run.agentsHidden, run.model, run.effort,
         (run.agents || []).map(function (agent) {
-          return [agent.id, agent.state, agent.label, agent.phase, agent.tool, Math.floor((agent.lastWriteMs || 0) / 10000), Math.floor((agent.contextTokens || 0) / 1000)];
+          return [agent.id, agent.state, agent.label, agent.phase, agent.tool, agent.model, agent.effort, Math.floor((agent.lastWriteMs || 0) / 10000), Math.floor((agent.contextTokens || 0) / 1000)];
         })] : claudeRuns.map(function (entry) {
-        return [entry.id, entry.status, entry.name, entry.project, entry.counts, Math.floor(entry.updatedMs / 10000), entry.durationMs];
+        return [entry.id, entry.status, entry.name, entry.project, entry.model, entry.effort, entry.counts, Math.floor(entry.updatedMs / 10000), entry.durationMs];
       })]);
       if (signature === lastClaudeOverviewSignature) return;
       lastClaudeOverviewSignature = signature;
@@ -3474,7 +3561,7 @@
             claudeBar(group.done, group.failed, group.started));
           heading.title = group.done + ' done of ' + group.started + ' started';
           wrap.appendChild(heading);
-          group.agents.forEach(function (agent) { wrap.appendChild(claudeAgentRow(agent)); });
+          group.agents.forEach(function (agent) { wrap.appendChild(claudeAgentRow(agent, run)); });
         });
         if (run.agentsHidden) wrap.appendChild(textDiv('claude-note', '+ ' + run.agentsHidden + ' more agents not shown'));
         wrap.appendChild(textDiv('claude-note', 'Queued agents, log() lines and the planned total are not on disk, so they are not shown.'));
@@ -3520,6 +3607,8 @@
           state.offset = data.offset || 0;
           state.tool = data.tool || '';
           state.contextTokens = data.contextTokens || 0;
+          state.model = data.model || '';
+          state.effort = data.effort || '';
           state.state = data.state || '';
           // Once the agent stops running, one more poll picks up its last lines, then polling ends.
           if (state.state !== 'running') { if (state.final) state.stopped = true; state.final = true; }

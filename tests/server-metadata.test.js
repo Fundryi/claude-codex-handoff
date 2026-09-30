@@ -120,8 +120,14 @@ test("Claude transcript lines become feed events", () => {
 
   const text = events(asst({ type: "text", text: "Clean scope. Making the edits." }));
   assert.deepEqual(text[0], { kind: "agent", ts: base.timestamp, text: "Clean scope. Making the edits." });
-  // Usage rides every assistant line: context = input + cache creation + cache read.
-  assert.deepEqual(text[1], { kind: "meta", ts: base.timestamp, tokens: 2 + 59403 + 21837 });
+  // Usage rides every assistant line: context = input + cache creation + cache read. So do model and effort.
+  assert.deepEqual(text[1], { kind: "meta", ts: base.timestamp, tokens: 2 + 59403 + 21837, model: "claude-opus-5-5", effort: "" });
+  const withEffort = events({ ...asst({ type: "text", text: "x" }), effort: "high" }).find((e) => e.kind === "meta");
+  assert.equal(withEffort.model, "claude-opus-5-5");
+  assert.equal(withEffort.effort, "high");
+  // An API-error line is "<synthetic>": no model.
+  const synthetic = events({ ...base, type: "assistant", message: { model: "<synthetic>", content: [], usage: { input_tokens: 0 } } })[0];
+  assert.equal(synthetic.model, "");
 
   assert.deepEqual(events(asst({ type: "thinking", thinking: "", signature: "redacted" })).map((e) => e.kind), ["meta"]);
   assert.equal(events(asst({ type: "thinking", thinking: "Check the gate first." }))[0].kind, "think");
@@ -148,4 +154,18 @@ test("Claude transcript lines become feed events", () => {
   assert.deepEqual(events({ ...base, type: "attachment", attachment: { type: "hook_success", hookName: "SubagentStart" } }), []);
   assert.deepEqual(events("{broken"), []);
   assert.deepEqual(events("null"), []);
+});
+
+test("Claude transcript tail: the newest real assistant line gives model and effort", () => {
+  const last = (text, midFile) => ({ ...fn("claudeLastModel")(text, midFile) });
+  const line = (o) => JSON.stringify({ isSidechain: true, agentId: "a7beb7a64a116bddb", timestamp: "2026-09-30T17:42:08.361Z", ...o });
+  const asst = (model, effort) => line({ type: "assistant", effort, message: { model, role: "assistant", content: [{ type: "text", text: "x" }] } });
+  const result = line({ type: "user", message: { role: "user", content: [{ tool_use_id: "toolu_01A", type: "tool_result", content: "redacted" }] } });
+  const tail = [asst("claude-sonnet-5-5", "low"), asst("claude-opus-5-5", "high"), result, asst("<synthetic>", "high"), result].join("\n") + "\n";
+  assert.deepEqual(last(tail, false), { model: "claude-opus-5-5", effort: "high" });
+  // Read from mid-file: the cut first line is dropped, never parsed as the answer.
+  const cut = '","type":"assistant","message":{"model":"claude-haiku-4-5"}}\n' + result + "\n";
+  assert.deepEqual(last(cut, true), { model: "", effort: "" });
+  assert.deepEqual(last(asst("claude-fable-5-1") + "\n", false), { model: "claude-fable-5-1", effort: "" });
+  assert.deepEqual(last("", false), { model: "", effort: "" });
 });
