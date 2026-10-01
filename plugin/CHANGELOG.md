@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.20.0
+
+- **Claude limits stay current without /usage.** The plugin ships a status line script. Claude Code hands every status line your 5-hour and weekly limits after each reply. The script prints them at the bottom of the chat (for example "Opus 5.5 · 5h 2% · week 44%") and saves them to `~/.codex-companion/claude-limits.json`. The dashboard shows the newer of this file and the `/usage` snapshot. Numbers from the status line do not hide after one hour: they only grow while you use Claude, and a window whose reset passed shows "unknown". The per-model weekly limit (for example Fable) still comes only from `/usage`.
+- **You turn it on with one setting.** A plugin cannot set a status line, so add `"statusLine": { "type": "command", "command": "node \"<home>/.codex-companion/claude-statusline.mjs\"" }` to `~/.claude/settings.json`. The session hook copies the script to that path at each session start, so the path stays the same after plugin updates. The README section "Claude limits that stay current" has the steps. If you already have a status line, keep it: the dashboard then uses the `/usage` snapshot, as before.
+- **It is light.** One run takes about 50 ms, after a reply and never during one. It makes no network call and costs no tokens. The file is replaced on each run and stays about 150 bytes. A failed write leaves no temporary file.
+- **Where it works.** Confirmed in the terminal CLI. Not yet confirmed in the VS Code extension: it did not run in a VS Code chat that was open before the setting was added. Limits appear only for claude.ai Pro and Max plans.
+- **New tests:** the status line script keeps only the two documented windows and copies itself to a stable path (`tests/plugin-autostart.test.js`); the newer source wins and the per-model week keeps its own age (`tests/server-metadata.test.js`).
+
 ## 2.19.0
 
 - **One tree shows all work that a Claude chat starts.** The sidebar is now a tree, grouped by project. Each Claude chat is a root. Under it are its subagents, its workflow runs and its Codex handoffs. Each handoff sits under the exact agent that started it, also when a subagent or a workflow agent started it. Codex agents nest under their handoff at every level. Your own Codex CLI runs are roots of their own, with a "you" tag. A handoff whose chat is not on this PC sits under "Not on this PC". Finished children fold behind one "+ N finished" row.

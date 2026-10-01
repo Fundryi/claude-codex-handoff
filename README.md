@@ -111,7 +111,7 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 - a feed that shows who says what: your messages, Claude's handoff prompts and automatic answers, the plugin's return format, Codex's replies and questions, and Codex's work (thinking, commands, patches) in its own collapsed log, each actor in one color with a legend
 - a result card on every finished handoff (Summary, Changed files, Checks run, Needs decision) with an answer box that resumes the thread when Codex asked a question; "Show full result" opens the full result dialog and lists every run on the thread, newest first
 - a Claude chat opens with its live transcript (your prompts, Claude's replies and work); a Claude subagent or workflow agent opens in a side panel next to it; a workflow shows its phases and agents. Claude work uses the Claude orange, Codex work teal. The viewer only reads the files under `~/.claude/projects` and has no stop or resume buttons for Claude
-- token usage on every row and tree, split into Claude and Codex, and your plan limits at the bottom of the sidebar, as the part already used: the Codex limits read live every 5 minutes with the count of free limit resets you have, and the Claude 5-hour and weekly limits from the snapshot Claude Code saves when you open `/usage`
+- token usage on every row and tree, split into Claude and Codex, and your plan limits at the bottom of the sidebar, as the part already used: the Codex limits read live every 5 minutes with the count of free limit resets you have, and the Claude 5-hour and weekly limits, updated after each Claude reply when you turn on the plugin's status line (see "Claude limits that stay current" below), else from the snapshot Claude Code saves when you open `/usage`
 - one-click resume and cancel, with in-app confirmation
 - one job store shared with the CLI, so `/codex:status` and the dashboard always agree
 - search across all recorded sessions, effort/sandbox/token display, archived sessions, unread markers, saved layout
@@ -126,6 +126,24 @@ Patterns from daily use that make handoffs reliable:
 4. **Fix a return format.** Uniform returns (findings, diff, manifest, gate results) are reviewable at a glance. The plugin ends every task with Summary, Changed files, Checks run and Needs decision; your contract's sections come before those.
 5. **Match effort to the task, and round up.** `xhigh` for everything that involves judgment; `medium`/`high` fit verification runs like browser testing, where the checklist does the thinking. `--fast` only when you're actively waiting.
 6. **Let the dashboard carry the anxiety.** Kick off jobs, keep working, act when a badge asks you to.
+
+<details>
+<summary><b>Claude limits that stay current</b> (one setting)</summary>
+
+Claude Code saves its usage numbers only when you open `/usage`. To keep the dashboard's Claude 5-hour and weekly limits current, turn on the status line that the plugin ships. Claude Code hands every status line your limits after each reply. The script prints them at the bottom of the chat and saves them for the dashboard.
+
+A plugin cannot turn on a status line by itself, so add this to `~/.claude/settings.json` once (use your own home folder):
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "node \"C:/Users/<you>/.codex-companion/claude-statusline.mjs\""
+}
+```
+
+The plugin copies the script to `~/.codex-companion/claude-statusline.mjs` at each session start, so the path stays the same after plugin updates. One run takes about 50 ms after a reply and costs no tokens. Limits show only for claude.ai Pro and Max plans. Confirmed in the terminal CLI; not yet confirmed in the VS Code extension. If you already have a status line, keep yours: the dashboard then uses the `/usage` snapshot.
+
+</details>
 
 <details>
 <summary><b>Standalone dashboard</b> (no plugin needed)</summary>
