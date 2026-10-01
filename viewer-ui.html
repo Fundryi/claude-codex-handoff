@@ -514,7 +514,7 @@
     body.claude-tab .codex-only, body:not(.claude-tab) .claude-only { display: none !important; }
     body.chat-page .codex-only, body:not(.chat-page) .chat-only { display: none !important; }
     /* Live overview: the legend row carries a one-line note instead of the actor legend */
-    body.overview-page #legend > :not(.overview-only), body:not(.overview-page) .overview-only { display: none !important; }
+    body.overview-page #feed-toolbar { display: none !important; }
     /* Main body: the feed (a chat or a Codex task), or the workflow run view (#claude-overview, body.claude-tab)
        in the main pane; the side panel (#panel) on the right. The run view keeps the same content column as the feed. */
     #main-body { flex: 1; min-height: 0; display: flex; position: relative; overflow: hidden; container-type: inline-size; }
@@ -1219,8 +1219,6 @@
 
     <div id="feed-toolbar"><div class="inner">
       <div id="legend" role="note" aria-label="Who's who in the feed">
-        <span class="legend-title overview-only">Overview</span>
-        <span class="legend-note overview-only">Running first, then Needs you and Needs attention. Finished work is behind the button at the end.</span>
         <span class="legend-title">Who's who</span>
         <span class="legend-item actor-you codex-only" title="You: a message you typed, or your answer relayed through Claude or the answer box">You</span>
         <span class="legend-item actor-claude codex-only" title="Claude: a handoff prompt, or an answer Claude gave by itself">Claude</span>
@@ -2875,7 +2873,6 @@
       document.body.classList.toggle('claude-tab', page === 'workflow');
       document.body.classList.toggle('chat-page', page === 'chat' || page === 'ghost');
       document.body.classList.toggle('overview-page', page === 'overview');
-      document.getElementById('legend').setAttribute('aria-label', page === 'overview' ? 'About the overview' : "Who's who in the feed");
       document.body.classList.toggle('panel-open', !!prefs.panel || panelDocked());
       search.value = prefs.query || '';
       autoOpenToggle.classList.toggle('on', !!prefs.autoFollow);
@@ -3865,61 +3862,36 @@
     function renderUsage(node) {
       var cells = [];
       var now = Date.now();
-      if (!node) {
-        if (pageKind() !== 'overview') { usageBar.textContent = ''; usageBar.dataset.signature = ''; return; }
-        var live = liveUsage(currentModel(), now);
-        var liveCell = usageCell('Live 24 h', 'Every root in Live' + (live.partial ? '. A lower bound: some usage is unknown or over the read cap' : ''), live.partial);
-        liveCell.appendChild(bold(compactCount(live.claude + live.codex)));
-        treeParts(liveCell, live);
-        cells.push(liveCell);
-        var codex = newestCodexPlan();
-        if (codex) {
-          var codexCell = usageCell('Codex plan', 'Per Codex account, from the newest token_count event');
-          var csev = planSeverity('', codex.usedPercent);
-          codexCell.append(bold(Math.round(codex.usedPercent) + '%'), meterElement(codex.usedPercent, csev), textSpan('', resetText(codex.resetsAtMs, now)));
-          cells.push(codexCell);
-        }
-        var limits = claudeUsage ? claudeUsage.limits : [];
-        var five = limits.find(function (l) { return l.kind === 'session'; }), week = limits.find(function (l) { return l.kind === 'weekly_all'; });
-        if (five || week) {
-          var claudeCell = usageCell('Claude plan', 'Claude 5-hour window and 7-day window (the /usage snapshot)');
-          [[five, '5 h'], [week, 'week']].forEach(function (pair) {
-            if (!pair[0]) return;
-            claudeCell.append(bold(pair[0].percent + '%'), meterElement(pair[0].percent, planSeverity(pair[0].severity || 'normal', pair[0].percent)), textSpan('', pair[1]));
-          });
-          cells.push(claudeCell);
-        }
-      } else {
-        var usage = node.usage;
-        var context = node.kind === 'chat' ? usage && usage.context : node.row && node.row.session ? node.row.session.contextTokens : null;
-        var windowSize = node.row && node.row.session ? node.row.session.contextWindow : 0;
-        var ctx = usageCell('Context', 'Context in the newest message' + (windowSize ? ' of a ' + compactCount(windowSize) + ' window' : ''));
-        if (node.kind === 'ghost') ctx.appendChild(textSpan('unk', 'no chat file'));
-        else if (!context) ctx.appendChild(textSpan('unk', 'unknown'));
+      if (!node) { usageBar.textContent = ''; usageBar.dataset.signature = ''; return; } // the sidebar's usage block shows it
+      var usage = node.usage;
+      var context = node.kind === 'chat' ? usage && usage.context : node.row && node.row.session ? node.row.session.contextTokens : null;
+      var windowSize = node.row && node.row.session ? node.row.session.contextWindow : 0;
+      var ctx = usageCell('Context', 'Context in the newest message' + (windowSize ? ' of a ' + compactCount(windowSize) + ' window' : ''));
+      if (node.kind === 'ghost') ctx.appendChild(textSpan('unk', 'no chat file'));
+      else if (!context) ctx.appendChild(textSpan('unk', 'unknown'));
+      else {
+        ctx.appendChild(bold(compactCount(context)));
+        if (windowSize) ctx.append(textSpan('', '/ ' + compactCount(windowSize)), meterElement(100 * context / windowSize, ''), textSpan('', Math.round(100 * context / windowSize) + '%'));
+        else { var unk = textSpan('unk', 'window unknown'); unk.title = 'The window size is not on disk for Claude'; ctx.appendChild(unk); }
+      }
+      cells.push(ctx);
+      var total = usageCell('Total', 'Input (cached included) plus output, every call, this node only', usage && usage.partial && usage.total);
+      if (node.kind === 'ghost') total.appendChild(textSpan('unk', 'no chat file'));
+      else if (!usage || usage.total == null) total.appendChild(textSpan('unk', 'unknown'));
+      else if (usage.partial && !usage.total) total.appendChild(textSpan('unk', 'counting…'));
+      else {
+        total.appendChild(bold(compactCount(usage.total)));
+        if (usage.output) { var out = textSpan('', '↓ ' + compactCount(usage.output)); out.title = 'Output tokens'; total.appendChild(out); }
+      }
+      cells.push(total);
+      if (node.children.length) {
+        var tree = usageCell('Tree', 'This node plus every child' + (node.tree.partial ? '. A lower bound: some usage is unknown or over the read cap' : ''), node.tree.partial && node.tree.total);
+        if (node.tree.partial && !node.tree.total) tree.appendChild(textSpan('unk', 'counting…'));
         else {
-          ctx.appendChild(bold(compactCount(context)));
-          if (windowSize) ctx.append(textSpan('', '/ ' + compactCount(windowSize)), meterElement(100 * context / windowSize, ''), textSpan('', Math.round(100 * context / windowSize) + '%'));
-          else { var unk = textSpan('unk', 'window unknown'); unk.title = 'The window size is not on disk for Claude'; ctx.appendChild(unk); }
+          tree.appendChild(bold(compactCount(node.tree.total)));
+          treeParts(tree, node.tree);
         }
-        cells.push(ctx);
-        var total = usageCell('Total', 'Input (cached included) plus output, every call, this node only', usage && usage.partial && usage.total);
-        if (node.kind === 'ghost') total.appendChild(textSpan('unk', 'no chat file'));
-        else if (!usage || usage.total == null) total.appendChild(textSpan('unk', 'unknown'));
-        else if (usage.partial && !usage.total) total.appendChild(textSpan('unk', 'counting…'));
-        else {
-          total.appendChild(bold(compactCount(usage.total)));
-          if (usage.output) { var out = textSpan('', '↓ ' + compactCount(usage.output)); out.title = 'Output tokens'; total.appendChild(out); }
-        }
-        cells.push(total);
-        if (node.children.length) {
-          var tree = usageCell('Tree', 'This node plus every child' + (node.tree.partial ? '. A lower bound: some usage is unknown or over the read cap' : ''), node.tree.partial && node.tree.total);
-          if (node.tree.partial && !node.tree.total) tree.appendChild(textSpan('unk', 'counting…'));
-          else {
-            tree.appendChild(bold(compactCount(node.tree.total)));
-            treeParts(tree, node.tree);
-          }
-          cells.push(tree);
-        }
+        cells.push(tree);
       }
       var signature = cells.map(function (c) { return c.outerHTML; }).join('');
       if (usageBar.dataset.signature === signature) return;
@@ -4267,16 +4239,10 @@
       meta.className = 'row-meta';
       var lead = [nodeKindLabel(node)];
       if (node.fast) { var fast = textSpan('fl fast', 'fast'); fast.title = 'Fast mode: the priority service tier'; lead.push(fast); }
-      appendDotted(meta, lead.concat(nodeMetaParts(node), node.state === 'RUNNING' && node.tool ? [textSpan('mono', node.tool)] : []));
+      // The state word and the FAST tag already say the state on a card: only the plain flags join the meta line.
+      var flags = nodeFlagWords(node).filter(function (w) { return !w[2]; }).map(function (w) { var f = textSpan('fl', w[0]); f.title = w[1]; return f; });
+      appendDotted(meta, lead.concat(nodeMetaParts(node), flags, node.state === 'RUNNING' && node.tool ? [textSpan('mono', node.tool)] : []));
       el.append(head, meta);
-      // The pill and the FAST tag already say the state on a card: only the plain flags show here.
-      var flags = nodeFlagWords(node).filter(function (w) { return !w[2]; });
-      if (flags.length) {
-        var line = document.createElement('div');
-        line.className = 'row-flags';
-        flags.forEach(function (w) { var f = textSpan('flag', w[0]); f.title = w[1]; line.appendChild(f); });
-        el.appendChild(line);
-      }
       if (node.kind === 'workflow' && node.run && node.run.phases) {
         el.appendChild(textDiv('row-meta', node.run.phases.map(function (p) { return p.title + ' ' + p.done + '/' + p.started; }).join(' · ')));
       }
@@ -4914,22 +4880,6 @@
         line.appendChild(claudeMetaItem(compactCount(run.totals.tokens) + ' tokens · ' + (run.totals.toolCalls || 0).toLocaleString() + ' tool calls', 'From the finish record'));
       }
       box.append(line, claudeBar(c.done || 0, c.failed || 0, c.started || 0));
-      var running = (run.agents || []).filter(function (agent) { return agent.state === 'running'; });
-      if (running.length) {
-        var row = document.createElement('div');
-        row.className = 'claude-running';
-        row.appendChild(textSpan('', 'Running now:'));
-        running.forEach(function (agent) {
-          var button = document.createElement('button');
-          button.type = 'button';
-          button.dataset.key = 'running:' + agent.id; // focus survives the live rebuild
-          button.textContent = agent.label || agent.id;
-          button.title = 'Open the transcript of ' + (agent.label || agent.id) + (agent.tool ? '\nRunning now: ' + agent.tool : '');
-          button.addEventListener('click', function () { openClaudeAgent(agent.id); });
-          row.appendChild(button);
-        });
-        box.appendChild(row);
-      }
       return box;
     }
 
