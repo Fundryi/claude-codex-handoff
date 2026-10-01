@@ -418,3 +418,98 @@ test("dismissed ids: sessions and job-only rows stay while they exist; job ids w
   assert.deepEqual(plain(keptDismissed(["s1", "gone", "job:j1", "job:old"], sessions, jobs, true)), ["s1", "job:j1"]);
   assert.deepEqual(plain(keptDismissed(["s1", "gone", "job:j1", "job:old"], sessions, [], false)), ["s1", "job:j1", "job:old"], "jobs not loaded yet: keep every job id");
 });
+
+// The unified tree (design 13.2.1): one chat with a subagent, a workflow agent and handoffs; a ghost; your
+// own Codex run; a Codex agent two levels down. Shapes as the claudeChats/claudeRuns frames send them.
+test("buildNodes joins chats, runs, handoffs and Codex agents into one tree, every node with a visible parent", () => {
+  const { buildRows, buildNodes } = ctx();
+  const now = Date.now();
+  const sid = "0b1c2d3e-0000-4000-8000-000000000001";
+  const ghostId = "7f3a9c2e-0000-4000-8000-000000000009";
+  const iso = new Date(now).toISOString();
+  const sessions = [
+    { id: "s-h1", threadId: "T1", originator: "Claude Code", status: "LIVE", lastGrow: now, tokensUsed: 1000 },
+    { id: "s-h2", threadId: "T2", originator: "Claude Code", status: "DONE", lastGrow: now, tokensUsed: 500 },
+    { id: "s-ca", threadId: "T3", parentThreadId: "T1", status: "LIVE", lastGrow: now, tokensUsed: 200 },
+    { id: "s-ca2", threadId: "T4", parentThreadId: "T3", status: "DONE", lastGrow: now, tokensUsed: 50 },
+    { id: "s-you", threadId: "T5", originator: "codex_cli_rs", status: "DONE", lastGrow: now, tokensUsed: 70 },
+    { id: "s-gh", threadId: "T6", originator: "Claude Code", status: "DONE", lastGrow: now },
+  ];
+  const jobs = [
+    { id: "task-a", threadId: "T1", sessionId: sid, status: "running", createdAt: iso, updatedAt: iso },
+    { id: "task-b", threadId: "T2", sessionId: sid, status: "completed", createdAt: iso, updatedAt: iso },
+    { id: "task-c", threadId: "T6", sessionId: ghostId, status: "completed", updatedAt: iso },
+  ];
+  const frame = {
+    chats: [{
+      id: "chat:" + sid, sessionId: sid, title: "Fix the release flow", project: "repo", cwd: "D:/x/repo", state: "running", updatedMs: now,
+      usage: { context: 1, total: 4000, output: 10, partial: false }, claudeTree: { total: 9000, output: 0, partial: false }, childrenHidden: 3,
+      children: [
+        { kind: "agent", id: "agent:a1", parentId: "chat:" + sid, label: "Review the hook", agentType: "general-purpose", background: true, state: "running", usage: { total: 300 }, startedMs: 1 },
+        { kind: "workflow", id: "workflow:" + sid + "/wf_x", runId: "wf_x", parentId: "chat:" + sid, label: "scope", state: "running", usage: { total: 600 }, startedMs: 2 },
+        { kind: "handoff", id: "handoff:T1", parentId: "agent:a1", threadId: "T1", jobIds: ["task-a"], exact: true, startedMs: 3 },
+        { kind: "handoff", id: "handoff:T2", parentId: "wfagent:" + sid + "/wf_x/a2", threadId: "T2", jobIds: ["task-b", "task-z"], exact: false, startedMs: 4 },
+      ],
+    }],
+    ghosts: [{ id: "ghost:" + ghostId, sessionId: ghostId, updatedMs: now, children: [{ kind: "handoff", id: "handoff:T6", threadId: "T6", jobIds: ["task-c"] }] }],
+  };
+  const runs = [{ id: "wf_x", sessionId: sid, status: "RUNNING", agents: [{ id: "a2", label: "scout", phase: "Scout", state: "done", usage: { total: 600 } }] }];
+  const { nodes, roots } = buildNodes(frame, runs, buildRows(sessions, jobs), jobs, now);
+  const parent = (id) => nodes[id].parentId;
+  assert.equal(parent("agent:a1"), "chat:" + sid);
+  assert.equal(parent("handoff:T1"), "agent:a1", "a subagent's handoff hangs under the subagent");
+  assert.equal(parent("handoff:T2"), "wfagent:" + sid + "/wf_x/a2", "a workflow agent's handoff hangs under that agent");
+  assert.equal(parent("codexagent:s-ca"), "handoff:T1");
+  assert.equal(parent("codexagent:s-ca2"), "codexagent:s-ca", "a Codex grandchild nests, never a root of its own");
+  assert.equal(parent("handoff:T6"), "ghost:" + ghostId);
+  assert.deepEqual(plain(roots).sort(), ["chat:" + sid, "codex:s-you", "ghost:" + ghostId].sort());
+  assert.deepEqual(plain(nodes["handoff:T2"].flags), ["agent not known", "2 runs"]);
+  assert.deepEqual(plain(nodes["agent:a1"].flags), ["background"]);
+  // Roll-up: the chat runs. Usage: the server's Claude total for the chat, plus the Codex part of the tree.
+  assert.equal(nodes["chat:" + sid].rollup, "RUNNING");
+  assert.equal(nodes["chat:" + sid].tree.claude, 9000);
+  assert.equal(nodes["chat:" + sid].tree.codex, 1000 + 500 + 200 + 50);
+  assert.equal(nodes["chat:" + sid].tree.partial, true, "3 children were not sent: a lower bound");
+  // No loose node: every node reaches a root through parents that exist.
+  Object.keys(nodes).forEach((id) => {
+    let n = nodes[id];
+    for (let guard = 0; n.parentId && guard < 10; guard++) { assert.ok(nodes[n.parentId], id + " has a missing parent " + n.parentId); n = nodes[n.parentId]; }
+    assert.ok(roots.includes(n.id), id + " ends at a root");
+  });
+});
+
+test("a handoff of a tracked chat that the frame did not send stays out of the roots", () => {
+  const { buildRows, buildNodes } = ctx();
+  const now = Date.now();
+  const sid = "0b1c2d3e-0000-4000-8000-000000000001";
+  const sessions = [{ id: "s-old", threadId: "T9", originator: "Claude Code", status: "DONE", lastGrow: now }];
+  const jobs = [{ id: "task-old", threadId: "T9", sessionId: sid, status: "completed", updatedAt: new Date(now).toISOString() }];
+  const frame = { chats: [{ id: "chat:" + sid, sessionId: sid, title: "t", state: "done", updatedMs: now, children: [], childrenHidden: 1 }], ghosts: [] };
+  const { roots } = buildNodes(frame, [], buildRows(sessions, jobs), jobs, now);
+  assert.deepEqual(plain(roots), ["chat:" + sid]);
+});
+
+test("worstState, the Live window and saved views from before the redesign", () => {
+  const { worstState, liveRoot, nodeSavedView, nodeIdFor } = ctx();
+  assert.equal(worstState("FINISHED", "RUNNING"), "RUNNING");
+  assert.equal(worstState("ANSWER", "ATTENTION"), "ANSWER");
+  assert.equal(worstState("", "ENDED"), "ENDED");
+  const now = Date.now();
+  assert.equal(liveRoot({ state: "FINISHED", rollup: "FINISHED", updatedMs: now - 3600e3 }, now, []), true);
+  assert.equal(liveRoot({ state: "FINISHED", rollup: "FINISHED", updatedMs: now - 30 * 3600e3 }, now, []), false, "old and done: History");
+  assert.equal(liveRoot({ state: "ANSWER", rollup: "ANSWER", updatedMs: now - 90 * 3600e3 }, now, []), true, "an old question still shows");
+  assert.equal(liveRoot({ state: "RUNNING", rollup: "RUNNING", updatedMs: now, row: { id: "s1" } }, now, ["s1"]), false, "dismissed");
+  // Design 4.3: Now -> Live; Handoffs -> Live + Codex; Claude -> Live + Claude; History unchanged.
+  const v = (p) => plain(nodeSavedView(p));
+  assert.deepEqual(v({ tab: "NOW", chip: "ANSWER" }), { tab: "LIVE", chip: "ANSWER", kinds: { claude: false, codex: false } });
+  assert.deepEqual(v({ tab: "HANDOFFS", chip: "FINISHED" }), { tab: "LIVE", chip: "FINISHED", kinds: { claude: false, codex: true } });
+  assert.deepEqual(v({ tab: "CLAUDE", chip: "RUNNING" }), { tab: "LIVE", chip: "RUNNING", kinds: { claude: true, codex: false } });
+  assert.deepEqual(v({ tab: "HISTORY", chip: "ARCHIVED" }), { tab: "HISTORY", chip: "ARCHIVED", kinds: { claude: false, codex: false } });
+  assert.deepEqual(v({ tab: "LIVE", chip: "STOPPED", kinds: { codex: true } }), { tab: "LIVE", chip: "STOPPED", kinds: { claude: false, codex: true } });
+  assert.deepEqual(v({ filter: "STALE" }), { tab: "LIVE", chip: "ATTENTION", kinds: { claude: false, codex: false } });
+  // A saved Codex row id or Claude run maps to its node; a missing one gives null (the overview shows).
+  const model = { nodes: { "handoff:T1": { row: { id: "s-h1" } }, "workflow:s/wf_x": { kind: "workflow", runId: "wf_x" } }, roots: [] };
+  assert.equal(nodeIdFor(model, { selected: "s-h1" }), "handoff:T1");
+  assert.equal(nodeIdFor(model, { claudeRun: "wf_x" }), "workflow:s/wf_x");
+  assert.equal(nodeIdFor(model, { selected: "gone" }), null);
+});

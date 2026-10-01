@@ -11,12 +11,13 @@ const navigationFunctions = script.match(
   /function chooseView[\s\S]*?(?=\n    function renderList)/,
 )[0];
 
-// sessions/jobs are live arrays: tests mutate them to simulate SSE updates.
+// sessions/jobs are live arrays: tests mutate them to simulate SSE updates. The tree is built from them
+// (no Claude chats), so a Codex session is a node "codex:<id>" (or "codexagent:<id>" under its lead).
 function navigation(overrides = {}) {
   const context = {
-    prefs: { tab: "NOW", chip: "ALL", autoFollow: true, dismissed: [] },
+    prefs: { tab: "LIVE", chip: "ALL", kinds: {}, autoFollow: true, dismissed: [], node: "codex:selected" },
     selected: "selected",
-    sessions: [{ id: "selected", threadId: "t-sel", status: "LIVE" }],
+    sessions: [{ id: "selected", threadId: "t-sel", status: "LIVE", lastGrow: Date.now() }],
     jobs: [],
     savePrefs() {},
     applyPrefs() {},
@@ -24,142 +25,116 @@ function navigation(overrides = {}) {
     renderList() {},
     renderHeader() {},
     renderFeed() {},
-    syncClaudePoll() {},
-    refreshJobs() { context.refreshed = (context.refreshed || 0) + 1; },
-    selectSession(id) { context.selected = id; },
+    selectSession(id) { context.selected = id; context.prefs.node = "codex:" + id; },
     ...overrides,
   };
   context.currentRows = () => context.buildRows(context.sessions, context.jobs);
+  context.currentModel = () => context.buildNodes({ chats: [], ghosts: [] }, [], context.currentRows(), context.jobs, Date.now());
+  // As in the page code: the open node decides the page kind.
+  context.pageKind = () => {
+    if (context.prefs.home || !context.prefs.node) return "overview";
+    const kind = String(context.prefs.node).split(":")[0];
+    if (kind === "handoff" || kind === "codex" || kind === "codexagent") return "codex";
+    return ["chat", "workflow", "ghost"].includes(kind) ? kind : "overview";
+  };
+  context.pageNode = () => context.currentModel().nodes[context.prefs.node] || null;
   vm.runInNewContext(pureHelpers + "\n" + navigationFunctions, context);
   return context;
 }
 const view = (context) => [context.prefs.tab, context.prefs.chip];
 
-test("picking a tab or chip pauses automatic following and closes the Now overview", () => {
+test("picking a tab or chip pauses automatic following and closes the overview", () => {
   const context = navigation();
   context.prefs.home = true;
-
   context.chooseView("HISTORY", "FINISHED");
   assert.deepEqual(view(context), ["HISTORY", "FINISHED"]);
   assert.equal(context.prefs.autoFollow, false);
   assert.equal(context.prefs.home, false);
-  assert.equal(context.refreshed, undefined);
-
-  context.chooseView("HANDOFFS", "ALL");
-  assert.equal(context.refreshed, 1, "Handoffs pulls fresh job state");
 });
 
-test("the chip only follows an actual selected-task status change, so the row stays visible", () => {
+test("the chip widens only when the open node's status change takes its root out of the view", () => {
   const context = navigation();
-  context.prefs.tab = "HISTORY";
-  context.prefs.chip = "FINISHED";
-
+  context.prefs.chip = "RUNNING";
   // No status change: an explicit choice is never overridden.
   context.followSelectedStatus("RUNNING");
-  assert.deepEqual(view(context), ["HISTORY", "FINISHED"]);
-
-  // Running -> Waiting while Now/Running is open: same tab, new chip.
-  context.prefs.tab = "NOW";
-  context.prefs.chip = "RUNNING";
+  assert.deepEqual(view(context), ["LIVE", "RUNNING"]);
+  // Running -> Waiting while Live/Running is open: the root leaves Running, so the chip widens to All.
   context.sessions[0].status = "IDLE";
   context.followSelectedStatus("RUNNING");
-  assert.deepEqual(view(context), ["NOW", "WAITING"]);
-
-  // Waiting -> Finished: Now has no Finished chip, so History/Finished (old DONE filter).
-  context.sessions[0].status = "DONE";
-  context.followSelectedStatus("WAITING");
-  assert.deepEqual(view(context), ["HISTORY", "FINISHED"]);
-
-  // A handoff that finishes while Handoffs/Running is open stays in Handoffs.
-  context.prefs.tab = "HANDOFFS";
-  context.prefs.chip = "RUNNING";
-  context.jobs.push({ id: "j", threadId: "t-sel", live: "completed" });
-  context.followSelectedStatus("RUNNING");
-  assert.deepEqual(view(context), ["HANDOFFS", "FINISHED"]);
-
+  assert.deepEqual(view(context), ["LIVE", "ALL"]);
   // Still visible after the change: no move.
-  context.prefs.tab = "NOW";
-  context.prefs.chip = "ALL";
-  context.jobs[0].live = "dead";
+  context.prefs.chip = "WAITING";
+  context.followSelectedStatus("RUNNING");
+  assert.deepEqual(view(context), ["LIVE", "WAITING"]);
+  // History: a finished session stopped while History/Finished is open widens to Everything.
+  context.prefs.tab = "HISTORY";
+  context.prefs.chip = "FINISHED";
+  context.sessions[0].status = "STOPPED";
   context.followSelectedStatus("FINISHED");
-  assert.deepEqual(view(context), ["NOW", "ALL"]);
+  assert.deepEqual(view(context), ["HISTORY", "EVERYTHING"]);
 });
 
-test("Everything stays Everything and Handoffs/All stays put when the selected task changes", () => {
+test("Everything stays Everything when the open node changes", () => {
   const context = navigation();
   context.prefs.tab = "HISTORY";
   context.prefs.chip = "EVERYTHING";
   context.sessions[0].status = "DONE";
   context.followSelectedStatus("RUNNING");
   assert.deepEqual(view(context), ["HISTORY", "EVERYTHING"]);
-
-  // A session without a handoff never shows in Handoffs; like the old Jobs filter, it stays.
-  context.prefs.tab = "HANDOFFS";
-  context.prefs.chip = "ALL";
-  context.sessions[0].status = "IDLE";
-  context.followSelectedStatus("FINISHED");
-  assert.deepEqual(view(context), ["HANDOFFS", "ALL"]);
 });
 
-test("a selected child agent follows the view of its lead row", () => {
+test("an open Codex child agent follows the view of its root", () => {
+  const now = Date.now();
   const context = navigation({
     selected: "kid",
     sessions: [
-      { id: "lead", threadId: "L", status: "DONE", lastGrow: 2 },
-      { id: "kid", threadId: "K", parentThreadId: "L", status: "LIVE", lastGrow: 1 },
+      { id: "lead", threadId: "L", status: "DONE", lastGrow: now - 2 },
+      { id: "kid", threadId: "K", parentThreadId: "L", status: "LIVE", lastGrow: now - 1 },
     ],
   });
+  context.prefs.node = "codexagent:kid";
   context.prefs.chip = "RUNNING";
+  // While the child runs, its root is in Live/Running through the roll-up.
+  context.followSelectedStatus("WAITING");
+  assert.deepEqual(view(context), ["LIVE", "RUNNING"]);
+  context.sessions[1].status = "DONE";
   context.followSelectedStatus("RUNNING");
-  assert.deepEqual(view(context), ["HISTORY", "FINISHED"], "the lead row is what the list draws");
+  assert.deepEqual(view(context), ["LIVE", "ALL"], "the root is what the tree draws");
 });
 
-test("Follow newest keeps a thread resumed after its handoff finished in the running view", () => {
-  // codex resume <thread> after the handoff completed: live session, newest job completed.
-  const resumed = { id: "resumed", threadId: "t-res", status: "LIVE" };
-  const context = navigation({ jobs: [{ id: "j", threadId: "t-res", live: "completed" }] });
-  context.sessions.push(resumed);
-  context.followRunningSession(resumed);
-  assert.deepEqual(view(context), ["NOW", "ALL"], "visible in Now/All: no jump to History/Finished");
-  assert.equal(context.selected, "resumed");
-
-  context.prefs.tab = "HISTORY";
-  context.prefs.chip = "FINISHED";
-  context.selected = "selected";
-  context.followRunningSession(resumed);
-  assert.deepEqual(view(context), ["NOW", "RUNNING"]);
-});
-
-test("Follow newest deliberately returns to the running view", () => {
-  const running = { id: "running", threadId: "t-run", status: "LIVE" };
+test("Auto-open follows a running Codex task, never away from an open Claude page or panel", () => {
+  const running = { id: "running", threadId: "t-run", status: "LIVE", lastGrow: Date.now() };
   const context = navigation();
   context.sessions.push(running);
-  context.prefs.tab = "HISTORY";
-  context.prefs.chip = "FINISHED";
   context.prefs.autoFollow = false;
-
   context.followRunningSession(running);
-  assert.deepEqual(view(context), ["HISTORY", "FINISHED"]);
-  assert.equal(context.selected, "selected");
+  assert.equal(context.selected, "selected", "Auto-open off: nothing moves");
 
   context.prefs.autoFollow = true;
   context.followRunningSession(running);
-  assert.deepEqual(view(context), ["NOW", "RUNNING"]);
   assert.equal(context.selected, "running");
 
-  // Already visible in the current view: the view stays.
-  context.prefs.tab = "NOW";
-  context.prefs.chip = "ALL";
-  context.selected = "selected";
+  // From the overview too (no node open).
+  context.prefs.node = null;
+  context.selected = null;
   context.followRunningSession(running);
-  assert.deepEqual(view(context), ["NOW", "ALL"]);
   assert.equal(context.selected, "running");
+
+  // An open Claude chat or an open side panel keeps its place.
+  context.prefs.node = "chat:0b1c2d3e-0000-4000-8000-000000000001";
+  context.selected = null;
+  context.followRunningSession(running);
+  assert.equal(context.selected, null);
+  context.prefs.node = "codex:selected";
+  context.prefs.panel = "agent:a0123456789abcdef";
+  context.followRunningSession(running);
+  assert.equal(context.selected, null);
 });
 
-test("turning Auto-open on from the Now overview leaves it and opens the running task", () => {
+test("turning Auto-open on from the overview leaves it and opens the running task", () => {
   // The toggle only shows on the overview (prefs.home), where followRunningSession stands down.
-  const running = { id: "running", threadId: "t-run", status: "LIVE" };
-  const context = navigation({ sessions: [{ id: "selected", threadId: "t-sel", status: "IDLE" }, running] });
+  const running = { id: "running", threadId: "t-run", status: "LIVE", lastGrow: Date.now() };
+  const context = navigation({ sessions: [{ id: "selected", threadId: "t-sel", status: "IDLE", lastGrow: Date.now() }, running] });
   context.prefs.home = true;
   context.prefs.autoFollow = false;
 
