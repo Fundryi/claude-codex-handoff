@@ -987,7 +987,9 @@ function claudeRunView(run) {
   const all = [...run.agents.values()].map((a) => {
     const s = run.snapAgents.get(a.id); // labels outlive a stale snapshot (a resumed legacy run has no others)
     const state = claudeAgentState(run, a);
+    const r = claudeWfReaders.get(run.sessionId + "/" + run.id + "/" + a.id); // the chat tree's reader: usage totals
     return {
+      usage: r ? { total: r.usage.total, output: r.usage.output, partial: !r.scanDone || r.capped } : null,
       id: a.id, order: a.order, label: a.label || a.metaLabel || (s && s.label) || a.id,
       phase: a.phase || a.metaPhase || (s && s.phase) || "phase unknown", state,
       lastWriteMs: Math.floor(a.lastWriteMs || (s && s.lastMs) || 0), tool: state === "running" ? a.toolName : "", contextTokens: a.contextTokens,
