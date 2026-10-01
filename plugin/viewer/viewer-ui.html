@@ -14,9 +14,9 @@
       --bg: #0d0f14;               /* page, gaps between panels, code blocks */
       --panel: #15181f;            /* main pane, feed, cards */
       --panel-2: #1c202b;          /* sidebar, header, toolbar, buttons */
-      --panel-3: #222736;          /* nested fills: usage cells, chip fills, inline code */
+      --panel-3: #313747;          /* nested fills: the active chip, inline code (reference "All 17" chip) */
       --hover: #242a3a;
-      --selected: #2c2748;         /* selected row band */
+      --selected: #41386f;         /* selected row band (reference) */
       --selected-bar: #b693f4;     /* selected row left bar */
       --border: #2c3142;           /* panels, cards, inputs */
       --border-strong: #3a4054;    /* chips, buttons */
@@ -49,12 +49,16 @@
       --meter-track: #2c3142;
       --meter-fill: #8087a8;       /* neutral. Status colors only on a plan meter near its limit */
       /* geometry */
+      --r-panel: 10px;             /* the three cards (sidebar, main, side panel), dialogs */
+      --r-btn: 8px;                /* buttons, inputs, cards, code blocks */
+      --r-chip: 6px;               /* chips, pills, selected rows, usage cells */
+      --gutter: 8px;               /* the backdrop gap around and between the cards */
       --sidebar-width: 340px;      /* 400px from 2200 px viewport width */
       --indent: 18px;              /* one tree level (levels 1 to 4) */
       --indent-deep: 10px;         /* one tree level from level 5 on */
       --rail-x: 12px;              /* level 1 rail, from the row's padding edge */
       --content-max: 1360px;       /* feed and header column on wide screens */
-      --main-w: calc(100vw - var(--sidebar-width));                 /* width of the main pane */
+      --main-w: calc(100vw - var(--sidebar-width) - 3 * var(--gutter)); /* width of the main pane (gutters off) */
       --panel-w: clamp(320px, calc(var(--main-w) * .46), 760px);    /* side panel: an agent transcript */
       font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
       font-size: 13px;
@@ -66,8 +70,10 @@
 
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; }
+    /* Three rounded cards on the backdrop (reference): the sidebar, the main pane and the side panel, with a gutter between. */
     body {
       margin: 0;
+      padding: var(--gutter);
       background: var(--bg);
       color: var(--fg);
       display: flex;
@@ -76,6 +82,7 @@
       font-size: 13px;
       line-height: 1.45;
     }
+    .pane { border: 1px solid var(--border); border-radius: var(--r-panel); overflow: hidden; }
     button, input, select, textarea { font: inherit; }
     button { color: inherit; }
     button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [role="separator"]:focus-visible {
@@ -85,9 +92,9 @@
     .icon-button {
       width: 32px;
       height: 32px;
-      border: 1px solid var(--border-strong);
-      border-radius: 7px;
-      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
+      background: transparent;
       color: var(--muted);
       cursor: pointer;
       display: inline-grid;
@@ -109,9 +116,7 @@
       background: var(--panel-2);
       display: flex;
       flex-direction: column;
-      overflow: hidden;
       flex: none;
-      border-right: 1px solid var(--border);
     }
     body.side-collapsed #side { display: none; }
     #brand {
@@ -151,9 +156,9 @@
       width: 100%;
       height: 32px;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: var(--r-btn);
       color: var(--fg);
-      background: var(--bg);
+      background: var(--panel);
       padding: 0 10px;
       font-size: 13px;
     }
@@ -166,7 +171,7 @@
       height: 28px;
       border: 0;
       border-bottom: 2px solid transparent;
-      border-radius: 6px 6px 0 0;
+      border-radius: var(--r-chip) var(--r-chip) 0 0;
       background: transparent;
       color: var(--muted);
       cursor: pointer;
@@ -187,8 +192,10 @@
     .tab-button .count { margin-left: 0; color: var(--faint); opacity: 1; }
     /* A narrow sidebar drops the tab counts so the tab names stay whole (the chips keep theirs). */
     @container (max-width: 300px) { .tab-button .count { display: none; } }
+    /* The chip row is one compact line (reference "All 17 · Working 2 · Error 0 · Done 12 · Idle 3"): plain words with a
+       dot and an inline count, the active one on a small filled block. It scrolls sideways when the sidebar is narrow. */
     #chips-wrap { position: relative; }
-    #chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    #chips { display: flex; flex-wrap: wrap; gap: 1px 0; margin-top: 6px; padding: 2px 0; }
     /* phone: the chip row scrolls sideways; a fade at the edge that still has more shows it (chipEdges toggles the classes) */
     #chips-wrap::before, #chips-wrap::after { content: ''; position: absolute; top: 0; bottom: 0; width: 36px; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 1; }
     #chips-wrap::before { left: 0; background: linear-gradient(to right, var(--panel-2), transparent); }
@@ -197,17 +204,19 @@
     .chip-button {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      height: 24px;
-      border: 1px solid var(--border-strong);
-      border-radius: 999px;
-      padding: 0 8px;
+      gap: 5px;
+      height: 22px;
+      border: 0;
+      border-radius: var(--r-chip);
+      padding: 0 6px;
       background: transparent;
       color: var(--muted);
       cursor: pointer;
       font-size: 11px;
       white-space: nowrap;
+      flex: none;
     }
+    .chip-button.zero { opacity: .45; } /* a chip with nothing in it is dim, like the reference "Error 0" */
     .tab-button, .chip-button, .toolbar-button {
       transition: color .14s ease, background-color .14s ease, border-color .14s ease;
     }
@@ -235,13 +244,14 @@
     .chip-button[data-chip="FINISHED"] { --c: var(--green); }
     .chip-button[data-chip="STOPPED"], .chip-button[data-chip="ARCHIVED"], .chip-button[data-chip="DISMISSED"] { --c: var(--gray); }
     .chip-button:hover { background: var(--hover); color: var(--fg); }
-    .chip-button.on { background: var(--panel-3); color: var(--fg); border-color: var(--border-strong); }
-    .chip-button .count { color: var(--faint); opacity: 1; }
+    .chip-button.on { background: var(--panel-3); color: var(--fg); opacity: 1; }
+    .chip-button .count { color: var(--muted); opacity: 1; margin-left: 0; }
+    .chip-button.on .count { color: var(--tree-text); }
     /* kind chips (Claude, Codex): an SVG glyph instead of the dot; the two wrap as one unit */
     .chip-button.kind::before { display: none; }
     .chip-button.kind .k { display: inline-grid; place-items: center; width: 12px; height: 12px; }
     .chip-button.kind .k svg { width: 11px; height: 11px; }
-    .chip-kinds { display: inline-flex; align-items: center; gap: 6px; flex: none; margin-left: 2px; }
+    .chip-kinds { display: inline-flex; align-items: center; gap: 2px; flex: none; margin-left: 4px; padding-left: 6px; border-left: 1px solid var(--border); }
     #open-elsewhere {
       display: flex;
       align-items: center;
@@ -265,8 +275,9 @@
     #list-wrap::after { bottom: 0; background: linear-gradient(to top, var(--panel-2), transparent); }
     #list-wrap.more-above::before, #list-wrap.more-below::after { opacity: 1; }
     /* ---- tree rows (unified view): one root row, child rows on rails, fold and cap rows, project groups ---- */
-    .group { --pc: var(--tree); --rail: color-mix(in srgb, var(--pc) 55%, transparent); background: color-mix(in srgb, var(--pc) 6%, var(--panel-2)); border-bottom: 1px solid var(--border); }
-    .group-caption { width: 100%; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; background: transparent; border: 0; cursor: pointer; color: var(--pc, var(--tree)); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: left; }
+    .group { --pc: var(--tree); --rail: color-mix(in srgb, var(--pc) 55%, transparent); background: color-mix(in srgb, var(--pc) 5%, var(--panel-2)); border-bottom: 1px solid var(--border); }
+    .group:last-child { border-bottom: 0; }
+    .group-caption { width: 100%; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px 0 14px; background: transparent; border: 0; cursor: pointer; color: var(--pc, var(--tree)); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: left; }
     .group-caption .caret { color: var(--faint); width: 10px; font-size: 9px; flex: none; }
     .group-caption .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     .group-caption .n, .group-caption .use { flex: none; }
@@ -278,6 +289,7 @@
     /* narrow sidebar (under 300 px): drop the words that repeat a nearby fact */
     @container (max-width: 299px) {
       .row.root .src, .row-sum .rollup i, .row-sum .use { display: none; } /* the tree total stays on the group caption */
+      .row.child.fin .state-word, .row.child.fin .row-use { display: none; } /* the dot says done; the tokens stay in the tooltip */
       .row.root .kind-label { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
       .plan-row { grid-template-columns: 16px minmax(0, 1fr) 40px 34px; }
       .plan-row .pl-reset { display: none; }
@@ -285,34 +297,53 @@
       .plans-head .caret { display: inline; }
       #plans.open .plan-row .pl-reset { font-size: 10px; line-height: 14px; margin-top: -3px; }
     }
-    /* rows: shared bits */
-    .row { width: 100%; text-align: left; border: 0; border-left: 3px solid transparent; background: transparent; cursor: pointer; position: relative; color: var(--fg); transition: background-color .14s ease, border-color .14s ease; }
+    /* rows: shared bits. A row is a rounded band inset 4 px from the sidebar edges (reference: the selected row is a
+       rounded violet band with a bar on its left). */
+    .row { width: calc(100% - 8px); margin: 0 4px; text-align: left; border: 0; border-left: 3px solid transparent; border-radius: var(--r-chip); background: transparent; cursor: pointer; position: relative; color: var(--fg); transition: background-color .14s ease, border-color .14s ease; }
     .row:hover { background: var(--hover); }
     .row.selected { background: var(--selected); border-left-color: var(--selected-bar); }
-    .row-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .row-title { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .row.selected .row-title { font-weight: 600; }
     .row-meta { color: var(--muted); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     .row-meta b { color: var(--fg); font-weight: 600; }
     .row-meta .fl { color: var(--muted); }
     .row-meta .fl.ask { color: var(--amber); font-weight: 600; }
-    .row-meta .fl.fast { color: var(--yellow); font-weight: 600; }
+    .row-meta .fl.fast { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: .05em; }
+    .row-meta .kind-label { height: auto; font-size: 10.5px; font-weight: 600; }
     .row-sum .flag { margin-left: 2px; }
-    .row-time { color: var(--muted); font-size: 10.5px; white-space: nowrap; text-align: right; }
-    /* root row: line 1 (pill, kind, source, unread, time), title, meta, roll-up */
-    .row.root { display: block; padding: 8px 10px 7px 10px; border-top: 1px solid var(--border-soft); }
-    .row-top { display: flex; align-items: center; gap: 6px; min-width: 0; height: 18px; }
+    .row-time { color: var(--muted); font-size: 10.5px; white-space: nowrap; text-align: right; flex: none; }
+    /* on the selected band the dim text lifts so it keeps its contrast on the violet */
+    .row.selected .row-meta, .row.selected .row-time, .row.selected .row-sum, .row.selected .row-meta .fl { color: #c9cbe0; }
+    /* root row: two lines. Line 1: state mark, kind mark, title, state word, time. Line 2: the kind word and the meta
+       on the left, the quiet roll-up (kind counts, tree total) on the right. */
+    .row.root { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 1px; padding: 6px 10px 6px 7px; margin-top: 1px; }
+    .row-top { display: flex; align-items: center; gap: 6px; min-width: 0; height: 20px; grid-column: 1 / -1; }
+    .row-top .row-title { flex: 1; font-size: 12.5px; }
+    .row-top .state-word { margin-left: auto; }
+    .row-top .state-word + .row-time { margin-left: 0; }
     .row-top .row-time { margin-left: auto; }
-    .row.root .row-title { margin-top: 3px; }
-    .row-sum { display: flex; align-items: center; gap: 8px; margin-top: 3px; height: 18px; font-size: 10.5px; color: var(--muted); }
-    .row-sum .cnt { display: inline-flex; align-items: center; gap: 4px; }
-    .row-sum .use { margin-left: auto; }
-    /* child row: a grid. Columns: state box, mark box, title, time. Line 2 starts under the title.
+    .row.root .row-meta { grid-column: 1; }
+    .row-sum { grid-column: 2; display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--muted); white-space: nowrap; }
+    /* a sidebar under 400 px keeps the roll-up word and the tree total; the kind counts come back at 400 px (2K and up) */
+    @container (max-width: 399px) { .row.root .row-sum .cnt { display: none; } }
+    .row-sum .cnt { display: inline-flex; align-items: center; gap: 3px; }
+    .row-sum .cnt .mark { width: 12px; height: 12px; } .row-sum .cnt .mark svg { width: 8px; height: 8px; }
+    .row-sum .use { margin-left: 2px; }
+    .row-sum .rollup i { font-style: normal; font-weight: 600; }
+    /* child row: a grid. Columns: state box, mark box, title, state word, time. Line 2 (active work only) starts under the title.
        Level offset --lx: one formula for rows, fold rows and rails. 18 px per level to level 4, 10 px per level after that. --d = depth. */
     .row.child, .fold { --lx: calc(var(--rail-x) + var(--indent) * (min(var(--d, 1), 4) - 1) + var(--indent-deep) * max(var(--d, 1) - 4, 0)); }
-    .row.child { display: grid; grid-template-columns: 10px 16px minmax(0, 1fr) auto; grid-template-rows: 18px auto; column-gap: 5px; row-gap: 1px; align-items: center; padding: 4px 10px 5px calc(var(--lx) + 13px); }
-    .row.child .row-title { font-weight: 500; }
-    .row.child.selected .row-title { font-weight: 600; }
+    .row.child { display: grid; grid-template-columns: 10px 16px minmax(0, 1fr) auto auto auto; grid-template-rows: 18px auto; column-gap: 5px; row-gap: 1px; align-items: center; padding: 3px 10px 4px calc(var(--lx) + 13px); }
     .row.child .row-meta { grid-column: 3 / -1; }
     .row.child .row-time { padding-left: 4px; }
+    .row.child .state-word { padding-left: 6px; }
+    /* finished work is small and quiet: one line, muted title, the state word and the tokens on the right */
+    .row.child.fin { grid-template-rows: 18px; padding: 1px 10px 1px calc(var(--lx) + 13px); }
+    .row.child.fin .row-title { color: var(--muted); font-weight: 400; font-size: 11.5px; }
+    .row.child.fin .row-meta { display: none; }
+    .row.child.fin .state-word { font-weight: 400; }
+    .row.child.fin .row-use { color: var(--faint); font-size: 10px; padding-left: 6px; white-space: nowrap; }
+    .row.child.fin:hover .row-title, .row.child.fin.selected .row-title { color: var(--fg); }
     /* rails: full-height guides per continuing ancestor level (--l), an elbow into this row, a through line when not last */
     .rl { position: absolute; left: calc(var(--rail-x) + var(--indent) * (min(var(--l, 1), 4) - 1) + var(--indent-deep) * max(var(--l, 1) - 4, 0)); border-left: 1px solid var(--rail); pointer-events: none; }
     .rl.thru { top: 0; bottom: 0; }
@@ -320,13 +351,15 @@
     /* stem: from this child row's state mark (center at 13 px) down to its open children. Root rows draw no stem. */
     .rl.stem { top: 13px; bottom: 0; }
     /* fold and cap rows share the child grid */
-    .fold { display: grid; grid-template-columns: 10px 16px minmax(0, 1fr) auto; column-gap: 5px; align-items: center; height: 24px; width: 100%; text-align: left; border: 0; border-left: 3px solid transparent; background: transparent; color: var(--tree-text); font-size: 10.5px; padding: 0 10px 0 calc(var(--lx) + 13px); cursor: pointer; position: relative; }
+    /* The fold row ("+ 18 finished") is a small rounded button in the structure violet, so the hidden work is one click away. */
+    .fold { display: grid; grid-template-columns: 10px 16px minmax(0, 1fr) auto; column-gap: 5px; align-items: center; height: 22px; width: calc(100% - 8px); margin: 1px 4px; text-align: left; border: 0; border-left: 3px solid transparent; border-radius: var(--r-chip); background: color-mix(in srgb, var(--accent-fill) 45%, transparent); color: var(--tree-text); font-size: 10.5px; font-weight: 600; padding: 0 10px 0 calc(var(--lx) + 13px); cursor: pointer; position: relative; }
     .fold > .txt { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .fold:hover { text-decoration: underline; }
+    .fold:hover { background: var(--accent-fill); color: var(--fg); }
     /* cap row: the server sent at most N children of this chat. The rest live in History; the row says so and is not a link. */
-    .fold.cap { color: var(--muted); cursor: default; height: 26px; padding-bottom: 4px; }
-    .fold.cap:hover { text-decoration: none; }
+    .fold.cap { color: var(--muted); font-weight: 400; cursor: default; height: 24px; padding-bottom: 2px; }
+    .fold.cap:hover { background: transparent; color: var(--muted); }
     .fold.cap b { color: var(--fg); font-weight: 600; }
+    .rows { padding-bottom: 3px; }
 
     /* ---- kind marks: one 16 px box, one SVG set (GL), one stroke weight ---- */
     .mark { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; flex: none; color: var(--k); }
@@ -355,18 +388,25 @@
     .home-heading .n, .ov-heading .n { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
     .ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; margin-bottom: 16px; }
     /* cards: only in the Live overview. A node page has no cards; the tree lists its children. The left bar is the worker color (--k). */
-    .card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 3px; text-align: left; border: 1px solid var(--border); border-left: 3px solid var(--k, var(--border)); border-radius: 7px; background: var(--panel); padding: 8px 10px 9px; cursor: pointer; color: var(--fg); min-width: 0; position: relative; transition: background-color .14s ease; }
-    .card:hover { background: var(--hover); }
-    .card.selected { background: var(--selected); }
-    .card-head { display: flex; align-items: center; gap: 6px; height: 18px; min-width: 0; }
-    .card-head .row-time { margin-left: auto; flex: none; }
+    .card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 3px; text-align: left; border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--panel-2); padding: 8px 12px 9px; cursor: pointer; color: var(--fg); min-width: 0; position: relative; transition: background-color .14s ease, border-color .14s ease; }
+    .card:hover { background: var(--hover); border-color: var(--border-strong); }
+    .card.selected { background: var(--selected); border-color: var(--selected-bar); }
+    /* card head: state mark, title, state word, time; the kind word leads the meta line */
+    .card-head { display: flex; align-items: center; gap: 6px; height: 20px; min-width: 0; }
+    .card-head .row-title { flex: 1; font-size: 12.5px; }
+    .card-head .state-word { margin-left: auto; flex: none; }
+    .card-head .row-time { flex: none; }
     .card-head .kind-label { overflow: hidden; text-overflow: ellipsis; }
-    .card .row-title { white-space: normal; }
+    .card.selected .row-meta, .card.selected .row-time, .card.selected .kids { color: #c9cbe0; }
     .card .row-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 1px; }
     .card .kids { margin-top: 4px; padding-left: 10px; border-left: 1px solid var(--rail, color-mix(in srgb, var(--tree) 55%, transparent)); font-size: 10.5px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
     .card .kids div { display: flex; align-items: center; gap: 5px; height: 18px; }
     .card .kids .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .home-more { margin-top: 4px; }
+    /* secondary button (reference "New worktree"): panel fill, thin border, rounded, muted text */
+    .empty-action, .toolbar-button.home-more { display: inline-flex; align-items: center; justify-content: center; height: 32px; margin-top: 10px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--r-btn); background: var(--panel-2); color: var(--muted); font-size: 12px; cursor: pointer; transition: color .14s ease, background-color .14s ease; }
+    .empty-action:hover, .toolbar-button.home-more:hover { background: var(--hover); color: var(--fg); }
+    .empty-list .empty-action { display: inline-flex; margin-top: 12px; }
     .history-caption {
       padding: 10px 12px 4px;
       color: var(--faint);
@@ -375,15 +415,14 @@
       letter-spacing: .05em;
       text-transform: uppercase;
     }
-    .status.HISTORY { background: var(--panel-3); color: var(--muted); border-color: var(--border-strong); }
     .search-count { padding: 6px 12px 2px; color: var(--muted); font-size: 11px; }
-    .unread { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); vertical-align: middle; flex: none; }
+    .unread { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; flex: none; }
 
     /* ---- status pills and state dots (tinted chips: pastel text on a dark fill of the same hue, thin border) ---- */
     .status {
       display: inline-flex;
       align-items: center;
-      border-radius: 999px;
+      border-radius: var(--r-chip);
       padding: 0 7px;
       height: 18px;
       font-size: 10px;
@@ -404,19 +443,21 @@
       animation: spin 1s linear infinite;
     }
     .status.DONE { background: #152929; color: var(--green); border-color: #1e5a44; }
-    .status.IDLE { background: #42331b; color: var(--yellow); border-color: #6b5222; }
+    .status.IDLE { background: #252a3a; color: var(--muted); border-color: var(--border-strong); }
     .status.STALE { background: #3a2618; color: var(--amber); border-color: #6b4522; }
     .status.NEEDS_ANSWER { background: transparent; color: var(--amber); border-color: var(--amber); }
     .status.STOPPED { background: #252a3a; color: var(--muted); border-color: var(--border-strong); }
     .status.ARCHIVED { background: #252a3a; color: var(--muted); border-color: var(--border-strong); }
-    .status.FAST { background: transparent; color: var(--yellow); border-color: #6b5222; }
+    .status.FAST { background: transparent; color: var(--muted); border-color: var(--border-strong); }
     .status.BG { background: var(--panel-3); color: var(--muted); border-color: var(--border-strong); font-weight: 600; }
     /* state mark: a 10 px box, one shape per state (child rows, cards, run view rows) */
     .sdot { width: 10px; height: 10px; display: inline-grid; place-items: center; flex: none; }
     .sdot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--s, var(--gray)); }
     .sdot.LIVE::before, .sdot.running::before { width: 10px; height: 10px; background: transparent; border: 1.5px solid var(--blue); border-top-color: transparent; animation: spin 1s linear infinite; }
     .sdot.DONE, .sdot.done { --s: var(--green); }
-    .sdot.IDLE { --s: var(--yellow); }
+    .sdot.IDLE { --s: var(--gray); }
+    .sdot.BG { --s: var(--blue); }
+    .state-word.BG { color: var(--blue); }
     .sdot.STALE, .sdot.failed { --s: var(--amber); }
     .sdot.NEEDS_ANSWER::before { background: transparent; border: 1.5px solid var(--amber); }
     .sdot.STOPPED { --s: var(--gray); }
@@ -424,9 +465,9 @@
     .rollup { display: inline-flex; align-items: center; gap: 4px; }
     .rollup i { font-style: normal; color: var(--fg); }
     .state-word { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
-    .state-word.LIVE { color: var(--blue); } .state-word.DONE { color: var(--green); } .state-word.STALE, .state-word.NEEDS_ANSWER { color: var(--amber); } .state-word.STOPPED { color: var(--muted); }
+    .state-word.LIVE { color: var(--blue); } .state-word.DONE { color: var(--green); } .state-word.STALE, .state-word.NEEDS_ANSWER { color: var(--amber); } .state-word.STOPPED, .state-word.IDLE, .state-word.ENDED { color: var(--muted); }
     /* green confirmation row */
-    .done-row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border: 1px solid #134b3e; border-radius: 7px; background: #152929; color: #6ee7b7; font-size: 11px; margin: 10px 0; }
+    .done-row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border: 1px solid #134b3e; border-radius: var(--r-btn); background: #152929; color: #6ee7b7; font-size: 11px; margin: 10px 0; }
     .done-row .msg-time { color: #6ee7b7; opacity: .8; }
     /* usage bits */
     .meter { display: inline-block; width: 44px; height: 5px; border-radius: 3px; background: var(--meter-track); vertical-align: middle; position: relative; overflow: hidden; }
@@ -434,7 +475,7 @@
     .meter.warn i { background: var(--amber); }
     .meter.crit i { background: var(--red); }
     /* sidebar plans block (Claude and Codex plan limits), under the tree */
-    #plans { border-top: 1px solid var(--border); padding: 6px 12px 8px; font-size: 10.5px; color: var(--muted); background: var(--panel-2); flex: none; }
+    #plans { border-top: 1px solid var(--border); padding: 6px 14px 8px; font-size: 10.5px; color: var(--muted); background: var(--panel-2); flex: none; }
     .plans-head { width: 100%; display: flex; align-items: center; gap: 6px; height: 22px; border: 0; background: transparent; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 0; cursor: pointer; text-align: left; }
     .plans-head .asof { margin-left: auto; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); white-space: nowrap; }
     .plans-head .asof.stale { color: var(--amber); }
@@ -467,7 +508,7 @@
     .status.CLAUDE_WF { background: transparent; color: var(--claude); padding: 0 1px; gap: 4px; }
     .status.CLAUDE_WF svg, .tab-button svg { width: 11px; height: 11px; vertical-align: -1px; color: var(--claude); flex: none; }
     /* the unified header counter: one button, three counts (running · need you · need attention), filled by the logic */
-    #counter { height: 32px; border: 1px solid var(--border-strong); border-radius: 7px; background: transparent; padding: 0 10px; display: inline-flex; align-items: center; gap: 10px; font-size: 11px; color: var(--fg); cursor: pointer; white-space: nowrap; }
+    #counter { height: 32px; border: 1px solid var(--border); border-radius: var(--r-btn); background: transparent; padding: 0 10px; display: inline-flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); cursor: pointer; white-space: nowrap; }
     #counter:hover { background: var(--hover); }
     #counter span { display: inline-flex; align-items: center; gap: 5px; }
     body.claude-tab .codex-only, body:not(.claude-tab) .claude-only { display: none !important; }
@@ -482,11 +523,11 @@
     .claude-view { max-width: var(--content-max); margin: 0 auto; width: 100%; min-width: 0; }
     body.claude-tab #feed-wrap { display: none; }
     /* run view: summary box, progress bar, phase headings, agent rows */
-    .claude-summary { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); font-size: 12px; }
+    .claude-summary { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--panel-2); font-size: 12px; }
     .claude-summary-line { display: flex; flex-wrap: wrap; gap: 3px 12px; color: var(--muted); font-size: 11px; }
     .claude-summary-line b { color: var(--fg); font-weight: 650; }
     .claude-running { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; color: var(--muted); font-size: 11px; }
-    .claude-running button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid #274a7d; border-radius: 999px; padding: 1px 8px; background: #172a45; color: var(--blue); cursor: pointer; font: 11px "Cascadia Code", Consolas, monospace; }
+    .claude-running button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid #274a7d; border-radius: var(--r-chip); padding: 1px 8px; background: #172a45; color: var(--blue); cursor: pointer; font: 11px "Cascadia Code", Consolas, monospace; }
     .claude-running button:hover { background: var(--hover); }
     /* Progress: the violet-to-sky fill for done, failed amber (a status color), the rest of the started agents on the track. */
     .claude-bar { display: flex; height: 4px; margin-top: 8px; border-radius: 2px; background: var(--meter-track); overflow: hidden; }
@@ -497,7 +538,7 @@
     .claude-phase .phase-count, .phase .n { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
     .claude-phase .claude-bar { flex: 1; max-width: 120px; margin: 0 0 0 auto; height: 3px; }
     /* agent row: state mark, label (and tool while running), tail (last write, state word). The open row is selected; a running row has a faint blue tint. */
-    .agent-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; width: 100%; height: 30px; padding: 0 8px 0 14px; border: 0; border-radius: 6px; background: transparent; color: var(--fg); text-align: left; font-size: 12px; cursor: pointer; transition: background-color .14s ease; }
+    .agent-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; width: 100%; height: 30px; padding: 0 8px 0 14px; border: 0; border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; font-size: 12px; cursor: pointer; transition: background-color .14s ease; }
     .agent-row:hover { background: var(--hover); }
     .agent-row.open { background: var(--selected); }
     .agent-row.running, .agent-row.live { background: color-mix(in srgb, var(--blue) 6%, transparent); }
@@ -512,9 +553,10 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
     /* the unified side panel (an open Claude agent, or the docked Live overview on wide screens); shown by body.panel-open */
-    #panel { width: var(--panel-w); flex: none; border-left: 1px solid var(--border); display: none; flex-direction: column; background: var(--panel); }
+    /* the third card: beside the main pane, after a gutter */
+    #panel { width: var(--panel-w); flex: none; margin-left: var(--gutter); display: none; flex-direction: column; background: var(--panel); }
     body.panel-open #panel { display: flex; }
-    #panel-head { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel-2); display: flex; gap: 8px; align-items: flex-start; }
+    #panel-head { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; gap: 8px; align-items: flex-start; }
     /* head line: pill, kind word, flag, then the title. The title shares the line while it fits, else it takes the next line whole. */
     #panel-head .row-top { flex-wrap: wrap; height: auto; min-height: 18px; row-gap: 2px; }
     #panel-head .t { font-weight: 650; font-size: 13px; flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -525,27 +567,29 @@
     #panel-body { flex: 1; overflow: auto; padding: 12px; }
     #back { display: none; }
 
+    /* the splitter is the gutter between the sidebar card and the main card; it shows itself only under the pointer */
     #splitter {
-      width: 5px;
+      width: var(--gutter);
       flex: none;
       cursor: col-resize;
-      background: var(--border);
+      background: transparent;
       border: 0;
       padding: 0;
       touch-action: none;
+      border-radius: 3px;
+      transition: background-color .14s ease;
     }
-    #splitter:hover, #splitter.dragging { background: var(--accent); }
+    #splitter:hover, #splitter.dragging { background: var(--accent-fill); }
     body.side-collapsed #splitter { display: none; }
-    body.side-collapsed { --main-w: 100vw; } /* no sidebar: the main pane is the viewport */
+    body.side-collapsed { --main-w: calc(100vw - 2 * var(--gutter)); } /* no sidebar: the main pane is the viewport */
 
-    #main { min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    /* One content column: header, toolbar, result card and feed share it, at most --content-max wide, centered in the pane. */
+    #main { min-width: 0; flex: 1; display: flex; flex-direction: column; background: var(--panel); }
+    /* One content column: header, toolbar, result card and feed share it, at most --content-max wide, centered in the pane.
+       The side panel is a card of its own beside the pane, so the column centers in what is left on its own. */
     .inner, #feed-inner, .result-card-box { max-width: var(--content-max); margin: 0 auto; width: 100%; min-width: 0; }
-    /* side panel open: the column centers in the space left of the panel, so header and feed keep one left edge */
-    body.panel-open .inner, body.panel-open #feed-inner, body.panel-open .result-card-box, body.panel-open .claude-view { margin-left: max(0px, calc((var(--main-w) - var(--panel-w) - var(--content-max) - 32px) / 2)); margin-right: 0; }
     #task-header {
       padding: 10px 16px 8px;
-      background: var(--panel-2);
+      background: var(--panel);
       border-bottom: 1px solid var(--border);
       flex: none;
     }
@@ -587,7 +631,7 @@
     #task-facts { --fact-accent: var(--codex); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; min-width: 0; }
     #task-facts.claude { --fact-accent: var(--claude); }
     #task-facts + #task-meta { margin-top: 6px; }
-    .fact { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 24px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--panel-3); color: var(--fg); font-size: 11px; white-space: nowrap; }
+    .fact { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--r-chip); background: transparent; color: var(--fg); font-size: 11px; white-space: nowrap; }
     .fact .fact-key, .fact .dim { color: var(--muted); font-weight: 400; white-space: nowrap; }
     .fact .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     .fact-project { border-color: var(--fact-accent); font-weight: 600; }
@@ -598,7 +642,8 @@
     /* usage strip under the meta line: one cell per fact; .lower = a lower bound (≥), .unk = unknown */
     #usage { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     #usage:empty { display: none; }
-    .ucell { display: inline-flex; align-items: center; gap: 6px; height: 24px; border: 1px solid var(--border-strong); border-radius: 6px; padding: 0 8px; font-size: 11px; background: var(--panel-3); color: var(--muted); white-space: nowrap; flex: none; }
+    /* usage cells: quiet bordered items like the reference toolbar chips (no fill) */
+    .ucell { display: inline-flex; align-items: center; gap: 6px; height: 24px; border: 1px solid var(--border); border-radius: var(--r-chip); padding: 0 8px; font-size: 11px; background: transparent; color: var(--muted); white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; }
     .ucell b { color: var(--fg); font-weight: 600; }
     .ucell .lab { text-transform: uppercase; font-size: 9px; letter-spacing: .05em; color: var(--faint); font-weight: 700; }
     .ucell .sc { color: var(--claude); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
@@ -631,8 +676,8 @@
     #header-actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
     #auto-open-toggle {
       height: 32px;
-      border: 1px solid var(--border-strong);
-      border-radius: 7px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
       background: transparent;
       padding: 0 10px;
       color: var(--muted);
@@ -649,7 +694,7 @@
       overflow-y: auto;
       padding: 5px;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--r-panel);
       background: var(--panel-2);
       box-shadow: 0 12px 30px #0008;
       z-index: 5;
@@ -661,7 +706,7 @@
       overflow-y: auto;
       padding: 5px;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--r-panel);
       background: var(--panel-2);
       box-shadow: 0 12px 30px #0008;
       z-index: 30;
@@ -669,7 +714,7 @@
     #action-menu button, #context-menu button {
       width: 100%;
       border: 0;
-      border-radius: 5px;
+      border-radius: var(--r-chip);
       padding: 8px 9px;
       background: transparent;
       text-align: left;
@@ -701,7 +746,7 @@
     /* danger: the Failed red mixed into the panel, never a new color */
     .kill-button {
       border: 0;
-      border-radius: 5px;
+      border-radius: var(--r-chip);
       padding: 3px 7px;
       background: color-mix(in srgb, var(--red) 28%, var(--panel));
       color: var(--red);
@@ -724,7 +769,7 @@
       overflow-y: auto;
       background: var(--panel-2);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--r-panel);
       padding: 16px;
       box-shadow: 0 18px 50px #000c;
     }
@@ -733,7 +778,7 @@
     .stop-modal-label { color: var(--muted); flex: none; width: 70px; }
     .stop-modal-value { min-width: 0; overflow-wrap: anywhere; }
     .stop-modal-warning {
-      border-radius: 7px;
+      border-radius: var(--r-btn);
       padding: 8px 10px;
       margin-top: 10px;
       font-size: 12px;
@@ -745,7 +790,7 @@
     #stop-modal-actions, #job-modal-actions, #control-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
     #stop-modal-actions button, #job-modal-actions button, #control-modal-actions button {
       border: 1px solid var(--border-strong);
-      border-radius: 7px;
+      border-radius: var(--r-btn);
       padding: 7px 12px;
       background: transparent;
       cursor: pointer;
@@ -761,7 +806,7 @@
       margin: 12px 0 0;
       padding: 12px;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: var(--r-btn);
       background: var(--bg);
       color: var(--fg);
       font-size: 13px;
@@ -776,7 +821,7 @@
     .control-field input:not([type="checkbox"]), .control-field select, .control-field textarea {
       width: 100%;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: var(--r-btn);
       padding: 7px 9px;
       color: var(--fg);
       background: var(--bg);
@@ -790,16 +835,16 @@
     #control-modal-confirm:disabled { opacity: .6; cursor: default; }
 
     #feed-toolbar {
-      min-height: 40px;
+      min-height: 36px;
       padding: 0 16px;
       border-bottom: 1px solid var(--border);
-      background: var(--panel-2);
+      background: var(--panel);
       flex: none;
     }
-    #feed-toolbar .inner { display: flex; align-items: center; gap: 5px; min-height: 40px; }
+    #feed-toolbar .inner { display: flex; align-items: center; gap: 5px; min-height: 36px; }
     .toolbar-button {
-      border: 1px solid var(--border-strong);
-      border-radius: 6px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-chip);
       padding: 5px 8px;
       background: transparent;
       color: var(--muted);
@@ -817,9 +862,9 @@
     .started-by { display: inline-flex; align-items: center; gap: 6px; }
     .started-by b { color: var(--actor); font-weight: 650; }
     #result-card { flex: none; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
-    .result-card-box { border: 1px solid var(--border); border-left: 3px solid var(--codex); border-radius: 8px; background: var(--panel-2); }
+    .result-card-box { border: 1px solid var(--border); border-left: 3px solid var(--codex); border-radius: var(--r-btn); background: var(--panel-2); }
     .result-card-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 4px; }
-    .result-card-toggle { display: flex; align-items: center; gap: 7px; border: 0; border-radius: 6px; padding: 4px 6px; background: transparent; color: var(--fg); cursor: pointer; font-size: 12px; font-weight: 650; transition: background-color 160ms; }
+    .result-card-toggle { display: flex; align-items: center; gap: 7px; border: 0; border-radius: var(--r-chip); padding: 4px 6px; background: transparent; color: var(--fg); cursor: pointer; font-size: 12px; font-weight: 650; transition: background-color 160ms; }
     .result-card-toggle:hover { background: var(--hover); }
     .result-card-caret { color: var(--muted); font-size: 10px; width: 10px; }
     .result-card-runs { color: var(--muted); font-size: 11px; font-weight: 400; }
@@ -827,17 +872,17 @@
     .result-card-body { max-height: 38vh; overflow: auto; padding: 2px 14px 12px; border-top: 1px solid var(--border); }
     .result-section { margin-top: 10px; min-width: 0; }
     .result-section-title { margin: 0 0 4px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-    .result-section.question { margin-top: 12px; padding: 8px 12px 10px; border: 1px solid var(--you); border-radius: 7px; background: color-mix(in srgb, var(--you) 6%, var(--panel)); }
+    .result-section.question { margin-top: 12px; padding: 8px 12px 10px; border: 1px solid var(--you); border-radius: var(--r-btn); background: color-mix(in srgb, var(--you) 6%, var(--panel)); }
     .result-section.question .result-section-title { color: var(--you); }
     .result-section-body { overflow-wrap: anywhere; word-break: break-word; line-height: 1.55; font-size: 13px; }
     .result-section-body > :first-child { margin-top: 0; }
     .result-section-body > :last-child { margin-bottom: 0; }
-    .result-section-body code { font: 11px "Cascadia Code", Consolas, monospace; background: var(--panel-3); padding: 1px 4px; border-radius: 4px; }
+    .result-section-body code { font: 11px "Cascadia Code", Consolas, monospace; background: var(--panel-3); color: var(--tree-text); padding: 1px 5px; border-radius: 4px; }
     .result-card-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
     .answer-box { margin-top: 10px; display: grid; gap: 7px; }
-    .answer-box textarea { width: 100%; min-height: 70px; resize: vertical; border: 1px solid var(--border); border-radius: 7px; padding: 7px 9px; color: var(--fg); background: var(--bg); }
+    .answer-box textarea { width: 100%; min-height: 70px; resize: vertical; border: 1px solid var(--border); border-radius: var(--r-btn); padding: 7px 9px; color: var(--fg); background: var(--bg); }
     .answer-box-actions { display: flex; justify-content: flex-end; }
-    .answer-box-actions button { height: 32px; border: 1px solid var(--accent); border-radius: 7px; padding: 0 12px; background: var(--accent-fill); color: var(--fg); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .answer-box-actions button { height: 32px; border: 1px solid var(--accent); border-radius: var(--r-btn); padding: 0 12px; background: var(--accent-fill); color: var(--fg); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
     .answer-box-actions button:disabled { opacity: .5; cursor: default; }
     #feed-wrap { min-height: 0; flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; }
     #feed {
@@ -854,7 +899,7 @@
       pointer-events: auto;
       height: 28px;
       border: 1px solid var(--accent);
-      border-radius: 999px;
+      border-radius: var(--r-btn);
       background: var(--accent-fill);
       color: var(--fg);
       padding: 0 12px;
@@ -900,14 +945,14 @@
       margin: 0 0 10px;
       padding: 8px 12px;
       border: 1px solid var(--border);
-      border-left: 3px solid var(--actor);
-      border-radius: 7px;
-      background: color-mix(in srgb, var(--actor) 6%, var(--panel-2));
+      border-left: 2px solid color-mix(in srgb, var(--actor) 70%, transparent);
+      border-radius: var(--r-btn);
+      background: var(--panel-2);
     }
     .msg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 4px; font-size: 11px; }
     .msg-tag {
       border: 1px solid var(--actor);
-      border-radius: 999px;
+      border-radius: var(--r-chip);
       padding: 0 6px;
       color: var(--actor);
       font-size: 10px;
@@ -924,7 +969,7 @@
       padding: 8px 12px 9px;
       /* --asked: who the question is for (pink for you, light teal for the lead agent) */
       border: 1px solid color-mix(in srgb, var(--asked, var(--you)) 45%, transparent);
-      border-radius: 7px;
+      border-radius: var(--r-btn);
       background: color-mix(in srgb, var(--asked, var(--you)) 8%, var(--panel));
     }
     .ask.actor-codex-lead { --asked: var(--codex-lead); }
@@ -956,7 +1001,7 @@
       max-height: 360px;
       overflow: auto;
       padding: 8px 10px;
-      border-radius: 6px;
+      border-radius: var(--r-chip);
       background: var(--bg);
       color: var(--muted);
       font: 11px/1.5 "Cascadia Code", Consolas, monospace;
@@ -967,7 +1012,7 @@
       margin: 6px 0;
       padding: 5px 10px;
       border: 1px dashed var(--border-strong);
-      border-radius: 7px;
+      border-radius: var(--r-btn);
       background: transparent;
     }
     details.quiet[open] { background: var(--panel-2); }
@@ -1017,17 +1062,18 @@
     .md-list { margin: 6px 0; padding-left: 20px; }
     .md-list li { margin: 2px 0; }
     .md-quote { margin: 6px 0; padding: 2px 10px; border-left: 2px solid var(--border); color: var(--muted); }
-    .md-code { margin: 8px 0; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; background: var(--bg); }
+    .md-code { margin: 8px 0; border: 1px solid var(--border); border-radius: var(--r-btn); overflow: hidden; background: var(--bg); }
     .md-code-lang { padding: 4px 10px; color: var(--muted); font: 10px/1.4 "Cascadia Code", Consolas, monospace; border-bottom: 1px solid var(--border); }
     .md-code pre { margin: 0; padding: 10px; color: var(--fg); font: 11px/1.55 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .event-body code, .msg-body code, .md-quote code { font: 11px "Cascadia Code", Consolas, monospace; background: var(--panel-3); padding: 1px 4px; border-radius: 4px; }
+    /* inline code: the reference chip (#313747 fill, violet text) */
+    .event-body code, .msg-body code, .md-quote code { font: 11px "Cascadia Code", Consolas, monospace; background: var(--panel-3); color: var(--tree-text); padding: 1px 5px; border-radius: 4px; }
     .thinkgroup-step { padding: 8px 10px; border-top: 1px solid var(--border); }
     .thinkgroup-step:first-of-type { border-top: none; }
     .thinkgroup-step-time { color: var(--faint); font-size: 10px; margin-bottom: 3px; }
     .thinkgroup-step .event-body { color: var(--muted); font-size: 12px; }
     details.technical {
       border: 1px solid var(--border-soft);
-      border-radius: 6px;
+      border-radius: var(--r-chip);
       background: var(--panel-2);
       overflow: hidden;
     }
@@ -1052,7 +1098,7 @@
       width: 100%;
       margin: 0 0 16px;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: var(--r-btn);
       padding: 7px 10px;
       background: var(--panel);
       color: var(--muted);
@@ -1062,6 +1108,8 @@
     .load-earlier:hover { background: var(--hover); color: var(--fg); }
     @media (max-width: 760px) {
       :root { --main-w: 100vw; }
+      body { padding: 0; } /* a phone shows one full-bleed pane; the sidebar is a drawer */
+      .pane { border: 0; border-radius: 0; }
       .claude-desc { display: none; } /* the title tooltip keeps it; on a phone the agent panel needs the room */
       #side {
         position: fixed;
@@ -1070,6 +1118,7 @@
         width: min(88vw, 340px) !important;
         max-width: none;
         min-width: 0;
+        border-right: 1px solid var(--border);
         transform: translateX(-102%);
         transition: transform .18s ease;
         box-shadow: 15px 0 40px #000a;
@@ -1097,7 +1146,7 @@
       #result-card { padding-left: 12px; padding-right: 12px; }
       .control-grid { grid-template-columns: 1fr; }
       /* chips scroll sideways in one row; the kind chips follow the status chips */
-      #chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+      #chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 2px; }
       #chips::-webkit-scrollbar { display: none; }
       #side-backdrop { display: none; position: fixed; inset: 0; z-index: 19; background: rgba(0, 0, 0, .5); }
       body.mobile-side-open #side-backdrop { display: block; }
@@ -1113,8 +1162,8 @@
       .agent-row .tail .w, .agent-row .tool { display: none; }
       #claude-overview { padding-left: 12px; padding-right: 12px; }
       /* the unified side panel covers the main pane, full width, with a back button */
-      #panel { position: fixed; inset: 0; width: 100%; min-width: 0; z-index: 10; border-left: 0; }
-      #back { display: inline-flex; height: 28px; align-items: center; gap: 4px; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; padding: 0 8px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+      #panel { position: fixed; inset: 0; width: 100%; min-width: 0; z-index: 10; margin: 0; }
+      #back { display: inline-flex; height: 28px; align-items: center; gap: 4px; border: 1px solid var(--border-strong); border-radius: var(--r-chip); background: transparent; padding: 0 8px; font-size: 11px; cursor: pointer; white-space: nowrap; }
     }
     /* A narrow main pane (a small window with the sidebar open): the run view may shrink below its usual floor. */
     @container (max-width: 640px) {
@@ -1123,7 +1172,7 @@
   </style>
 </head>
 <body>
-  <aside id="side" aria-label="Task list">
+  <aside id="side" class="pane" aria-label="Task list">
     <div id="brand">
       <img id="brand-mark" src="/logo.svg" alt="">
       <div id="brand-copy">
@@ -1146,7 +1195,7 @@
 
   <div id="splitter" role="separator" aria-label="Resize session list" aria-orientation="vertical" tabindex="0"></div>
 
-  <main id="main">
+  <main id="main" class="pane">
     <header id="task-header"><div class="inner">
       <div id="crumbs" aria-label="Path to this node"></div>
       <div id="header-top">
@@ -1171,7 +1220,7 @@
     <div id="feed-toolbar"><div class="inner">
       <div id="legend" role="note" aria-label="Who's who in the feed">
         <span class="legend-title overview-only">Overview</span>
-        <span class="legend-note overview-only">Needs you first, then Needs attention, Running, and the newest finished</span>
+        <span class="legend-note overview-only">Running first, then Needs you and Needs attention. Finished work is behind the button at the end.</span>
         <span class="legend-title">Who's who</span>
         <span class="legend-item actor-you codex-only" title="You: a message you typed, or your answer relayed through Claude or the answer box">You</span>
         <span class="legend-item actor-claude codex-only" title="Claude: a handoff prompt, or an answer Claude gave by itself">Claude</span>
@@ -1198,12 +1247,13 @@
         <div id="feed"><div id="feed-inner"></div></div>
         <div id="feed-pill"><button id="jump-latest" type="button" hidden>&darr; <b id="feed-new"></b> Jump to latest</button></div>
       </div>
-      <section id="panel" aria-label="Side panel">
-        <div id="panel-head"></div>
-        <div id="panel-body"></div>
-      </section>
     </div>
   </main>
+
+  <section id="panel" class="pane" aria-label="Side panel">
+    <div id="panel-head"></div>
+    <div id="panel-body"></div>
+  </section>
 
   <div id="stop-modal" hidden>
     <div id="stop-modal-box" role="dialog" aria-modal="true" aria-labelledby="stop-modal-title">
@@ -2478,6 +2528,14 @@
       if (!b) return a;
       return STATE_ORDER.indexOf(a) <= STATE_ORDER.indexOf(b) ? a : b;
     }
+    // Children: active work first, newest started on top (a row does not jump while it writes);
+    // then finished work, newest finished on top.
+    function childOrder(a, b) {
+      var active = { ANSWER: 1, ATTENTION: 1, RUNNING: 1, BACKGROUND: 1, WAITING: 1 };
+      var ga = active[a.rollup] ? 0 : 1, gb = active[b.rollup] ? 0 : 1;
+      if (ga !== gb) return ga - gb;
+      return ga === 0 ? (b.startedMs || 0) - (a.startedMs || 0) : (b.updatedMs || 0) - (a.updatedMs || 0);
+    }
     // The key a Codex row shares with the server's handoff ids: its thread, else its job.
     function rowHandoffKey(row) {
       return row.threadId || (row.job ? row.job.id : '') || (row.session ? row.session.id : '');
@@ -2900,7 +2958,7 @@
       VIEW_TABS[prefs.tab].forEach(function (chip) {
         var count = counts[prefs.tab][chip];
         var label = prefs.tab === 'LIVE' && chip === 'ANSWER' ? 'Needs you' : VIEW_LABELS[chip];
-        var button = viewButton('chip-button' + (chip === 'RUNNING' && count > 0 ? ' has-sessions' : ''), label, count, prefs.chip === chip);
+        var button = viewButton('chip-button' + (chip === 'RUNNING' && count > 0 ? ' has-sessions' : '') + (count === 0 ? ' zero' : ''), label, count, prefs.chip === chip);
         button.dataset.chip = chip;
         button.addEventListener('click', function () { chooseView(prefs.tab, chip); });
         chipsBar.appendChild(button);
@@ -3088,11 +3146,15 @@
       el.dataset.id = node.id;
       el.setAttribute('aria-expanded', node.children.length ? String(isOpen) : 'false');
       el.title = [node.title, node.project, node.row ? rowTooltip(node.row, Date.now()) : node.sessionId || (node.chat && node.chat.sessionId) || ''].filter(Boolean).join('\n');
+      // Line 1: state mark, kind mark, title, state word, time. Line 2: kind word, source, fast, meta, flags.
       var top = document.createElement('div');
       top.className = 'row-top';
-      top.append(nodePill(node), nodeKindLabel(node));
-      if (node.fast) top.appendChild(fastChip());
-      if (node.kind === 'chat' && node.source) top.appendChild(textSpan('src', SOURCE_NAMES[node.source] || node.source));
+      var title = document.createElement('div');
+      title.className = 'row-title';
+      title.textContent = node.title;
+      if (node.kind === 'ghost') title.appendChild(textSpan('mono src', ' ' + String(node.sessionId || '').slice(0, 8)));
+      var word = textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase());
+      word.title = nodeStateHelp(node);
       var time = textSpan('row-time', relativeTime(node.updatedMs));
       // The root carries the dot for its whole tree, so a folded child's news still shows.
       if ((function any(n, d) { return nodeUnread(n) || (d < 8 && n.children.some(function (c) { return model.nodes[c] && any(model.nodes[c], d + 1); })); })(node, 0)) {
@@ -3100,16 +3162,15 @@
         dot.title = 'New activity';
         time.prepend(dot, document.createTextNode(' '));
       }
-      top.appendChild(time);
-      var title = document.createElement('div');
-      title.className = 'row-title';
-      title.textContent = node.title;
-      if (node.kind === 'ghost') title.appendChild(textSpan('mono src', ' ' + String(node.sessionId || '').slice(0, 8)));
+      top.append(stateDot(nodeBadge(node.state), nodeStateLabel(node.state)), nodeMark(node), title, word, time);
       var meta = document.createElement('div');
       meta.className = 'row-meta';
-      if (node.kind === 'ghost') meta.textContent = node.children.length + (node.children.length === 1 ? ' handoff' : ' handoffs') + ' with this chat id';
-      else appendDotted(meta, nodeMetaParts(node).concat(node.flags.length ? [node.flags.join(' · ')] : []));
-      el.append(top, title, meta);
+      var lead = [nodeKindLabel(node)];
+      if (node.kind === 'chat' && node.source) lead.push(textSpan('src', SOURCE_NAMES[node.source] || node.source));
+      if (node.fast) { var fast = textSpan('fl fast', 'fast'); fast.title = 'Fast mode: the priority service tier'; lead.push(fast); }
+      if (node.kind === 'ghost') appendDotted(meta, lead.concat([node.children.length + (node.children.length === 1 ? ' handoff' : ' handoffs') + ' with this chat id']));
+      else appendDotted(meta, lead.concat(nodeMetaParts(node), node.flags.length ? [node.flags.join(' · ')] : []));
+      el.append(top, meta);
       // Roll-up line: the worst child state when it beats the root's own, kind counts, the tree total.
       if (node.children.length || (controlsBlocked && node.kind === 'chat')) {
         var sum = document.createElement('div');
@@ -3159,7 +3220,9 @@
       var el = document.createElement('button');
       el.type = 'button';
       var open = prefs.node === node.id || prefs.panel === node.id;
-      el.className = 'row child' + (open ? ' selected' : '');
+      // Finished work (.fin) is one quiet line: title, state word, tokens, time. Active work keeps its meta line.
+      var fin = node.state === 'FINISHED' || node.state === 'ENDED' || node.state === 'STOPPED';
+      el.className = 'row child' + (open ? ' selected' : '') + (fin ? ' fin' : '');
       el.dataset.id = node.id;
       el.style.setProperty('--d', depth);
       if (node.children.length) el.setAttribute('aria-expanded', String(openKids));
@@ -3167,12 +3230,17 @@
       el.appendChild(rails(ancestors, depth, last, openKids));
       el.append(stateDot(nodeBadge(node.state), nodeStateLabel(node.state)), nodeMark(node));
       var title = textSpan('row-title', node.title);
+      var word = textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase());
+      word.title = nodeStateHelp(node);
       var time = textSpan('row-time', relativeTime(node.updatedMs));
       if (nodeUnread(node)) time.prepend(textSpan('unread', ''), document.createTextNode(' '));
-      el.append(title, time);
+      el.append(title, word);
+      if (fin) { var use = textSpan('row-use', nodeTokens(node) || ''); use.title = 'Tokens'; el.appendChild(use); }
+      el.appendChild(time);
       var meta = document.createElement('div');
       meta.className = 'row-meta';
-      var items = nodeFlagWords(node).map(function (w) {
+      // the state word sits on line 1 now; line 2 keeps the plain flags and "fast"
+      var items = nodeFlagWords(node).filter(function (w) { return w[2] !== 'ask' && w[2] !== 'st'; }).map(function (w) {
         var span = textSpan('fl' + (w[2] ? ' ' + w[2] : ''), w[0]);
         span.title = w[1];
         return span;
@@ -3207,7 +3275,7 @@
     }
     function appendChildren(container, model, node, depth, ancestors, view, reveal) {
       var kids = node.children.map(function (id) { return model.nodes[id]; })
-        .filter(function (k) { return k && (view.tab !== 'LIVE' || !liveHidden(k, prefs.dismissed)); });
+        .filter(function (k) { return k && (view.tab !== 'LIVE' || !liveHidden(k, prefs.dismissed)); }).sort(childOrder);
       var foldOpen = !!(prefs.openFolds || {})[node.id] || kids.some(function (k) { return reveal[k.id] || k.id === prefs.node || k.id === prefs.panel; });
       var folded = kids.filter(function (k) { return nodeFolded(model, k, view); });
       var shown = foldOpen ? kids : kids.filter(function (k) { return folded.indexOf(k) === -1; });
@@ -3368,10 +3436,12 @@
           row.className = 'row root';
           var top = document.createElement('div');
           top.className = 'row-top';
-          top.append(statusChip(entry.archived ? 'ARCHIVED' : 'HISTORY', entry.archived ? 'Archived' : 'History', 'Not in the live list. Click to load this session.'), textSpan('row-time', relativeTime(entry.mtimeMs)));
           var title = document.createElement('div');
           title.className = 'row-title';
           title.textContent = entry.title || 'Untitled Codex task';
+          var word = textSpan('state-word STOPPED', entry.archived ? 'archived' : 'history');
+          word.title = 'Not in the live list. Click to load this session.';
+          top.append(stateDot('ENDED', word.title), markElement('fill', 'codex', 'codex', 'Codex'), title, word, textSpan('row-time', relativeTime(entry.mtimeMs)));
           var meta = document.createElement('div');
           meta.className = 'row-meta';
           meta.appendChild(document.createElement('b')).textContent = projectName(entry.cwd);
@@ -4183,19 +4253,22 @@
       el.className = 'card k-' + info.k + (prefs.node === node.id ? ' selected' : '');
       el.dataset.key = 'card:' + node.id;
       if (railColor) el.style.setProperty('--rail', 'color-mix(in srgb, ' + railColor + ' 55%, transparent)');
+      // head: state mark, title, state word, time. Meta: kind word, fast, model, effort, tokens, tool.
       var head = document.createElement('div');
       head.className = 'card-head';
-      head.append(nodePill(node), nodeKindLabel(node));
-      if (node.fast) head.appendChild(fastChip());
-      head.appendChild(textSpan('row-time', relativeTime(node.updatedMs)));
       var title = document.createElement('div');
       title.className = 'row-title';
       title.textContent = node.title;
       title.title = node.title;
+      var word = textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase());
+      word.title = nodeStateHelp(node);
+      head.append(stateDot(nodeBadge(node.state), nodeStateLabel(node.state)), title, word, textSpan('row-time', relativeTime(node.updatedMs)));
       var meta = document.createElement('div');
       meta.className = 'row-meta';
-      appendDotted(meta, nodeMetaParts(node).concat(node.state === 'RUNNING' && node.tool ? [textSpan('mono', node.tool)] : []));
-      el.append(head, title, meta);
+      var lead = [nodeKindLabel(node)];
+      if (node.fast) { var fast = textSpan('fl fast', 'fast'); fast.title = 'Fast mode: the priority service tier'; lead.push(fast); }
+      appendDotted(meta, lead.concat(nodeMetaParts(node), node.state === 'RUNNING' && node.tool ? [textSpan('mono', node.tool)] : []));
+      el.append(head, meta);
       // The pill and the FAST tag already say the state on a card: only the plain flags show here.
       var flags = nodeFlagWords(node).filter(function (w) { return !w[2]; });
       if (flags.length) {
@@ -4207,8 +4280,11 @@
       if (node.kind === 'workflow' && node.run && node.run.phases) {
         el.appendChild(textDiv('row-meta', node.run.phases.map(function (p) { return p.title + ' ' + p.done + '/' + p.started; }).join(' · ')));
       }
-      var kids = node.children.map(function (id) { return model.nodes[id]; }).filter(Boolean);
-      if (kids.length) {
+      // A card lists only the children still at work; finished ones are one quiet count.
+      var all = node.children.map(function (id) { return model.nodes[id]; }).filter(Boolean);
+      var kids = all.filter(function (k) { return URGENT_STATES[k.rollup]; }).sort(childOrder);
+      var done = all.length - kids.length;
+      if (all.length) {
         var list = document.createElement('div');
         list.className = 'kids';
         kids.slice(0, 8).forEach(function (kid) {
@@ -4217,7 +4293,8 @@
           line.append(stateDot(nodeBadge(kid.state)), nodeMark(kid), textSpan('t', kid.title), word, textSpan('', nodeTokens(kid) || '?'));
           list.appendChild(line);
         });
-        if (kids.length > 8) list.appendChild(textDiv('', '+ ' + (kids.length - 8) + ' more'));
+        if (kids.length > 8) list.appendChild(textDiv('', '+ ' + (kids.length - 8) + ' more at work'));
+        if (done) list.appendChild(textDiv('', done + ' finished'));
         el.appendChild(list);
       }
       el.addEventListener('click', function () { lastHomeSignature = ''; selectNode(node.id, true); });
@@ -4225,7 +4302,7 @@
       return el;
     }
 
-    // The Live overview (design 4.4): Needs you, Needs attention, Running, Recently finished. Cards are roots
+    // The Live overview: Running, Needs you, Needs attention, then a Show finished button. Cards are roots
     // and handoffs (a handoff is the unit you act on); every other child shows on its parent's card.
     var dockedHomeSignature = '';
     function renderHome(inner) {
@@ -4593,7 +4670,7 @@
           dockedHomeSignature = '';
           panelHead.textContent = '';
           var copy = document.createElement('div');
-          copy.append(textDiv('t', 'Live overview'), textDiv('ov-note', 'Needs you first, then Needs attention, Running, and the newest finished'));
+          copy.append(textDiv('t', 'Live overview'), textDiv('ov-note', 'Running first, then Needs you and Needs attention. Finished work is behind the button at the end.'));
           panelHead.appendChild(copy);
         }
         renderHome(panelInner);
@@ -4630,12 +4707,13 @@
       var top = document.createElement('div');
       top.className = 'row-top';
       if (p) {
-        top.append(nodePill(p), nodeKindLabel(p));
+        top.append(stateDot(nodeBadge(p.state), nodeStateLabel(p.state)), nodeKindLabel(p));
         if (p.flags.indexOf('background') !== -1) top.appendChild(textSpan('flag', 'background'));
       }
       var title = textSpan('t', p ? p.title : String(prefs.panel || ''));
       title.title = title.textContent;
       top.appendChild(title);
+      if (p) { var pword = textSpan('state-word ' + nodeBadge(p.state), nodeStateLabel(p.state).toLowerCase()); pword.title = nodeStateHelp(p); top.appendChild(pword); }
       var meta = document.createElement('div');
       meta.className = 'm';
       function item(text, tip, mono) { var s = textSpan(mono ? 'mono' : '', text); if (tip) s.title = tip; meta.appendChild(s); }
