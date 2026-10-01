@@ -44,6 +44,14 @@ test("token_count events surface running token totals", () => {
   // tolerate the flat shape too
   const ev2 = ctx().simplify(JSON.stringify({ type: "event_msg", payload: { type: "token_count", total_tokens: 7 } }));
   assert.equal(ev2.tokens, 7);
+  // Codex 0.159.2: context now, the window and the plan limit (per account, newest wins in the UI)
+  const ev3 = ctx().simplify(JSON.stringify({ timestamp: "2026-10-01T10:00:00.000Z", type: "event_msg", payload: { type: "token_count",
+    info: { total_token_usage: { total_tokens: 42326 }, last_token_usage: { input_tokens: 42299, output_tokens: 27, total_tokens: 42326 }, model_context_window: 828400 },
+    rate_limits: { limit_id: "codex", primary: { used_percent: 47, window_minutes: 10080, resets_at: 1791046707 }, secondary: null, plan_type: "pro" } } }));
+  assert.equal(ev3.contextTokens, 42326);
+  assert.equal(ev3.contextWindow, 828400);
+  assert.deepEqual({ ...ev3.plan }, { usedPercent: 47, windowMinutes: 10080, resetsAtMs: 1791046707000, atMs: Date.parse("2026-10-01T10:00:00.000Z") });
+  assert.equal(ev.plan, null);
 });
 
 // Claude workflow parsers. Fixtures are trimmed real lines from ~/.claude/projects run files
@@ -168,4 +176,142 @@ test("Claude transcript tail: the newest real assistant line gives model and eff
   assert.deepEqual(last(cut, true), { model: "", effort: "" });
   assert.deepEqual(last(asst("claude-fable-5-1") + "\n", false), { model: "claude-fable-5-1", effort: "" });
   assert.deepEqual(last("", false), { model: "", effort: "" });
+});
+
+// Claude chat tree parsers. Line shapes from main chat files of Claude Code 2.1.186 and 2.1.285
+// on this PC, trimmed, with text, paths and ids redacted.
+function fns(...names) { const c = {}; for (const n of names) vm.runInNewContext(src.match(new RegExp("\\nfunction " + n + "\\([\\s\\S]*?\\n\\}"))[0], c); return c; }
+
+test("Claude chat lines: titles, prompts, turn state, tools, results and task notifications", () => {
+  const facts = (o) => fns("claudeLineFacts").claudeLineFacts(typeof o === "string" ? o : JSON.stringify(o));
+  const base = { sessionId: "354f362e-aa4e-45e9-9969-37583718e229", timestamp: "2026-10-01T09:41:02.000Z", version: "2.1.285", entrypoint: "claude-vscode", cwd: "D:\\GIT\\redacted" };
+  assert.equal(facts({ type: "custom-title", sessionId: base.sessionId, customTitle: "Fix the release flow" }).title, "Fix the release flow");
+  assert.equal(facts({ type: "custom-title", customTitle: "x" }).titleSource, "custom");
+  assert.equal(facts({ type: "ai-title", aiTitle: "Plan 2.19" }).titleSource, "ai");
+  assert.equal(facts({ type: "last-prompt", lastPrompt: "y".repeat(500) }).lastPrompt.length, 200);
+  // A typed prompt starts a turn; hook text and commands do not, and are never a prompt.
+  const p = facts({ ...base, type: "user", message: { role: "user", content: "Check the hook against CloudCLI" } });
+  assert.equal(p.prompt, "Check the hook against CloudCLI");
+  assert.equal(p.turn, "running");
+  assert.equal(p.entrypoint, "claude-vscode");
+  assert.equal(p.version, "2.1.285");
+  for (const c of ["<system-reminder>\nredacted\n</system-reminder>", "<command-name>/compact</command-name>", "<local-command-stdout>ok</local-command-stdout>"]) {
+    const f = facts({ ...base, type: "user", message: { role: "user", content: c } });
+    assert.equal(f.prompt, undefined);
+    assert.equal(f.turn, undefined);
+  }
+  assert.equal(facts({ ...base, type: "user", isMeta: true, message: { content: [{ type: "text", text: "hook text" }] } }).prompt, undefined);
+  assert.equal(facts({ ...base, type: "user", message: { content: [{ type: "text", text: "[Request interrupted by user]" }] } }).turn, "done");
+  // 2.1.186 forks: every copied line names the parent chat.
+  assert.equal(facts({ ...base, version: "2.1.186", entrypoint: "sdk-ts", forkedFrom: { sessionId: "0b1c2d3e-0000-4000-8000-000000000000", messageUuid: "u" }, type: "user", message: { content: "x" } }).forkedFrom, "0b1c2d3e-0000-4000-8000-000000000000");
+  // Assistant: model, effort, usage, tools; the stop reason decides the turn.
+  const usage = { input_tokens: 2, cache_creation_input_tokens: 59403, cache_read_input_tokens: 21837, output_tokens: 8 };
+  const asst = (content, stop, extra = {}) => ({ ...base, type: "assistant", effort: "high", message: { id: "msg_01", model: "claude-opus-5-5", content, stop_reason: stop, usage }, ...extra });
+  const t = facts(asst([{ type: "tool_use", id: "toolu_1", name: "Bash", input: { command: 'node "C:/x/plugin/scripts/codex-companion.mjs" task --background --effort low "redacted"' } },
+    { type: "tool_use", id: "toolu_2", name: "Agent", input: { description: "Review the plugin hook", prompt: "redacted" } },
+    { type: "tool_use", id: "toolu_3", name: "Bash", input: { command: "npm test" } }], "tool_use"));
+  assert.equal(t.model, "claude-opus-5-5");
+  assert.equal(t.effort, "high");
+  assert.deepEqual({ ...t.usage }, { id: "msg_01", in: 2 + 59403 + 21837, out: 8 });
+  assert.equal(t.turn, "running");
+  assert.deepEqual(Array.from(t.tools, (x) => [x.id, x.agent, x.companion]), [["toolu_1", false, true], ["toolu_2", true, false], ["toolu_3", false, false]]);
+  assert.equal(t.tools[1].preview, "Agent: Review the plugin hook");
+  assert.equal(facts(asst([{ type: "tool_use", id: "t", name: "PowerShell", input: { command: "node codex-companion.mjs adversarial-review --base main" } }], "tool_use")).tools[0].companion, true);
+  assert.equal(facts(asst([{ type: "tool_use", id: "t", name: "Bash", input: { command: "node codex-companion.mjs status" } }], "tool_use")).tools[0].companion, false);
+  assert.equal(facts(asst([{ type: "text", text: "Done." }], "end_turn")).turn, "done");
+  assert.equal(facts(asst([{ type: "text", text: "partial" }], null)).turn, "running");
+  const synthetic = facts({ ...base, type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text: "API Error" }] } });
+  assert.equal(synthetic.model, undefined);
+  assert.equal(synthetic.turn, "done");
+  // Results carry the full text (the launcher id line sits at the end of a long result).
+  const r = facts({ ...base, type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_1", content: [{ type: "text", text: "long result\n".repeat(200) }, { type: "text", text: "Codex job: task-muo8qkie-4wem4h" }] }] } });
+  assert.equal(r.results[0].id, "toolu_1");
+  assert.match(r.results[0].text, /Codex job: task-muo8qkie-4wem4h$/);
+  assert.equal(r.turn, "running");
+  // Background agents end by a task notification: in a queue-operation line or a user line.
+  const note = "<task-notification>\n<task-id>aa29e4c2d0000000a</task-id>\n<tool-use-id>toolu_2</tool-use-id>\n<status>completed</status>\n<summary>redacted</summary>\n</task-notification>";
+  assert.deepEqual(Array.from(facts({ type: "queue-operation", operation: "enqueue", content: note }).notes, (x) => ({ ...x })), [{ id: "aa29e4c2d0000000a", status: "completed" }]);
+  const nu = facts({ ...base, type: "user", message: { content: note } });
+  assert.equal(nu.notes[0].status, "completed");
+  assert.equal(nu.prompt, undefined);
+  assert.equal(nu.turn, "running");
+  assert.equal(facts({ type: "system", subtype: "compact_boundary", parentUuid: null }).compact, true);
+  assert.equal(facts({ type: "system", subtype: "turn_duration" }).turn, "done");
+  assert.equal(facts({ type: "attachment", attachment: { type: "hook_success" } }).turn, undefined);
+  assert.equal(facts("{broken"), null);
+  assert.equal(facts("null"), null);
+});
+
+test("Claude usage: each message id counts once, also when a compaction writes the line again", () => {
+  const { claudeUsageAdd } = fns("claudeUsageAdd");
+  const acc = { seen: new Set(), context: 0, total: 0, output: 0 };
+  const u = { id: "msg_01", in: 81242, out: 8 };
+  claudeUsageAdd(acc, u, true, true);
+  claudeUsageAdd(acc, u, true, true); // the same message, next content block
+  for (let i = 0; i < 300; i++) claudeUsageAdd(acc, { id: "msg_x" + i, in: 1, out: 1 }, true, true);
+  claudeUsageAdd(acc, u, true, false); // rewritten after a compact boundary, ~300 messages later
+  assert.equal(acc.total, 81250 + 600);
+  assert.equal(acc.output, 8 + 300);
+  assert.equal(acc.context, 1); // the newest live line
+  // A tail read sets the context only: the backfill counts those bytes.
+  const tail = { seen: new Set(), context: 0, total: 0, output: 0 };
+  claudeUsageAdd(tail, u, false, true);
+  assert.deepEqual([tail.context, tail.total, tail.seen.size], [81242, 0, 0]);
+  // A line without a message id still counts; the window of ids stays bounded.
+  claudeUsageAdd(acc, { id: "", in: 5, out: 5 }, true, false);
+  assert.equal(acc.total, 81860);
+  for (let i = 0; i < 5000; i++) claudeUsageAdd(acc, { id: "m" + i, in: 0, out: 0 }, true, false);
+  assert.equal(acc.seen.size <= 2048, true);
+});
+
+test("Claude launcher ids: job ids and labelled thread ids only, never a bare UUID", () => {
+  const ids = (t) => { const r = fns("claudeLauncherIds").claudeLauncherIds(t); return { jobIds: [...r.jobIds], threadIds: [...r.threadIds] }; };
+  assert.deepEqual(ids("Codex task started in the background as task-muocxq6w-uvy30z. Check /codex:status task-muocxq6w-uvy30z for progress."),
+    { jobIds: ["task-muocxq6w-uvy30z"], threadIds: [] });
+  // P1: the line every foreground result ends with
+  assert.deepEqual(ids("Summary\n...\nCodex job: review-muocv3nt-l3eu18 · thread: 01A0F346-1111-7222-8333-444455556666\n"),
+    { jobIds: ["review-muocv3nt-l3eu18"], threadIds: ["01a0f346-1111-7222-8333-444455556666"] });
+  assert.deepEqual(ids("Codex session ID: 01a0f348-aaaa-7bbb-8ccc-dddddddddddd\nResume in Codex: codex resume 01a0f348-aaaa-7bbb-8ccc-dddddddddddd").threadIds,
+    ["01a0f348-aaaa-7bbb-8ccc-dddddddddddd"]);
+  // A chat id in a path or a plain mention is no thread
+  assert.deepEqual(ids("D:/x/354f362e-aa4e-45e9-9969-37583718e229/subagents"), { jobIds: [], threadIds: [] });
+  assert.deepEqual(ids(null), { jobIds: [], threadIds: [] });
+});
+
+test("Claude head facts: first entrypoint, cwd and typed prompt; a cut last line is dropped", () => {
+  const head = (t) => ({ ...fns("claudeLineFacts", "claudeHeadFacts").claudeHeadFacts(t) });
+  const l = (o) => JSON.stringify({ sessionId: "s", timestamp: "2026-10-01T09:00:00Z", ...o });
+  const text = [
+    l({ type: "permission-mode", permissionMode: "auto" }),
+    l({ type: "user", entrypoint: "cli", version: "2.1.186", cwd: "D:\\GIT\\redacted", isMeta: true, message: { content: "<system-reminder>x</system-reminder>" } }),
+    l({ type: "user", entrypoint: "cli", cwd: "D:\\GIT\\other", message: { content: "  Tidy the KB routing tables  " } }),
+    '{"type":"user","message":{"content":"cut',
+  ].join("\n");
+  assert.deepEqual(head(text), { entrypoint: "cli", version: "2.1.186", cwd: "D:\\GIT\\redacted", forkedFrom: "", firstPrompt: "Tidy the KB routing tables" });
+  assert.equal(head("").firstPrompt, "");
+});
+
+test("Claude plan usage: only the usage snapshot fields leave Claude Code's state file", () => {
+  const view = (j) => fns("claudeUsageView").claudeUsageView(j);
+  const state = {
+    oauthAccount: { emailAddress: "secret@example.com", accessToken: "sk-secret" }, mcpServers: { x: { env: { TOKEN: "secret" } } },
+    cachedUsageUtilization: { fetchedAtMs: 1790791778358, accountUuid: "uuid-secret", utilization: {
+      five_hour: { utilization: 8 }, iguana_necktie: { secret: 1 },
+      limits: [
+        { kind: "session", group: "session", percent: 8, severity: "normal", resets_at: "2026-09-30T22:00:00+00:00", scope: null, is_active: false },
+        { kind: "weekly_all", group: "weekly", percent: 20, severity: "normal", resets_at: "2026-10-07T10:00:00+00:00", scope: null },
+        { kind: "weekly_scoped", group: "weekly", percent: 7, severity: "warning", resets_at: "2026-10-07T10:00:00+00:00", scope: { model: { id: null, display_name: "Fable" }, surface: null } },
+        null, { percent: 3 },
+      ],
+      spend: { used: { amount_minor: 0 }, percent: 0, severity: "normal", enabled: false } } },
+  };
+  const v = view(state);
+  assert.equal(JSON.stringify(v).includes("secret"), false);
+  assert.equal(v.fetchedAtMs, 1790791778358);
+  assert.deepEqual(Array.from(v.limits, (l) => [l.kind, l.percent, l.severity, l.model]), [["session", 8, "normal", ""], ["weekly_all", 20, "normal", ""], ["weekly_scoped", 7, "warning", "Fable"]]);
+  assert.equal(v.spend, null);
+  state.cachedUsageUtilization.utilization.spend.enabled = true;
+  assert.deepEqual({ ...view(state).spend }, { percent: 0, severity: "normal" });
+  assert.equal(view({}), null);
+  assert.equal(view(null), null);
 });

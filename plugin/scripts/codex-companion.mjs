@@ -804,6 +804,9 @@ async function followAndReport(cwd, job, logFile, options = {}) {
   // state.json carries no rendered/result - runTrackedJob only writes those to
   // the per-job file - so read the job file for the payload.
   const stored = readStoredJob(job.workspaceRoot, job.id) ?? {};
+  // One stable line, so the viewer can tell which transcript started this job.
+  const idLine = `Codex job: ${job.id}${stored.threadId ? ` · thread: ${stored.threadId}` : ""}\n`;
+  const withId = (text) => `${text}${text.endsWith("\n") || !text ? "" : "\n"}${idLine}`;
 
   // A worker that threw never records rendered/result and leaves exitCode null.
   // main().catch used to surface those errors when the run was inline; now that
@@ -813,14 +816,14 @@ async function followAndReport(cwd, job, logFile, options = {}) {
     const message = stored.errorMessage ?? `Job ${job.id} finished without recording a result.`;
     const payload = { jobId: job.id, status: stored.status ?? "failed", title: job.title, workspaceRoot: job.workspaceRoot, errorMessage: message };
     process.exitCode = 1;
-    outputAndMarkDelivered(options.json ? payload : `${message}\n`, options.json, job, stored);
+    outputAndMarkDelivered(options.json ? payload : withId(`${message}\n`), options.json, job, stored);
     return;
   }
 
   if (typeof stored.exitCode === "number" && stored.exitCode !== 0) {
     process.exitCode = stored.exitCode;
   }
-  outputAndMarkDelivered(options.json ? stored.result : stored.rendered ?? "", options.json, job, stored);
+  outputAndMarkDelivered(options.json ? stored.result : withId(stored.rendered ?? ""), options.json, job, stored);
 }
 
 // Double-spawn on purpose: this launches a trampoline (`task-worker-launch`), which
