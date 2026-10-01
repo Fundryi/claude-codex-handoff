@@ -111,7 +111,7 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 - a feed that shows who says what: your messages, Claude's handoff prompts and automatic answers, the plugin's return format, Codex's replies and questions, and Codex's work (thinking, commands, patches) in its own collapsed log, each actor in one color with a legend
 - a result card on every finished handoff (Summary, Changed files, Checks run, Needs decision) with an answer box that resumes the thread when Codex asked a question; "Show full result" opens the full result dialog and lists every run on the thread, newest first
 - a Claude chat opens with its live transcript (your prompts, Claude's replies and work); a Claude subagent or workflow agent opens in a side panel next to it; a workflow shows its phases and agents. Claude work uses the Claude orange, Codex work teal. The viewer only reads the files under `~/.claude/projects` and has no stop or resume buttons for Claude
-- token usage on every row and tree, split into Claude and Codex, and your plan limits at the bottom of the sidebar: the Claude 5-hour, weekly and per-model weekly limits and the Codex plan limit
+- token usage on every row and tree, split into Claude and Codex, and your plan limits at the bottom of the sidebar, as the part already used: the Codex limits read live every 5 minutes with the count of free limit resets you have, and the Claude 5-hour and weekly limits from the snapshot Claude Code saves when you open `/usage`
 - one-click resume and cancel, with in-app confirmation
 - one job store shared with the CLI, so `/codex:status` and the dashboard always agree
 - search across all recorded sessions, effort/sandbox/token display, archived sessions, unread markers, saved layout

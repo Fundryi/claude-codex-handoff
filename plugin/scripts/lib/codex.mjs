@@ -688,6 +688,42 @@ async function withAppServer(cwd, fn, connectOptions = {}) {
   }
 }
 
+// Plan limits for the viewer: only percentages, windows, reset times and the count of
+// free limit resets. Account ids, credit ids and backend texts never leave this function.
+export function shapeCodexLimits(reply, fetchedAtMs) {
+  const snap = reply?.rateLimitsByLimitId?.codex ?? reply?.rateLimits ?? {};
+  const win = (w) => w && typeof w.usedPercent === "number"
+    ? { usedPercent: w.usedPercent, windowMins: w.windowDurationMins ?? 0, resetsAtMs: (w.resetsAt ?? 0) * 1000 }
+    : null;
+  const rc = reply?.rateLimitResetCredits;
+  const expiries = (rc?.credits ?? []).filter((c) => c && c.status === "available" && c.expiresAt).map((c) => c.expiresAt * 1000);
+  return {
+    ok: true,
+    fetchedAtMs,
+    windows: [win(snap.primary), win(snap.secondary)].filter(Boolean),
+    allowed: typeof reply?.ordinaryUsageAllowed === "boolean" ? reply.ordinaryUsageAllowed : null,
+    resets: rc ? { available: Number(rc.availableCount) || 0, nextExpiryMs: expiries.length ? Math.min(...expiries) : 0 } : null
+  };
+}
+
+// One deadline over the whole read, start-up included. A read that times out may leave its
+// app-server open: the caller exits the process, and the app-server ends when its stdin closes.
+export async function readCodexLimits(cwd) {
+  const fetchedAtMs = Date.now();
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false, fetchedAtMs, detail: "timed out after 15 s" }), 15000);
+  });
+  const read = withAppServer(cwd, async (client) =>
+    shapeCodexLimits(await client.request("account/rateLimits/read", { excludeResetCreditDetails: false }), fetchedAtMs)
+  ).catch((error) => ({ ok: false, fetchedAtMs, detail: String(error instanceof Error ? error.message : error).slice(0, 200) }));
+  try {
+    return await Promise.race([read, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function resolveCodexHome() {
   return path.resolve(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
 }

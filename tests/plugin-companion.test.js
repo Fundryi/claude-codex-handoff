@@ -335,3 +335,27 @@ test("every flag a command's argument hint offers exists in the companion", () =
     }
   }
 });
+
+// Recorded account/rateLimits/read reply (Codex 0.159.2, Pro plan, 2026-10-01).
+test("shapeCodexLimits keeps only the numbers the viewer shows", async () => {
+  const { pathToFileURL } = require("node:url");
+  const { shapeCodexLimits } = await import(pathToFileURL(path.join(__dirname, "..", "plugin", "scripts", "lib", "codex.mjs")).href);
+  const snap = { limitId: "codex", primary: { usedPercent: 47, windowDurationMins: 10080, resetsAt: 1791046707 }, secondary: null,
+    credits: { hasCredits: true, unlimited: false, balance: "62500" }, planType: "pro" };
+  const credit = (id, expiresAt, status = "available") => ({ id, resetType: "codexRateLimits", status, grantedAt: 1788581970, expiresAt, title: "Full reset", description: "secret text" });
+  const reply = {
+    accountId: "acct-secret", ordinaryUsageAllowed: true, rateLimitUpsell: null,
+    rateLimits: { ...snap, limitId: "premium", primary: null },
+    rateLimitsByLimitId: { codex: snap },
+    rateLimitResetCredits: { availableCount: 2, credits: [credit("c-secret-1", 1792701861), credit("c-secret-2", 1791173970), credit("c-secret-3", 1790000000, "redeemed")] },
+  };
+  const v = shapeCodexLimits(reply, 123);
+  assert.deepEqual(v, { ok: true, fetchedAtMs: 123, windows: [{ usedPercent: 47, windowMins: 10080, resetsAtMs: 1791046707000 }],
+    allowed: true, resets: { available: 2, nextExpiryMs: 1791173970000 } });
+  assert.equal(/secret/.test(JSON.stringify(v)), false);
+  // No codex bucket, no reset summary (older Codex): the single-bucket view, no pill.
+  const old = shapeCodexLimits({ rateLimits: { primary: { usedPercent: 5, windowDurationMins: 300, resetsAt: 1 }, secondary: { usedPercent: 9, windowDurationMins: 10080, resetsAt: 2 } } }, 1);
+  assert.deepEqual(old.windows.map((w) => w.windowMins), [300, 10080]);
+  assert.equal(old.resets, null);
+  assert.equal(old.allowed, null);
+});

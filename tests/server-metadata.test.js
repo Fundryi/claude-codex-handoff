@@ -44,14 +44,17 @@ test("token_count events surface running token totals", () => {
   // tolerate the flat shape too
   const ev2 = ctx().simplify(JSON.stringify({ type: "event_msg", payload: { type: "token_count", total_tokens: 7 } }));
   assert.equal(ev2.tokens, 7);
-  // Codex 0.159.2: context now, the window and the plan limit (per account, newest wins in the UI)
+  // Codex 0.159.2: context now and the window. rate_limits are not read here (one bucket per
+  // event, a Spark run would show its 0 %); the plan limits come from the live read.
   const ev3 = ctx().simplify(JSON.stringify({ timestamp: "2026-10-01T10:00:00.000Z", type: "event_msg", payload: { type: "token_count",
     info: { total_token_usage: { total_tokens: 42326 }, last_token_usage: { input_tokens: 42299, output_tokens: 27, total_tokens: 42326 }, model_context_window: 828400 },
     rate_limits: { limit_id: "codex", primary: { used_percent: 47, window_minutes: 10080, resets_at: 1791046707 }, secondary: null, plan_type: "pro" } } }));
   assert.equal(ev3.contextTokens, 42326);
   assert.equal(ev3.contextWindow, 828400);
-  assert.deepEqual({ ...ev3.plan }, { usedPercent: 47, windowMinutes: 10080, resetsAtMs: 1791046707000, atMs: Date.parse("2026-10-01T10:00:00.000Z") });
-  assert.equal(ev.plan, null);
+  assert.equal(ev3.plan, undefined);
+  const spark = ctx().simplify(JSON.stringify({ type: "event_msg", payload: { type: "token_count", info: null,
+    rate_limits: { limit_id: "codex_bengalfox", primary: { used_percent: 0, window_minutes: 300, resets_at: 1791046707 } } } }));
+  assert.equal(spark, null);
 });
 
 // Claude workflow parsers. Fixtures are trimmed real lines from ~/.claude/projects run files
@@ -319,7 +322,9 @@ test("Claude plan usage: only the usage snapshot fields leave Claude Code's stat
   const v = view(state);
   assert.equal(JSON.stringify(v).includes("secret"), false);
   assert.equal(v.fetchedAtMs, 1790791778358);
-  assert.deepEqual(Array.from(v.limits, (l) => [l.kind, l.percent, l.severity, l.model]), [["session", 8, "normal", ""], ["weekly_all", 20, "normal", ""], ["weekly_scoped", 7, "warning", "Fable"]]);
+  assert.deepEqual(Array.from(v.limits, (l) => [l.kind, l.percent, l.severity, l.model, l.isActive]), [["session", 8, "normal", "", false], ["weekly_all", 20, "normal", "", false], ["weekly_scoped", 7, "warning", "Fable", false]]);
+  state.cachedUsageUtilization.utilization.limits[1].is_active = true;
+  assert.equal(view(state).limits[1].isActive, true);
   assert.equal(v.spend, null);
   state.cachedUsageUtilization.utilization.spend.enabled = true;
   assert.deepEqual({ ...view(state).spend }, { percent: 0, severity: "normal" });

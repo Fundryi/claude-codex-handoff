@@ -17,6 +17,7 @@ import {
     getSessionRuntimeStatus,
     importExternalAgentSession,
     parseStructuredOutput,
+    readCodexLimits,
     readOutputSchema,
     runAppServerReview,
     runAppServerTurn
@@ -97,7 +98,8 @@ function printUsage() {
       "  node scripts/codex-companion.mjs transfer [--source <claude-jsonl>] [--json]",
       "  node scripts/codex-companion.mjs status [job-id] [--all] [--json]",
       "  node scripts/codex-companion.mjs result [job-id] [--wait] [--timeout-ms <ms>] [--json]",
-      "  node scripts/codex-companion.mjs cancel [job-id] [--json]"
+      "  node scripts/codex-companion.mjs cancel [job-id] [--json]",
+      "  node scripts/codex-companion.mjs limits [--cwd <dir>]"
     ].join("\n")
   );
 }
@@ -1376,6 +1378,18 @@ async function main() {
     case "cancel":
       await handleCancel(argv);
       break;
+    case "limits": {
+      // Read-only, no job state: the viewer polls this for the plan limits block.
+      const { options } = parseArgs(argv, { valueOptions: ["cwd"], booleanOptions: ["json"] });
+      const limits = await readCodexLimits(options.cwd || process.cwd());
+      // Exit at once: a timed-out read can still hold an app-server open. On Windows that
+      // app-server sits under a shell, so a failed read ends this whole process tree.
+      process.stdout.write(`${JSON.stringify(limits, null, 2)}\n`, () => {
+        if (!limits.ok && process.platform === "win32") terminateProcessTree(process.pid);
+        process.exit(0);
+      });
+      return;
+    }
     default:
       throw new Error(`Unknown subcommand: ${subcommand}`);
   }
