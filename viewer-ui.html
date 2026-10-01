@@ -2894,7 +2894,7 @@
       var page = pageKind();
       document.body.classList.toggle('claude-tab', page === 'workflow');
       document.body.classList.toggle('chat-page', page === 'chat' || page === 'ghost');
-      document.body.classList.toggle('panel-open', !!prefs.panel);
+      document.body.classList.toggle('panel-open', !!prefs.panel || panelDocked());
       search.value = prefs.query || '';
       autoOpenToggle.classList.toggle('on', !!prefs.autoFollow);
       autoOpenToggle.setAttribute('aria-pressed', prefs.autoFollow ? 'true' : 'false');
@@ -4346,7 +4346,10 @@
 
     // The Live overview (design 4.4): Needs you, Needs attention, Running, Recently finished. Cards are roots
     // and handoffs (a handoff is the unit you act on); every other child shows on its parent's card.
-    function renderHome() {
+    var dockedHomeSignature = '';
+    function renderHome(inner) {
+      var docked = !!inner;
+      inner = inner || feedInner;
       var model = currentModel();
       var now = Date.now();
       var rootIds = viewRoots(model, { tab: 'LIVE', chip: 'ALL', kinds: {} }, now, prefs.dismissed, '');
@@ -4370,13 +4373,13 @@
       var sections = [['Needs you', pick(['ANSWER'])], ['Needs attention', pick(['ATTENTION'])], ['Running', pick(['RUNNING', 'BACKGROUND'])],
         ['Recently finished', cards.filter(function (c) { return c.node.state === 'FINISHED'; }).sort(function (a, b) { return (b.node.updatedMs || 0) - (a.node.updatedMs || 0); }).slice(0, 4)]];
       var signature = JSON.stringify([dataVersion, Math.floor(now / 10000), prefs.node, sections.map(function (s) { return s[1].map(function (c) { return c.node.id; }); })]);
-      if (signature === lastHomeSignature) return;
-      lastHomeSignature = signature;
-      var focusHost = feedInner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
+      if (signature === (docked ? dockedHomeSignature : lastHomeSignature)) return;
+      if (docked) dockedHomeSignature = signature; else lastHomeSignature = signature;
+      var focusHost = inner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
       var focusKey = focusHost ? focusHost.dataset.key : null;
-      feedInner.textContent = '';
+      inner.textContent = '';
       var wrap = document.createElement('div');
-      wrap.id = 'home-view';
+      if (!docked) wrap.id = 'home-view';
       sections.forEach(function (section) {
         if (!section[1].length) return;
         var heading = document.createElement('div');
@@ -4397,9 +4400,9 @@
         more.addEventListener('click', function () { chooseView('LIVE', 'FINISHED'); });
         wrap.appendChild(more);
       }
-      feedInner.appendChild(wrap);
+      inner.appendChild(wrap);
       if (focusKey) wrap.querySelectorAll('[data-key]').forEach(function (el) { if (el.dataset.key === focusKey) el.focus({ preventScroll: true }); });
-      jumpLatest.hidden = true;
+      if (!docked) jumpLatest.hidden = true;
     }
 
     function renderFeed(preservePosition) {
@@ -4692,10 +4695,27 @@
     panelInner.id = 'panel-inner';
     panelBody.appendChild(panelInner);
     var lastPanelSignature = '';
+    // Wide screens (design 10.1): the extra width docks the Live overview in the side panel. ?wide=0 turns it off.
+    var WIDE_OFF = /[?&]wide=0(?:&|$)/.test(location.search);
+    function isWide() { return !WIDE_OFF && window.innerWidth >= 2200; }
+    function panelDocked() { return !prefs.panel && isWide() && pageKind() !== 'overview'; }
     function renderPanel() {
-      var open = !!prefs.panel;
+      var docked = panelDocked();
+      var open = !!prefs.panel || docked;
       document.body.classList.toggle('panel-open', open);
       if (!open) { lastPanelSignature = ''; return; }
+      if (docked) {
+        if (lastPanelSignature !== 'docked') {
+          lastPanelSignature = 'docked';
+          dockedHomeSignature = '';
+          panelHead.textContent = '';
+          var copy = document.createElement('div');
+          copy.append(textDiv('t', 'Live overview'), textDiv('ov-note', 'Needs you first, then Needs attention, Running, and the newest finished'));
+          panelHead.appendChild(copy);
+        }
+        renderHome(panelInner);
+        return;
+      }
       var p = panelNode();
       var t = transcripts.panel;
       var signature = JSON.stringify([prefs.panel, p ? [p.state, p.title, p.model, p.effort, p.tool, p.usage, Math.floor((p.updatedMs || 0) / 10000)] : null,
@@ -5919,6 +5939,36 @@
       if (feedRenderPending && !feedRenderFrame) feedRenderFrame = requestAnimationFrame(flushFeedRender);
     });
 
+    list.addEventListener('keydown', function (event) {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(event.key) === -1) return;
+      var items = Array.prototype.slice.call(list.querySelectorAll('.row[data-id], .fold:not(.cap), .group-caption'));
+      var index = items.indexOf(document.activeElement);
+      if (index === -1) return;
+      event.preventDefault();
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        var next = items[index + (event.key === 'ArrowDown' ? 1 : -1)];
+        if (next) next.focus();
+        return;
+      }
+      var id = document.activeElement.dataset.id;
+      var model = currentModel();
+      var node = id && model.nodes[id];
+      if (!node) return;
+      prefs.openNodes = prefs.openNodes || {};
+      var isOpen = node.children.length > 0 && nodeOpen(node, revealSet(model));
+      if (event.key === 'ArrowRight' && node.children.length && !isOpen) prefs.openNodes[id] = true;
+      else if (event.key === 'ArrowLeft' && isOpen) prefs.openNodes[id] = false;
+      else if (event.key === 'ArrowLeft' && node.parentId) {
+        var parentRow = list.querySelector('.row[data-id="' + CSS.escape(node.parentId) + '"]');
+        if (parentRow) parentRow.focus();
+        return;
+      } else return;
+      savePrefs();
+      renderList();
+      var again = list.querySelector('.row[data-id="' + CSS.escape(id) + '"]');
+      if (again) again.focus();
+    });
+
     var events = new EventSource('/events');
     events.onopen = function () { if (!controlsBlocked) setConnection('connected', 'Live updates connected'); };
     events.onerror = function () { setConnection('disconnected', 'Reconnecting\u2026'); };
@@ -6031,7 +6081,7 @@
     applyPrefs();
     list.addEventListener('scroll', listEdges, { passive: true });
     chipsBar.addEventListener('scroll', chipEdges, { passive: true });
-    window.addEventListener('resize', function () { listEdges(); chipEdges(); });
+    window.addEventListener('resize', function () { listEdges(); chipEdges(); renderPanel(); });
     renderFilters();
     renderList();
     renderHeader();
