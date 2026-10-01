@@ -33,13 +33,16 @@ export function statusText(input, limits) {
   return parts.join(" · ");
 }
 
+// The file is replaced, never appended: it holds only the newest numbers (about 150 bytes).
 function save(limits, file = LIMITS_FILE) {
+  const tmp = `${file}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify({ atMs: Date.now(), ...limits }));
     fs.renameSync(tmp, file); // several chats may write at once: last one wins, never a half file
-  } catch { /* the status line still prints */ }
+  } catch {
+    try { fs.unlinkSync(tmp); } catch {} // a failed swap (file locked) leaves no temp file behind
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
