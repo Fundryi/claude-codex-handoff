@@ -207,10 +207,9 @@ function simplify(line) {
       // Context now = the last call's input + output (Codex appends the output to the history).
       const contextTokens = p.info?.last_token_usage?.total_tokens || 0;
       const contextWindow = p.info?.model_context_window || 0;
-      const pr = p.rate_limits?.primary;
-      const plan = pr && typeof pr.used_percent === "number"
-        ? { usedPercent: pr.used_percent, windowMinutes: pr.window_minutes || 0, resetsAtMs: (pr.resets_at || 0) * 1000, atMs: Date.parse(ts) || 0 } : null;
-      return tokens || plan ? { kind: "meta", ts, tokens, contextTokens, contextWindow, plan } : null;
+      // rate_limits here are ignored: one event holds one bucket (a Spark or premium bucket too).
+      // The plan limits come from the live read (refreshCodexLimits).
+      return tokens ? { kind: "meta", ts, tokens, contextTokens, contextWindow } : null;
     }
     if (et === "task_started") return { kind: "sys", ts, text: "task started" };
     if (et === "task_complete") return { kind: "done", ts, text: "task complete" };
@@ -434,7 +433,6 @@ function ingest(file) {
       if (ev.tokens) s.meta.tokens = ev.tokens;
       if (ev.contextTokens) s.meta.contextTokens = ev.contextTokens;
       if (ev.contextWindow) s.meta.contextWindow = ev.contextWindow;
-      if (ev.plan) s.meta.plan = ev.plan;
       // First session_meta wins. A child agent's rollout repeats the parent's
       // session_meta after its own; taking the last one made the child carry the
       // parent's thread id and become its own parent.
@@ -507,7 +505,6 @@ function sessionSummary(s, threadJobStatus) {
     tokensUsed: s.meta.tokens || 0,
     contextTokens: s.meta.contextTokens || 0,
     contextWindow: s.meta.contextWindow || 0,
-    plan: s.meta.plan || null, // per account: the UI shows the newest atMs across sessions
     status,
     archived: s.file.startsWith(ARCHIVED_DIR),
     lastGrow: s.lastGrow,
@@ -1174,6 +1171,34 @@ let claudeChatsFrame = { type: "claudeChats", chats: [], ghosts: [] };
 let claudeUsageMtime = -1;
 let claudeUsageFrame = { type: "claudeUsage", usage: null };
 
+// Codex plan limits, read live through the companion (one short app-server, about 1 s) only
+// while a browser is connected: on connect, every CODEX_LIMITS_MS, and when a job ends.
+// A failed read keeps the last good numbers and adds the error.
+const CODEX_LIMITS_MS = 5 * 60 * 1000;
+let codexLimitsFrame = { type: "codexLimits", limits: null };
+let codexLimitsAtMs = 0;
+let codexLimitsBusy = false;
+let codexLimitsRead = 0; // the read whose answer counts; a late answer of a released read is dropped
+function refreshCodexLimits(force) {
+  const now = Date.now();
+  if (!sseClients.size || (codexLimitsBusy && now - codexLimitsAtMs < 120000)) return; // a hung read frees the slot after 2 min
+  if (!force && now - codexLimitsAtMs < CODEX_LIMITS_MS) return;
+  codexLimitsBusy = true;
+  codexLimitsAtMs = now;
+  const read = ++codexLimitsRead;
+  runCompanion(["limits", "--json", "--cwd", os.homedir()], {}, (_err, parsed, stderr) => {
+    if (read !== codexLimitsRead) return;
+    codexLimitsBusy = false;
+    const last = codexLimitsFrame.limits;
+    const limits = parsed && parsed.ok ? parsed : {
+      ...(last && last.windows ? last : { windows: [], resets: null, fetchedAtMs: 0 }),
+      ok: false, allowed: null, error: String((parsed && parsed.detail) || stderr || "no reply").slice(0, 200),
+    };
+    codexLimitsFrame = { type: "codexLimits", limits };
+    broadcast(codexLimitsFrame);
+  });
+}
+
 // One chat or agent transcript line -> the facts the tree needs. Text is kept only where a fact
 // needs it (a tool result is scanned for job ids, then dropped).
 function claudeLineFacts(line) {
@@ -1300,7 +1325,7 @@ function claudeUsageView(j) {
   const n = (v) => typeof v === "number" && isFinite(v) ? v : 0;
   const u = c.utilization && typeof c.utilization === "object" ? c.utilization : {};
   const limits = (Array.isArray(u.limits) ? u.limits : []).filter((l) => l && typeof l.kind === "string").map((l) => ({
-    kind: l.kind, group: s(l.group), percent: n(l.percent), severity: s(l.severity), resetsAt: s(l.resets_at),
+    kind: l.kind, isActive: l.is_active === true, percent: n(l.percent), severity: s(l.severity), resetsAt: s(l.resets_at),
     model: s(l.scope && l.scope.model && l.scope.model.display_name),
   }));
   const sp = u.spend && typeof u.spend === "object" ? u.spend : null;
@@ -2018,9 +2043,11 @@ const server = http.createServer((req, res) => {
     res.write("data: " + JSON.stringify(claudeFrame) + "\n\n");
     res.write("data: " + JSON.stringify(claudeChatsFrame) + "\n\n");
     res.write("data: " + JSON.stringify(claudeUsageFrame) + "\n\n");
+    res.write("data: " + JSON.stringify(codexLimitsFrame) + "\n\n");
     for (const s of sessions.values())
       res.write("data: " + JSON.stringify({ type: "snapshot", session: s.id, events: s.events }) + "\n\n");
     req.on("close", () => sseClients.delete(res));
+    refreshCodexLimits(false);
   } else if (req.url === "/notifications") {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     notificationClients.add(res);
@@ -2074,6 +2101,7 @@ const server = http.createServer((req, res) => {
       if (body && body.jobId) {
         broadcast({ type: "job", jobId: body.jobId, status: body.status || "", title: String(body.title || "").slice(0, 120) }, notificationClients);
         kick();
+        refreshCodexLimits(true); // the job used some of the plan
       }
       jsonReply(res, 200, { ok: true });
     });
@@ -2215,6 +2243,7 @@ function serve() {
     setInterval(claudeDiscover, CLAUDE_SCAN_MS);
     setInterval(claudeTick, POLL_MS);
     setInterval(claudeChatsTick, POLL_MS);
+    setInterval(refreshCodexLimits, 60 * 1000, false);
     setTimeout(buildSearchIndex, 50);
     setInterval(buildSearchIndex, 30000);
     // A proxy cuts a stream that stays silent (nginx: 60 s). A comment line keeps both streams open.

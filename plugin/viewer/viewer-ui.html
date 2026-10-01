@@ -107,7 +107,7 @@
     ::-webkit-scrollbar { width: 10px; height: 10px; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
 
-    /* The sidebar is a size container: rows and the plans block drop repeated words under 300 px. */
+    /* The sidebar is a size container: rows drop repeated words under 300 px; plan rows go two-line under 330 px. */
     #side {
       container-type: inline-size;
       width: var(--sidebar-width);
@@ -291,11 +291,6 @@
       .row.root .src, .row-sum .rollup i, .row-sum .use { display: none; } /* the tree total stays on the group caption */
       .row.child.fin .state-word, .row.child.fin .row-use { display: none; } /* the dot says done; the tokens stay in the tooltip */
       .row.root .kind-label { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
-      .plan-row { grid-template-columns: 16px minmax(0, 1fr) 40px 34px; }
-      .plan-row .pl-reset { display: none; }
-      #plans.open .plan-row .pl-reset { display: block; grid-column: 2 / -1; }
-      .plans-head .caret { display: inline; }
-      #plans.open .plan-row .pl-reset { font-size: 10px; line-height: 14px; margin-top: -3px; }
     }
     /* rows: shared bits. A row is a rounded band inset 4 px from the sidebar edges (reference: the selected row is a
        rounded violet band with a bar on its left). */
@@ -474,30 +469,38 @@
     .meter i { position: absolute; left: 0; top: 0; bottom: 0; width: var(--p); background: var(--meter-fill); border-radius: 3px; }
     .meter.warn i { background: var(--amber); }
     .meter.crit i { background: var(--red); }
-    /* sidebar plans block (Claude and Codex plan limits), under the tree */
-    #plans { border-top: 1px solid var(--border); padding: 6px 14px 8px; font-size: 10.5px; color: var(--muted); background: var(--panel-2); flex: none; }
-    .plans-head { width: 100%; display: flex; align-items: center; gap: 6px; height: 22px; border: 0; background: transparent; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 0; cursor: pointer; text-align: left; }
-    .plans-head .asof { margin-left: auto; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); white-space: nowrap; }
-    .plans-head .asof.stale { color: var(--amber); }
-    .plans-head .caret { color: var(--faint); font-size: 9px; display: none; }
-    .plan-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 44px 34px auto; column-gap: 6px; align-items: center; min-height: 20px; }
-    .plan-row .pl-ic { display: inline-grid; place-items: center; width: 16px; height: 16px; }
-    .plan-row .pl-ic svg { width: 11px; height: 11px; }
-    .plan-row.claude .pl-ic { color: var(--claude); }
-    .plan-row.codex .pl-ic { color: var(--codex); }
-    .plan-row .pl-name { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .plan-row .pl-name .m { color: var(--muted); }
-    .plan-row .pl-pct { color: var(--fg); font-weight: 600; text-align: right; }
-    .plan-row.warn .pl-pct { color: var(--amber); }
-    .plan-row.crit .pl-pct { color: var(--red); }
-    .plan-row .pl-reset { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #plans.stale .plan-row.claude { opacity: .55; }
-    .plan-none { color: var(--muted); padding: 2px 0; line-height: 1.4; }
-    .plan-foot { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; padding-top: 5px; border-top: 1px solid var(--border-soft); }
-    .plan-foot b { color: var(--fg); font-weight: 600; }
-    .plan-foot .g { vertical-align: -2px; width: 12px; height: 12px; }
-    .plan-foot .g svg { width: 10px; height: 10px; }
-    .plan-foot .sc { color: var(--claude); } .plan-foot .sp { color: var(--codex); }
+    /* sidebar plans block (Claude and Codex plan limits), under the tree. The block is one grid and every
+       plan row is a column subgrid of it, so the name, meter, value and reset columns line up on every row
+       of both sources. Column 1 is the indent under the source icon (16 px icon + 6 px gap = 14 px + the gap). */
+    #plans { display: grid; grid-template-columns: 14px fit-content(76px) minmax(32px, 1fr) var(--pl-val-w) auto; column-gap: 8px; align-items: center; --pl-val-w: 58px; border-top: 1px solid var(--border); padding: 6px 12px 8px; font-size: 10.5px; color: var(--muted); background: var(--panel-2); flex: none; }
+    .plans-head { grid-column: 1 / -1; display: flex; align-items: center; height: 22px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .plan-src { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; min-height: 22px; }
+    .plan-src + .plan-src, .plan-row + .plan-src { margin-top: 4px; }
+    .plan-src .pl-ic { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; }
+    .plan-src .pl-ic svg { width: 11px; height: 11px; }
+    .plan-src.claude .pl-ic { color: var(--claude); }
+    .plan-src.codex .pl-ic { color: var(--codex); }
+    .plan-src .pl-src { flex: 1 0 auto; color: var(--fg); font-weight: 600; white-space: nowrap; } /* never cut: the note wraps instead */
+    .plan-src .pl-resets { flex: none; height: 18px; line-height: 16px; padding: 0 7px; border: 1px solid var(--border-strong); border-radius: var(--r-chip); background: var(--panel-3); color: var(--muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
+    .plan-src .pl-note { flex: 0 1 auto; text-align: right; line-height: 14px; }
+    .plan-src .pl-note.stale { color: var(--amber); }
+    .plan-src .pl-note.crit { color: var(--red); }
+    .plan-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; min-height: 20px; }
+    .plan-row .pl-name { grid-column: 2; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plan-row .meter { grid-column: 3; display: block; width: auto; }
+    .plan-row .pl-val { grid-column: 4; text-align: right; white-space: nowrap; }
+    .plan-row .pl-val b { color: var(--fg); font-weight: 600; }
+    .plan-row .pl-val .u { color: var(--muted); }
+    .plan-row.warn .pl-val b { color: var(--amber); }
+    .plan-row.crit .pl-val b { color: var(--red); }
+    .plan-row .pl-reset { grid-column: 5; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* narrow sidebar (under 330 px): a plan row drops its reset column and writes the reset time on a
+       second line under the meter. No toggle, nothing hidden. (After the base rules: same specificity.) */
+    @container (max-width: 329px) {
+      #plans { grid-template-columns: 14px fit-content(76px) minmax(32px, 1fr) var(--pl-val-w); }
+      .plan-row { padding-bottom: 3px; }
+      .plan-row .pl-reset { grid-column: 2 / -1; font-size: 10px; line-height: 12px; }
+    }
 
     /* The header's Handoff kind word, the same rule as the tree's: the worker's teal, the clay starter glyph (prepended by the
        startup code: Claude started it, Codex does the work), no pill, so it never reads as a status. */
@@ -3663,44 +3666,57 @@
       return unit;
     }
 
-    // -- The plans block (#plans, design 7.4): Claude limits from the claudeUsage frame, the Codex
-    // limit from the newest token_count event of any session, and the Live 24 h token line.
-    var plansOpen = false;
-    // A glyph in the inline .g box the usage cells and the plans foot size.
+    // -- The plans block (#plans): plan limits only, shown as the part already used. Claude comes from
+    // the claudeUsage frame (the snapshot Claude Code saves when /usage or the VS Code usage panel
+    // opens), Codex from the codexLimits frame (a live read every 5 min while a page is open).
+    var codexLimits = null; // codexLimits frame, or null before the first read
+    // A glyph in the inline .g box the usage cells size.
     function glyphSpan(name) {
       var box = textSpan('g', '');
       box.appendChild(glyph(name));
       return box;
     }
     function resetText(ms, now) {
-      if (!ms) return '';
-      if (ms <= now) return 'reset since this snapshot';
-      if (ms - now < 24 * 3600 * 1000) return 'resets in ' + formatDuration(Math.max(0, ms - now));
+      if (!ms || ms <= now) return '';
+      if (ms - now < 24 * 3600 * 1000) return 'resets in ' + formatDuration(ms - now);
       var d = new Date(ms);
       return 'resets ' + d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    function newestCodexPlan() {
-      var best = null;
-      sessions.forEach(function (s) { if (s.plan && (!best || s.plan.atMs > best.atMs)) best = s.plan; });
-      return best;
+    function ageText(ms, now) {
+      var min = Math.max(0, Math.round((now - ms) / 60000));
+      return min < 1 ? 'just now' : min < 120 ? min + ' min ago' : Math.round(min / 60) + ' h ago';
+    }
+    function windowLabel(mins) {
+      if (!(mins > 0)) return 'limit'; // Codex sent no window length
+      return mins === 300 ? '5 h' : mins === 10080 ? 'week' : mins % 1440 === 0 ? mins / 1440 + ' d' : mins < 60 ? mins + ' min' : Math.round(mins / 60) + ' h';
     }
     // Claude: the snapshot's own severity, never a threshold of ours. Codex has none: 80 % and 95 %.
     function planSeverity(severity, percent) {
       if (severity) return severity === 'critical' ? 'crit' : severity !== 'normal' ? 'warn' : '';
       return percent >= 95 ? 'crit' : percent >= 80 ? 'warn' : '';
     }
-    function planRow(kind, name, percent, reset, sev, title) {
-      var row = document.createElement('div');
-      row.className = 'plan-row ' + kind + (sev ? ' ' + sev : '');
-      row.title = title;
+    // One source line: icon, name, then a quiet note (age or state) at the right.
+    function planSource(kind, name, note, noteClass, title) {
+      var line = document.createElement('div');
+      line.className = 'plan-src ' + kind;
       var icon = textSpan('pl-ic', '');
-      icon.appendChild(glyph(kind === 'codex' ? 'codex' : 'claude'));
-      var meter = document.createElement('span');
-      meter.className = 'meter' + (sev ? ' ' + sev : '');
-      var fill = document.createElement('i');
-      fill.style.setProperty('--p', Math.max(0, Math.min(100, percent)) + '%');
-      meter.appendChild(fill);
-      row.append(icon, name, meter, textSpan('pl-pct', Math.round(percent) + '%'), textSpan('pl-reset', reset));
+      icon.appendChild(glyph(kind));
+      var noteSpan = textSpan('pl-note' + (noteClass ? ' ' + noteClass : ''), note);
+      noteSpan.title = title;
+      line.append(icon, textSpan('pl-src', name), noteSpan);
+      return line;
+    }
+    // A window whose reset time passed shows no number: the figure is from before the reset.
+    function planRow(name, percent, resetMs, sev, title, now) {
+      var passed = !!resetMs && resetMs <= now;
+      var row = document.createElement('div');
+      row.className = 'plan-row' + (passed ? ' passed' : sev ? ' ' + sev : '');
+      row.title = title;
+      var value = textSpan('pl-val', '');
+      if (passed) value.textContent = 'unknown';
+      else value.append(bold(Math.round(percent) + '%'), textSpan('u', ' used'));
+      var reset = passed ? 'reset ' + new Date(resetMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : resetText(resetMs, now);
+      row.append(textSpan('pl-name', name), meterElement(passed ? 0 : percent, passed ? '' : sev), value, textSpan('pl-reset', reset));
       return row;
     }
     function liveUsage(model, now) {
@@ -3717,57 +3733,51 @@
     function renderPlans() {
       var plans = document.getElementById('plans');
       var now = Date.now();
-      var usage = claudeUsage;
-      var codex = newestCodexPlan();
-      var live = liveUsage(currentModel(), now);
-      var ageMin = usage && usage.fetchedAtMs ? Math.max(0, Math.round((now - usage.fetchedAtMs) / 60000)) : 0;
-      var stale = !!usage && ageMin > 60;
-      var signature = JSON.stringify([usage, codex, live, plansOpen, Math.floor(ageMin / 5), Math.floor(now / 60000)]);
+      var usage = claudeUsage, codex = codexLimits;
+      var signature = JSON.stringify([usage, codex, Math.floor(now / 60000)]);
       if (plans.dataset.signature === signature) return;
       plans.dataset.signature = signature;
       plans.hidden = false;
-      plans.className = (plansOpen ? 'open' : '') + (stale ? ' stale' : '');
       plans.textContent = '';
-      var head = document.createElement('button');
-      head.type = 'button';
-      head.className = 'plans-head';
-      head.title = 'Plan limits. Claude: the snapshot Claude Code writes for /usage and its usage meter. Codex: the newest token_count event. On a narrow sidebar, click to show the reset times.';
-      head.appendChild(document.createTextNode('Usage'));
-      if (usage) head.appendChild(textSpan('asof' + (stale ? ' stale' : ''), (stale ? 'stale · ' : '') + 'as of ' + (ageMin >= 120 ? Math.round(ageMin / 60) + ' h' : ageMin + ' min') + ' ago'));
-      head.appendChild(textSpan('caret', plansOpen ? '▲' : '▼'));
-      head.addEventListener('click', function () { plansOpen = !plansOpen; renderPlans(); });
+      var head = textDiv('plans-head', 'Usage');
+      head.title = 'Plan limits, shown as the part already used';
       plans.appendChild(head);
-      if (!usage) plans.appendChild(textDiv('plan-none', 'Claude usage not available yet (open /usage once)'));
-      else {
+
+      // Claude Code itself drops its snapshot after 1 h, so older numbers are hidden, not shown dimmed.
+      var fresh = !!usage && now - usage.fetchedAtMs <= 3600 * 1000;
+      var claudeNote = !usage ? 'open /usage once' : fresh ? ageText(usage.fetchedAtMs, now) : 'checked ' + ageText(usage.fetchedAtMs, now) + ' · open /usage';
+      plans.appendChild(planSource('claude', 'Claude', claudeNote, fresh ? '' : 'stale', fresh
+        ? 'The snapshot Claude Code saves when /usage or the VS Code usage panel opens'
+        : 'Claude Code saves its usage only when /usage or the VS Code usage panel opens. Open one of them to see the numbers here.'));
+      if (fresh) {
         usage.limits.forEach(function (l) {
-          var name = textSpan('pl-name', '');
-          if (l.kind === 'weekly_scoped') name.append(textSpan('m', 'Claude'), document.createTextNode(' ' + (l.model || 'model') + ' week'));
-          else name.textContent = l.kind === 'session' ? 'Claude 5 h' : l.kind === 'weekly_all' ? 'Claude week' : 'Claude ' + l.kind;
-          var reset = resetText(Date.parse(l.resetsAt) || 0, now);
+          if (l.kind === 'weekly_scoped' && !l.isActive) return; // a per-model week only when it is the limit that binds
+          var name = l.kind === 'session' ? '5 h' : l.kind === 'weekly_all' ? 'week' : l.kind === 'weekly_scoped' ? (l.model || 'model') + ' week' : l.kind;
           var windowName = l.kind === 'session' ? '5-hour window' : l.kind === 'weekly_all' ? '7-day window, all models' : '7-day window, ' + (l.model || 'one model') + ' only';
-          plans.appendChild(planRow('claude', name, l.percent, reset, planSeverity(l.severity || 'normal', l.percent),
-            windowName + ' · ' + l.percent + '% used' + (reset ? ' · ' + reset : '') + ' · severity ' + (l.severity || 'normal')));
+          plans.appendChild(planRow(name, l.percent, Date.parse(l.resetsAt) || 0, planSeverity(l.severity || 'normal', l.percent), windowName + ' · ' + l.percent + '% used', now));
         });
-        if (usage.spend) plans.appendChild(planRow('claude spend', textSpan('pl-name', 'Claude spend'), usage.spend.percent, '', planSeverity(usage.spend.severity || 'normal', usage.spend.percent), 'Usage credit spend this period'));
+        if (usage.spend) plans.appendChild(planRow('credits', usage.spend.percent, 0, planSeverity(usage.spend.severity || 'normal', usage.spend.percent), 'Usage credits spent this period', now));
       }
-      if (codex) {
-        var codexReset = resetText(codex.resetsAtMs, now);
-        plans.appendChild(planRow('codex', textSpan('pl-name', 'Codex plan'), codex.usedPercent, codexReset, planSeverity('', codex.usedPercent),
-          'Codex plan limit, per account · ' + codex.usedPercent + '% used' + (codexReset ? ' · ' + codexReset : '') + ' · from the newest Codex session'));
+
+      var note = 'checking…', noteClass = '', noteTitle = 'Read from Codex every 5 min while this page is open';
+      if (codex && codex.allowed === false) { note = 'limit reached'; noteClass = 'crit'; }
+      else if (codex && !codex.ok) {
+        note = codex.windows.length ? 'update failed · ' + ageText(codex.fetchedAtMs, now) : 'unavailable';
+        noteClass = 'stale';
+        noteTitle = codex.error || 'No reply from Codex';
+      } else if (codex) note = ageText(codex.fetchedAtMs, now);
+      var source = planSource('codex', 'Codex', note, noteClass, noteTitle);
+      var resets = codex && codex.resets;
+      if (resets && resets.available > 0) {
+        var pill = textSpan('pl-resets', resets.available + (resets.available === 1 ? ' reset' : ' resets'));
+        var expiry = resets.nextExpiryMs ? new Date(resets.nextExpiryMs).toLocaleDateString([], { day: 'numeric', month: 'short' }) : '';
+        pill.title = resets.available + ' free Codex limit ' + (resets.available === 1 ? 'reset' : 'resets') + ' to use' + (expiry ? ' · the next one expires ' + expiry : '');
+        source.insertBefore(pill, source.lastChild);
       }
-      var foot = document.createElement('div');
-      foot.className = 'plan-foot';
-      foot.title = 'Tokens of every root in Live (last 24 h)' + (live.partial ? '. A lower bound: some usage is unknown or over the read cap' : '');
-      var all = textSpan('', 'Live 24 h ');
-      all.appendChild(document.createElement('b')).textContent = boundText(live.partial, live.claude + live.codex);
-      var sc = textSpan('sc', '');
-      sc.append(glyphSpan('claude'), document.createTextNode(' '));
-      sc.appendChild(document.createElement('b')).textContent = compactCount(live.claude);
-      var sp = textSpan('sp', '');
-      sp.append(glyphSpan('codex'), document.createTextNode(' '));
-      sp.appendChild(document.createElement('b')).textContent = controlsBlocked ? '?' : compactCount(live.codex);
-      foot.append(all, sc, sp);
-      plans.appendChild(foot);
+      plans.appendChild(source);
+      if (codex) codex.windows.forEach(function (w) {
+        plans.appendChild(planRow(windowLabel(w.windowMins), w.usedPercent, w.resetsAtMs, planSeverity('', w.usedPercent), 'Codex ' + windowLabel(w.windowMins) + ' window · ' + w.usedPercent + '% used', now));
+      });
     }
     function folderIcon() {
       var ns = 'http://www.w3.org/2000/svg';
@@ -3872,23 +3882,6 @@
         liveCell.appendChild(bold(compactCount(live.claude + live.codex)));
         treeParts(liveCell, live);
         cells.push(liveCell);
-        var codex = newestCodexPlan();
-        if (codex) {
-          var codexCell = usageCell('Codex plan', 'Per Codex account, from the newest token_count event');
-          var csev = planSeverity('', codex.usedPercent);
-          codexCell.append(bold(Math.round(codex.usedPercent) + '%'), meterElement(codex.usedPercent, csev), textSpan('', resetText(codex.resetsAtMs, now)));
-          cells.push(codexCell);
-        }
-        var limits = claudeUsage ? claudeUsage.limits : [];
-        var five = limits.find(function (l) { return l.kind === 'session'; }), week = limits.find(function (l) { return l.kind === 'weekly_all'; });
-        if (five || week) {
-          var claudeCell = usageCell('Claude plan', 'Claude 5-hour window and 7-day window (the /usage snapshot)');
-          [[five, '5 h'], [week, 'week']].forEach(function (pair) {
-            if (!pair[0]) return;
-            claudeCell.append(bold(pair[0].percent + '%'), meterElement(pair[0].percent, planSeverity(pair[0].severity || 'normal', pair[0].percent)), textSpan('', pair[1]));
-          });
-          cells.push(claudeCell);
-        }
       } else {
         var usage = node.usage;
         var context = node.kind === 'chat' ? usage && usage.context : node.row && node.row.session ? node.row.session.contextTokens : null;
@@ -5946,7 +5939,6 @@
         renderList();
         renderHeader();
         renderResultCard();
-        renderPlans();
         if (showOverview()) renderFeed();
         else if (selected === previousSelected && (selectedRow() || {}).status !== previousFeedStatus) requestFeedRender();
       }
@@ -5959,7 +5951,6 @@
         renderFilters();
         renderList();
         renderHeader();
-        renderPlans();
         renderPanel();
         // A workflow or ghost page can only draw once its node is in the tree.
         if (pageKind() === 'workflow') renderClaudeBody();
@@ -5967,6 +5958,10 @@
       }
       if (data.type === 'claudeUsage') {
         claudeUsage = data.usage || null;
+        renderPlans();
+      }
+      if (data.type === 'codexLimits') {
+        codexLimits = data.limits || null;
         renderPlans();
       }
       if (data.type === 'claudeRuns') {
