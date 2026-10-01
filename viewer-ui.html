@@ -3732,20 +3732,28 @@
       head.title = 'Plan limits, shown as the part already used';
       plans.appendChild(head);
 
-      // Claude Code itself drops its snapshot after 1 h, so older numbers are hidden, not shown dimmed.
-      var fresh = !!usage && now - usage.fetchedAtMs <= 3600 * 1000;
-      var claudeNote = !usage ? 'open /usage once' : fresh ? ageText(usage.fetchedAtMs, now) : 'checked ' + ageText(usage.fetchedAtMs, now) + ' · open /usage';
-      plans.appendChild(planSource('claude', 'Claude', claudeNote, fresh ? '' : 'stale', fresh
-        ? 'The snapshot Claude Code saves when /usage or the VS Code usage panel opens'
-        : 'Claude Code saves its usage only when /usage or the VS Code usage panel opens. Open one of them to see the numbers here.'));
+      // Two sources. The status line (after each Claude reply) stays valid while you do not use
+      // Claude: the numbers only grow with use, and a passed reset shows "unknown". The /usage
+      // snapshot is dropped by Claude Code itself after 1 h, so older snapshot numbers are hidden.
+      var HOUR = 3600 * 1000;
+      var live = !!usage && usage.source === 'statusline';
+      var fresh = !!usage && (live || now - usage.fetchedAtMs <= HOUR);
+      var claudeNote = !usage ? 'send one message' : fresh ? ageText(usage.fetchedAtMs, now) : 'checked ' + ageText(usage.fetchedAtMs, now) + ' · open /usage';
+      plans.appendChild(planSource('claude', 'Claude', claudeNote, fresh ? '' : 'stale', live
+        ? 'From the Claude Code status line, updated after each Claude reply. Use on claude.ai or another PC shows after your next reply here.'
+        : fresh ? 'The snapshot Claude Code saves when /usage or the VS Code usage panel opens'
+        : 'Add the plugin status line to keep this current (see the README), or open /usage.'));
       if (fresh) {
         usage.limits.forEach(function (l) {
           if (l.kind === 'weekly_scoped' && !l.isActive) return; // a per-model week only when it is the limit that binds
+          if (l.atMs && now - l.atMs > HOUR) return; // from an old snapshot
           var name = l.kind === 'session' ? '5 h' : l.kind === 'weekly_all' ? 'week' : l.kind === 'weekly_scoped' ? (l.model || 'model') + ' week' : l.kind;
           var windowName = l.kind === 'session' ? '5-hour window' : l.kind === 'weekly_all' ? '7-day window, all models' : '7-day window, ' + (l.model || 'one model') + ' only';
-          plans.appendChild(planRow(name, l.percent, Date.parse(l.resetsAt) || 0, planSeverity(l.severity || 'normal', l.percent), windowName + ' · ' + l.percent + '% used', now));
+          // The status line has no severity: 80 % and 95 % then, as for Codex.
+          var sev = l.severity === null ? planSeverity('', l.percent) : planSeverity(l.severity || 'normal', l.percent);
+          plans.appendChild(planRow(name, l.percent, Date.parse(l.resetsAt) || 0, sev, windowName + ' · ' + l.percent + '% used', now));
         });
-        if (usage.spend) plans.appendChild(planRow('credits', usage.spend.percent, 0, planSeverity(usage.spend.severity || 'normal', usage.spend.percent), 'Usage credits spent this period', now));
+        if (usage.spend && (!usage.spendAtMs || now - usage.spendAtMs <= HOUR)) plans.appendChild(planRow('credits', usage.spend.percent, 0, planSeverity(usage.spend.severity || 'normal', usage.spend.percent), 'Usage credits spent this period', now));
       }
 
       var note = 'checking…', noteClass = '', noteTitle = 'Read from Codex every 5 min while this page is open';

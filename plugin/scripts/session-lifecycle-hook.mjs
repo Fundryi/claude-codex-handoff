@@ -167,9 +167,28 @@ function appendEnvVar(name, value) {
   fs.appendFileSync(process.env.CLAUDE_ENV_FILE, `export ${name}=${shellEscape(value)}\n`, "utf8");
 }
 
+// The statusLine setting needs a path that survives plugin updates (the plugin folder name holds
+// the version), so the status line script is kept as a copy in ~/.codex-companion.
+export const STATUSLINE_COPY = path.join(os.homedir(), ".codex-companion", "claude-statusline.mjs");
+export function syncStatusLineScript(env = process.env, dest = STATUSLINE_COPY) {
+  if (!env.CLAUDE_PLUGIN_ROOT) return false;
+  try {
+    const body = fs.readFileSync(path.join(env.CLAUDE_PLUGIN_ROOT, "scripts", "claude-statusline.mjs"));
+    let old = null;
+    try { old = fs.readFileSync(dest); } catch {}
+    if (old && old.equals(body)) return false;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, body);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function handleSessionStart(input) {
   appendEnvVar(SESSION_ID_ENV, input.session_id);
   appendEnvVar(TRANSCRIPT_PATH_ENV, input.transcript_path);
+  syncStatusLineScript();
   const viewer = await maybeStartViewer();
   if (viewer === "port-busy") {
     console.log(`[codex plugin] An older Codex viewer on port ${viewerPort()} did not stop, so the updated viewer could not start. Run /codex:viewer restart, or /codex:viewer kill if it hangs. This is not retried for this plugin version.`);

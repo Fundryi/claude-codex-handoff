@@ -330,4 +330,17 @@ test("Claude plan usage: only the usage snapshot fields leave Claude Code's stat
   assert.deepEqual({ ...view(state).spend }, { percent: 0, severity: "normal" });
   assert.equal(view({}), null);
   assert.equal(view(null), null);
+  // The status line file wins when newer; the per-model week stays from the snapshot with its time.
+  const merge = (s, l) => JSON.parse(JSON.stringify(fns("claudeUsageMerge").claudeUsageMerge(s, l)));
+  const snap = view(state);
+  const line = { atMs: snap.fetchedAtMs + 60000, fiveHour: { usedPercent: 12, resetsAtMs: 1790800000000 }, sevenDay: { usedPercent: 21, resetsAtMs: 0 } };
+  const m = merge(snap, line);
+  assert.equal(m.source, "statusline");
+  assert.equal(m.fetchedAtMs, line.atMs);
+  assert.deepEqual(m.limits.map((l) => [l.kind, l.percent, l.severity, l.atMs || 0]), [["session", 12, null, 0], ["weekly_all", 21, null, 0], ["weekly_scoped", 7, "warning", snap.fetchedAtMs]]);
+  assert.equal(m.limits[0].resetsAt, new Date(1790800000000).toISOString());
+  assert.equal(merge(snap, { ...line, atMs: snap.fetchedAtMs - 1 }).source, "snapshot", "an older status line loses");
+  assert.equal(merge(null, line).limits.length, 2);
+  assert.equal(merge(null, null), null);
+  assert.equal(merge(null, { atMs: "x" }), null, "a broken file is ignored");
 });

@@ -54,6 +54,24 @@ test("maybeStartViewer honors opt-out and a missing bundle without spawning", as
   assert.equal(await maybeStartViewer({ CLAUDE_PLUGIN_ROOT: path.join(__dirname, "missing-plugin") }), "no-bundle");
 });
 
+test("the status line script: a stable copy, and only the two documented limit windows", async () => {
+  const { syncStatusLineScript } = await import(hookUrl);
+  const dest = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "clv-statusline-")), "sub", "claude-statusline.mjs");
+  const root = path.join(__dirname, "..", "plugin");
+  assert.equal(syncStatusLineScript({ CLAUDE_PLUGIN_ROOT: root }, dest), true, "copied on the first start");
+  assert.equal(syncStatusLineScript({ CLAUDE_PLUGIN_ROOT: root }, dest), false, "unchanged: no write");
+  assert.equal(syncStatusLineScript({}, dest), false, "no plugin root: nothing");
+  const { statusLimits, statusText } = await import(pathToFileURL(path.join(root, "scripts", "claude-statusline.mjs")).href);
+  const input = { model: { display_name: "Opus 5.5" }, session_id: "secret",
+    rate_limits: { five_hour: { used_percentage: 12.4, resets_at: 1790800000 }, seven_day: { used_percentage: 21, resets_at: 1791000000 }, spend_limit: { used_percentage: 3 } } };
+  const limits = statusLimits(input);
+  assert.deepEqual(limits, { fiveHour: { usedPercent: 12.4, resetsAtMs: 1790800000000 }, sevenDay: { usedPercent: 21, resetsAtMs: 1791000000000 } });
+  assert.equal(statusText(input, limits), "Opus 5.5 · 5h 12% · week 21%");
+  assert.equal(statusLimits({ rate_limits: { five_hour: { used_percentage: "12" } } }), null, "not a number: nothing saved");
+  assert.equal(statusLimits({}), null, "an API-key user has no rate_limits");
+  assert.equal(statusText({ model: { display_name: "Opus 5.5" } }, null), "Opus 5.5");
+});
+
 // A plugin root whose bundled "viewer" only leaves a marker, so a test can see
 // whether the hook started it.
 function fakePluginRoot(version) {

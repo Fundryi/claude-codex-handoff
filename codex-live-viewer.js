@@ -1168,6 +1168,8 @@ let claudeLastSweep = 0;
 let claudeJobs = [];               // listCompanionJobs(), refreshed each scan
 let claudeChatsSig = "";
 let claudeChatsFrame = { type: "claudeChats", chats: [], ghosts: [] };
+// The plugin's status line script saves the 5-hour and 7-day windows here after each Claude reply.
+const CLAUDE_LIMITS_FILE = path.join(os.homedir(), ".codex-companion", "claude-limits.json");
 let claudeUsageMtime = -1;
 let claudeUsageFrame = { type: "claudeUsage", usage: null };
 
@@ -1691,14 +1693,34 @@ function claudeChatView(chat, now, runs, hands) {
 }
 
 // Claude plan usage: re-read Claude Code's state file only when its mtime moves.
+// The newer of two sources wins for the 5-hour and 7-day windows: the status line file (written
+// after each Claude reply) or the /usage snapshot. A per-model week exists only in the snapshot;
+// it carries the snapshot's time so the page can hide it when old.
+function claudeUsageMerge(snapshot, line) {
+  const n = (v) => typeof v === "number" && isFinite(v) ? v : null;
+  const win = (w, kind) => w && n(w.usedPercent) !== null
+    ? { kind, isActive: false, percent: w.usedPercent, severity: null, resetsAt: n(w.resetsAtMs) ? new Date(w.resetsAtMs).toISOString() : "", model: "" }
+    : null;
+  if (!line || !n(line.atMs) || (snapshot && snapshot.fetchedAtMs > line.atMs)) return snapshot ? { ...snapshot, source: "snapshot" } : null;
+  const scoped = snapshot ? snapshot.limits.filter((l) => l.kind === "weekly_scoped").map((l) => ({ ...l, atMs: snapshot.fetchedAtMs })) : [];
+  return {
+    source: "statusline", fetchedAtMs: line.atMs,
+    limits: [win(line.fiveHour, "session"), win(line.sevenDay, "weekly_all"), ...scoped].filter(Boolean),
+    spend: snapshot ? snapshot.spend : null, spendAtMs: snapshot ? snapshot.fetchedAtMs : 0,
+  };
+}
+
 function claudeUsageCheck() {
-  let st;
+  let st, lt;
   try { st = fs.statSync(CLAUDE_STATE_FILE); } catch { st = null; }
-  const mtime = st ? st.mtimeMs : 0;
+  try { lt = fs.statSync(CLAUDE_LIMITS_FILE); } catch { lt = null; }
+  const mtime = (st ? st.mtimeMs : 0) + "/" + (lt ? lt.mtimeMs : 0);
   if (mtime === claudeUsageMtime) return;
   claudeUsageMtime = mtime;
-  let usage = null;
-  try { usage = st ? claudeUsageView(JSON.parse(fs.readFileSync(CLAUDE_STATE_FILE, "utf8"))) : null; } catch { return; } // mid-write: retry on the next mtime
+  let snapshot = null, line = null;
+  try { snapshot = st ? claudeUsageView(JSON.parse(fs.readFileSync(CLAUDE_STATE_FILE, "utf8"))) : null; } catch { claudeUsageMtime = -1; return; } // mid-write: retry
+  try { line = lt ? JSON.parse(fs.readFileSync(CLAUDE_LIMITS_FILE, "utf8")) : null; } catch { line = null; }
+  const usage = claudeUsageMerge(snapshot, line);
   if (JSON.stringify(usage) === JSON.stringify(claudeUsageFrame.usage)) return;
   claudeUsageFrame = { type: "claudeUsage", usage };
   broadcast(claudeUsageFrame);
