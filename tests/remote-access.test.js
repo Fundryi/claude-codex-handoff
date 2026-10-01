@@ -162,15 +162,10 @@ test("parseTunnelUrl: finds trycloudflare URL in cloudflared stderr chatter", ()
   assert.equal(ctx.parseTunnelUrl("no url here"), null);
 });
 
-function transcriptCtx(opts = {}) {
-  const ctx = { PORT: 8377, PROXY_DECLARED: opts.proxy || false, FLAGS: { tunnel: opts.tunnel || false }, trustedControlOrigin: () => opts.originOk !== false };
-  extract("loopbackDirect", ctx);
-  return extract("claudeTranscriptAllowed", ctx);
-}
 const fakeReq = (headers, remoteAddress = "127.0.0.1") => ({ headers: { host: "127.0.0.1:8377", ...headers }, socket: { remoteAddress } });
 
 test("loopbackDirect: loopback socket and loopback Host, no proxy headers", () => {
-  const ctx = transcriptCtx();
+  const ctx = extract("loopbackDirect", { PORT: 8377 });
   assert.equal(ctx.loopbackDirect(fakeReq({})), true);
   assert.equal(ctx.loopbackDirect(fakeReq({ host: "localhost:8377" }, "::1")), true);
   assert.equal(ctx.loopbackDirect(fakeReq({ host: "[::1]:8377" }, "::ffff:127.0.0.1")), true);
@@ -180,18 +175,6 @@ test("loopbackDirect: loopback socket and loopback Host, no proxy headers", () =
   assert.equal(ctx.loopbackDirect(fakeReq({}, "10.0.0.5")), false, "LAN address");
   assert.equal(ctx.loopbackDirect(fakeReq({ host: "rebind.attacker.com" })), false, "DNS-rebound Host");
   assert.equal(ctx.loopbackDirect(fakeReq({ host: "127.0.0.1:9999" })), false, "other port");
-});
-
-test("claudeTranscriptAllowed: this PC's browser or the tunnel link only", () => {
-  assert.equal(transcriptCtx().claudeTranscriptAllowed(fakeReq({})), true);
-  assert.equal(transcriptCtx({ originOk: false }).claudeTranscriptAllowed(fakeReq({})), false, "loopback but foreign origin");
-  assert.equal(transcriptCtx().claudeTranscriptAllowed(fakeReq({ "x-forwarded-for": "1.2.3.4" })), false, "local proxy");
-  assert.equal(transcriptCtx().claudeTranscriptAllowed(fakeReq({ "cf-connecting-ip": "1.2.3.4" })), false, "forged tunnel header, tunnel off");
-  const tunnel = fakeReq({ host: "x.trycloudflare.com", "cf-connecting-ip": "1.2.3.4", "x-forwarded-for": "1.2.3.4" });
-  assert.equal(transcriptCtx({ tunnel: true }).claudeTranscriptAllowed(tunnel), true, "tunnel (token already checked)");
-  assert.equal(transcriptCtx({ tunnel: true, originOk: false }).claudeTranscriptAllowed(tunnel), false, "tunnel, origin refused");
-  assert.equal(transcriptCtx({ proxy: true }).claudeTranscriptAllowed(fakeReq({})), false, "declared proxy, nginx-default headers");
-  assert.equal(transcriptCtx({ proxy: true, tunnel: true }).claudeTranscriptAllowed(tunnel), true, "declared proxy, tunnel still works");
 });
 
 // The guards above are only predicates; this checks they are wired into the real
@@ -223,6 +206,12 @@ test("serve: control routes refuse GET and foreign origins, with no side effects
     line({ type: "user", message: { role: "user", content: "[Workflow harness] scout" } }) +
     line({ type: "attachment", attachment: { type: "hook_success" } }) +
     line({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "found it" }], usage: { input_tokens: 5 } } }));
+  // One Claude main chat (2.1.285 line shapes), for /claude/transcript.
+  const chatId = "0b1c2d3e-0000-4000-8000-000000000001";
+  const cline = (o) => JSON.stringify({ sessionId: chatId, timestamp: new Date().toISOString(), cwd: home, entrypoint: "cli", ...o }) + "\n";
+  fs.writeFileSync(path.join(home, "claude", "projects", "p", chatId + ".jsonl"),
+    cline({ type: "user", message: { role: "user", content: "Check the hook" } }) +
+    cline({ type: "assistant", message: { id: "msg_1", model: "claude-opus-5-5", role: "assistant", content: [{ type: "text", text: "Checked." }], stop_reason: "end_turn", usage: { input_tokens: 7, output_tokens: 2 } } }));
   const env = { ...process.env, CODEX_VIEWER_PORT: String(port), CODEX_HOME: home, CODEX_COMPANION_STATE_ROOT: stateRoot, CLAUDE_CONFIG_DIR: path.join(home, "claude") };
   delete env.CODEX_VIEWER_ALLOWED_HOSTS; // the owner's own settings must not widen the bind
   delete env.CODEX_VIEWER_HOST;
@@ -266,7 +255,7 @@ test("serve: control routes refuse GET and foreign origins, with no side effects
     assert.equal(await call("POST", "/resume", trusted, "{}"), 400);
     assert.equal(await call("POST", "/open?id=x", trusted), 404);
 
-    // Claude transcripts: loopback-direct only. The gate must not just refuse everything.
+    // Claude transcripts: the /jobs gate (owner decision 12.1). It must not just refuse everything.
     const agentUrl = "/claude/agent?run=wf_test-001&agent=a0123456789abcdef";
     let page = { status: 0 };
     for (let i = 0; i < 20 && page.status !== 200; i++) {
@@ -275,13 +264,21 @@ test("serve: control routes refuse GET and foreign origins, with no side effects
     }
     assert.equal(page.status, 200, "plain loopback request");
     assert.deepEqual(page.body.events.map((e) => e.kind), ["user", "agent"]);
-    assert.equal(await call("GET", agentUrl, { "X-Forwarded-For": "1.2.3.4" }), 403);
-    assert.equal(await call("GET", agentUrl, { Forwarded: "for=1.2.3.4" }), 403);
+    assert.equal((await getJson("/claude/transcript?run=wf_test-001&agent=a0123456789abcdef")).status, 200, "new name, same run agent");
+    assert.equal(await call("GET", agentUrl, evil), 403, "foreign origin");
     assert.equal(await call("GET", agentUrl, { Host: "rebind.attacker.com" }), 403);
     assert.equal(await call("GET", "/claude/agent?run=wf_nope-000&agent=a0123456789abcdef"), 404);
     assert.equal(await call("GET", "/claude/agent?run=wf_test-001&agent=../../x"), 404);
-    assert.equal(await call("GET", "/claude/run?run=wf_test-001", { "X-Forwarded-For": "1.2.3.4" }), 403);
+    assert.equal(await call("GET", "/claude/run?run=wf_test-001", evil), 403);
     assert.equal(await call("GET", "/claude/run?run=wf_test-001"), 200);
+    const chatPage = await getJson("/claude/transcript?chat=" + chatId);
+    assert.equal(chatPage.status, 200, "main chat transcript");
+    assert.deepEqual(chatPage.body.events.map((e) => [e.kind, e.text]), [["user", "Check the hook"], ["agent", "Checked."]]);
+    assert.equal(chatPage.body.model, "claude-opus-5-5");
+    assert.equal(await call("GET", "/claude/transcript?chat=" + chatId, evil), 403);
+    assert.equal(await call("GET", "/claude/transcript?chat=../../x"), 404);
+    assert.equal(await call("GET", "/claude/transcript?chat=" + chatId + "&agent=../../x"), 404);
+    assert.equal(await call("GET", "/claude/transcript?chat=" + chatId + "&agent=a0123456789abcdee"), 404, "agent file missing");
 
     // /notify: only the companion's own request (loopback, no Origin, no proxy headers).
     const job = JSON.stringify({ jobId: "j" });

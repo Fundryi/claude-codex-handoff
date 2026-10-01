@@ -42,8 +42,6 @@ function parseFlags(argv) {
 const FLAGS = parseFlags(process.argv.slice(2));
 // A proxy name usually means the proxy runs on another machine, so it opens the bind too.
 const HOST = FLAGS.host || process.env.CODEX_VIEWER_HOST || (process.env.CODEX_VIEWER_ALLOWED_HOSTS ? "0.0.0.0" : "127.0.0.1");
-// A declared reverse proxy can reach us from loopback with a loopback Host and no forwarding headers.
-const PROXY_DECLARED = !!process.env.CODEX_VIEWER_ALLOWED_HOSTS;
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 // Claude Code's own root. CLAUDE_CONFIG_DIR moves it (Claude Code settings docs). Read only, like CODEX_HOME.
 const CLAUDE_HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
@@ -695,7 +693,7 @@ function handleLaunch(res, body, args) {
 //   workflows/<runId>.json (snapshot, written at run end), workflows/scripts/<name>-<runId>.js
 // Polled, never fs.watch'ed (GBs, and every transcript write would fire). Nothing here writes.
 // Only ids, labels, phases, states, counts, times, tool names, token counts, models and efforts reach /events;
-// transcript text goes out only through /claude/agent (claudeTranscriptAllowed).
+// transcript text goes out only through /claude/transcript (and its alias /claude/agent), behind trustedControlOrigin.
 const CLAUDE_SCAN_MS = 5000;              // new runs appear within this
 const CLAUDE_MAX_RUNS = 20;               // newest runs tracked; running runs always kept on top
 const CLAUDE_KEEP_MS = 24 * 60 * 60 * 1000; // no activity this long => dropped from memory (files stay)
@@ -2055,17 +2053,34 @@ const server = http.createServer((req, res) => {
       }
       jsonReply(res, 200, { ok: true });
     });
-  } else if (/^\/claude\/(?:agent|run)(?:\?|$)/.test(req.url)) {
-    // Read only, so GET without an origin rule; the transcript gate is stricter than trustedControlOrigin.
+  } else if (/^\/claude\/(?:agent|run|transcript)(?:\?|$)/.test(req.url)) {
+    // Read only. Owner decision (2026-10-01): a Claude transcript needs no stricter gate than a Codex
+    // job, so the gate is the one /jobs uses. The tunnel token is checked before any route runs.
     if (req.method !== "GET") { res.writeHead(405); return res.end("GET only"); }
-    if (!claudeTranscriptAllowed(req)) {
-      res.writeHead(403, { "Content-Type": "text/plain" });
-      return res.end("Claude transcripts are served only to a browser on this PC, or through the tunnel link.");
-    }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     const u = new URL(req.url, "http://local");
     const run = claudeRuns.get(u.searchParams.get("run") || "");
     const agentId = u.searchParams.get("agent") || "";
     const noStore = (code, obj) => { res.setHeader("Cache-Control", "no-store"); jsonReply(res, code, obj); };
+    const offset = Math.max(0, parseInt(u.searchParams.get("offset"), 10) || 0);
+    if (u.pathname === "/claude/transcript" && !run) {
+      // A chat, or a plain subagent of it. Paths come from the server's own file list and a validated id.
+      const sid = u.searchParams.get("chat") || "";
+      const c = CLAUDE_CHAT_ID.test(sid) && claudeChatFiles.get(sid);
+      if (!c) return noStore(404, { ok: false, error: "chat not found" });
+      if (agentId && !CLAUDE_AGENT_ID.test(agentId)) return noStore(404, { ok: false, error: "agent not found" });
+      const file = agentId ? path.join(path.dirname(c.file), sid, "subagents", "agent-" + agentId + ".jsonl") : c.file;
+      const chat = claudeChats.get(sid);
+      const a = chat && agentId ? chat.agents.get(agentId) : null;
+      const r = chat ? (agentId ? a && a.reader : chat.reader) : null;
+      let page;
+      try { page = claudeTranscriptPage(file, offset); } catch { return noStore(404, { ok: false, error: "transcript not found" }); }
+      const state = !r ? "" : agentId ? (a ? claudeAgentLiveState(chat, a, Date.now()) : "") : claudeChatState(chat, Date.now(), false);
+      const pend = r && state === "running" ? [...r.pending.values()].pop() : null;
+      return noStore(200, { ok: true, events: page.events, offset: page.offset, size: page.size,
+        tool: pend ? pend.preview : "", contextTokens: (r && r.usage.context) || page.contextTokens, state,
+        model: (r && r.model) || (a && a.metaModel) || "", effort: (r && r.effort) || "" });
+    }
     if (!run) return noStore(404, { ok: false, error: "run not tracked" });
     if (u.pathname === "/claude/run") {
       return noStore(200, { ok: true, journal: path.join(run.dir, "journal.jsonl"), snapshot: run.snapshotFile,
@@ -2075,7 +2090,7 @@ const server = http.createServer((req, res) => {
     const agent = CLAUDE_AGENT_ID.test(agentId) && run.agents.get(agentId);
     if (!agent) return noStore(404, { ok: false, error: "agent not tracked" });
     let page;
-    try { page = claudeTranscriptPage(path.join(run.dir, "agent-" + agent.id + ".jsonl"), Math.max(0, parseInt(u.searchParams.get("offset"), 10) || 0)); }
+    try { page = claudeTranscriptPage(path.join(run.dir, "agent-" + agent.id + ".jsonl"), offset); }
     catch { return noStore(404, { ok: false, error: "transcript not found" }); }
     const state = claudeAgentState(run, agent);
     noStore(200, { ok: true, events: page.events, offset: page.offset, size: page.size,
@@ -2133,23 +2148,13 @@ function trustedControlOrigin(req) {
 // A request straight from this PC: loopback socket, no proxy in between, a loopback Host
 // (a DNS-rebound page in a local browser passes the socket check but not this).
 // ponytail: a local proxy that adds no forwarding headers (nginx's default proxy_pass sets Host to the
-// upstream and adds none) looks exactly like the browser. claudeTranscriptAllowed refuses when a proxy is
-// declared (CODEX_VIEWER_ALLOWED_HOSTS); an undeclared proxy of that shape still passes, that is the ceiling.
+// upstream and adds none) looks exactly like a local process; /notify only broadcasts a job id, that is the ceiling.
 function loopbackDirect(req) {
   const h = req.headers || {};
   if (h["x-forwarded-for"] || h.forwarded || h["x-real-ip"] || h["cf-connecting-ip"]) return false;
   const ip = (req.socket && req.socket.remoteAddress) || "";
   if (ip !== "127.0.0.1" && ip !== "::1" && ip !== "::ffff:127.0.0.1") return false;
   return h.host === "127.0.0.1:" + PORT || h.host === "localhost:" + PORT || h.host === "[::1]:" + PORT;
-}
-
-// Claude transcripts cover every project on this PC: only this PC's browser, or the tunnel link.
-// Tunnel traffic carries cf-connecting-ip AND X-Forwarded-For; tunnelAuthDecision has already
-// checked its token before any route runs, so that branch comes first.
-function claudeTranscriptAllowed(req) {
-  if (FLAGS.tunnel && req.headers["cf-connecting-ip"]) return trustedControlOrigin(req);
-  if (PROXY_DECLARED) return false; // proxied remote clients are indistinguishable from this PC's browser
-  return loopbackDirect(req) && trustedControlOrigin(req);
 }
 
 function serve() {
