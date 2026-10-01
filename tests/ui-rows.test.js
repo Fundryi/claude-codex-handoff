@@ -496,7 +496,12 @@ test("a handoff of a tracked chat that the frame did not send stays out of the r
 });
 
 test("worstState, the Live window and saved views from before the redesign", () => {
-  const { worstState, liveRoot, liveHidden, nodeSavedView, nodeIdFor, childOrder } = ctx();
+  const { worstState, liveRoot, liveHidden, nodeSavedView, nodeIdFor, childOrder, nodeSelfMatch } = ctx();
+  // The Running chip (the default) also shows a question for you; nothing finished.
+  assert.equal(nodeSelfMatch({ kind: "handoff", state: "ANSWER" }, "RUNNING", {}), true);
+  assert.equal(nodeSelfMatch({ kind: "chat", state: "RUNNING" }, "RUNNING", {}), true);
+  assert.equal(nodeSelfMatch({ kind: "chat", state: "FINISHED" }, "RUNNING", {}), false);
+  assert.equal(nodeSelfMatch({ kind: "handoff", state: "ATTENTION" }, "RUNNING", {}), false);
   // Children: active first (newest started on top), then finished (newest finished on top).
   const kids = [
     { id: "old-done", rollup: "FINISHED", startedMs: 1, updatedMs: 10 },

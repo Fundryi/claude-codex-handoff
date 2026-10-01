@@ -2761,6 +2761,8 @@
       if ((k.claude || k.codex) && !k[nodeKind(node)]) return false;
       if (chip === 'ALL') return true;
       if (chip === 'FINISHED') return node.state === 'FINISHED' || node.state === 'ENDED';
+      // Running (the default view) also keeps a question for you in sight.
+      if (chip === 'RUNNING') return node.state === 'RUNNING' || node.state === 'ANSWER';
       return node.state === chip;
     }
     // A node matches when it or any descendant does (the roll-up rule, 4.2). The cycle guard is depth 8.
@@ -2957,6 +2959,7 @@
         var label = prefs.tab === 'LIVE' && chip === 'ANSWER' ? 'Needs you' : VIEW_LABELS[chip];
         var button = viewButton('chip-button' + (chip === 'RUNNING' && count > 0 ? ' has-sessions' : '') + (count === 0 ? ' zero' : ''), label, count, prefs.chip === chip);
         button.dataset.chip = chip;
+        if (chip === 'RUNNING' && prefs.tab === 'LIVE') button.title = 'Work that runs now, and work that waits for your answer';
         button.addEventListener('click', function () { chooseView(prefs.tab, chip); });
         chipsBar.appendChild(button);
       });
