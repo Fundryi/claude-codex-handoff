@@ -49,7 +49,7 @@ Corner radii measured on the 2x crops: cards (the three panels) about 10 px; but
 | `--panel-3` | `#313747` | the active filter chip, inline code |
 | `--hover` | `#242a3a` | hover band |
 | `--selected` | `#41386f` | selected row band (reference) |
-| `--selected-bar` | `#b693f4` | selected row left bar |
+| `--selected-bar` | `#b693f4` | the selected overview card's even border |
 | `--border` | `#2c3142` | the cards, message cards, inputs, usage cells, fact chips, buttons |
 | `--border-strong` | `#3a4054` | dialog buttons, flags, the stale-row dash |
 | `--border-soft` | `#1f2431` | dividers inside blocks |
@@ -102,6 +102,9 @@ Use Segoe UI Variable, Segoe UI, or the platform system font for the interface. 
 | Side panel title | 13 px | 650 |
 | Root row title, overview card title, run view agent label | 12 px | 600 |
 | Child row title | 12 px | 500 (600 when selected) |
+| Sidebar row titles | | `--muted` at rest (the reference list); `--fg` on the selected, hovered or focused row |
+| Work step kind (`.step-kind`) | 10 px | 600, plain case, in the actor color |
+| Phase caption (`.claude-phase`) | 10 px | 700 `--faint` uppercase, like `.ov-heading`, no stripe |
 | Navigation, metadata, chips, meta line, crumbs | 11 px | 400 |
 | Root row line 3, child row line 2, overview card meta, fold row, row time, plans block, state words | 10.5 px | 400 (600 for state words and the row words "needs answer", "needs attention", "fast") |
 | Status pills, kind words, captions, section labels, usage cell labels, flags | 10 px | 700 (captions and labels uppercase, letter-spacing .05 em; flags 400) |
@@ -137,15 +140,15 @@ Actor color says who sent a feed message, never a status. The avatar shape (fill
 | You | Pink `--you` `#f28fbf` | `you` | A message you typed in a Codex session or a chat |
 | You, relayed | Pink, dashed ring avatar, tag "relayed answer" | `you` | Your answer delivered through Claude or the answer box |
 | Claude | Clay `--claude` `#e0825e` | `claude` | A handoff prompt (tag "handoff"), Claude's own answer, or a chat reply (Claude → You) |
-| Claude work | Clay rail, ring dot | `claude` | A chat's own tool calls and thinking (`.actor-claude-work`) |
+| Claude work | Clay ring dot, indented work rows | `claude` | A chat's own tool calls and thinking (`.actor-claude-work`) |
 | Plugin | Lime `--plugin` `#c3e88d` | `plugin` | The return-format footer the plugin appends to a handoff prompt |
 | Codex | Teal `--codex` `#4fd1bd` | `codex` | Codex replies; tag "asks you" when the reply has a question |
 | Codex (lead) | Light teal `--codex-lead` `#9ae0d4`, ring avatar | `codex` | In a child agent's session: the lead agent's prompts |
-| Codex work | Teal rail, ring dot | `codex` | Thinking, commands, output, patches and tool calls |
+| Codex work | Teal ring dot, indented work rows | `codex` | Thinking, commands, output, patches and tool calls |
 | System | Slate `--system` `#8087a8`, dashed | `info` | Injected context and hook text |
 | Workflow script | Clay, ring avatar | `flow` | The prompt a workflow script gave an agent |
 | Claude agent | Clay, filled avatar | `flow` | The replies of an agent a workflow started |
-| Agent work | Clay rail, ring dot | `flow` | That agent's tool calls, output and thinking |
+| Agent work | Clay ring dot, indented work rows | `flow` | That agent's tool calls, output and thinking |
 
 The `you` tag (9 px 700, pink outline) sits on a Codex CLI root row: you started it, not Claude. Kind word color = who does the work; the clay `claude` starter glyph on "Handoff" = Claude started it, Codex does the work.
 
@@ -155,7 +158,7 @@ Who sent a message comes from `messageActor(event, session)`: Codex work kinds a
 
 ## Structure color
 
-The violet family is structure and never an actor or a status: `--accent` `#7c5cff` for the active tab underline, the focus ring, the unread dot, the primary button border and the Jump pill; `--accent-fill` `#342f60` for the primary button fill; `--selected` and `--selected-bar` for the selected row; `--tree` for rails and captions when project colors are off; `--tree-text` `#b693f4` for structure text (the fold row, the brand mark, links in the sidebar). The Codex agent pill is no longer violet: it is the Codex teal ring mark.
+The violet family is structure and never an actor or a status: `--accent` `#7c5cff` for the active tab underline, the focus ring, the unread dot, the primary button border and the Jump pill; `--accent-fill` `#342f60` for the primary button fill; `--selected` for the selected row band and `--selected-bar` for the selected overview card's border; `--tree` for rails and captions when project colors are off; `--tree-text` `#b693f4` for structure text (the fold row, the brand mark, links in the sidebar). The Codex agent pill is no longer violet: it is the Codex teal ring mark.
 
 ## Project colors
 
@@ -184,19 +187,19 @@ Numbers use the compact format (`412k`, `1.2M`, `3.8M`), tabular figures, interf
 
 ## Task facts
 
-The project, the model and the effort are the facts you check first, so they are chips under the header title (`.fact`, 24 px, `--panel-3` fill, `--border-strong`): project with a folder icon in the worker's color and a solid border in that color (dashed `.fact-project.other` for a child in another project), model short name, effort with a dim label, and `from` (the chat a handoff came from; hidden on a phone). The meta line (`.mi-wrap` with `.mi` items) never splits an item and never leaves a dangling separator; "Started by: Claude (handoff)" colors the name with the actor color.
+The project, the model and the effort are the facts you check first, so they are chips under the header title (`.fact`, 24 px, `--panel-3` fill, `--border-strong`): project in 600 with a folder icon in the worker's color and the same neutral border as every other chip (dashed `.fact-project.other` for a child in another project), model short name, effort with a dim label, and `from` (the chat a handoff came from; hidden on a phone). The meta line (`.mi-wrap` with `.mi` items) never splits an item and never leaves a dangling separator; "Started by: Claude (handoff)" colors the name with the actor color.
 
 ## Geometry and spacing
 
 - Layout: three rounded cards (`.pane`: `#side`, `#main`, `#panel`) on the `--bg` backdrop with a `--gutter` (8 px) around and between them, like the reference. The splitter is the gutter between the sidebar and the main card and only shows itself (accent fill) under the pointer. On a phone the gutter is 0 and the cards lose their corners.
-- Grid: 4 px. Row padding 6 px 10 px 6 px 7 px (root), 3 px 10 px 4 px plus the level offset (child), 1 px top and bottom for a finished child. Card padding 8 px 12 px 9 px. Header padding 10 px 16 px 8 px. Feed padding 12 px 16 px 56 px.
+- Grid: 4 px. Row padding 6 px 10 px (root), 3 px 10 px 4 px plus the level offset (child), 1 px top and bottom for a finished child. Card padding 8 px 12 px 9 px. Header padding 10 px 16 px 8 px. Feed padding 12 px 16 px 56 px.
 - Rows: a root row is two lines. Line 1: state mark, kind mark, title, state word, time (20 px). Line 2: the kind word, source, "fast", model, effort, tokens and flags on the left; the roll-up (the children's worst state, kind counts, Σ tree total) on the right, 10 px `--muted`. Under 400 px (the default 340 px sidebar) the kind counts hide and the roll-up keeps the word and the Σ total; under 300 px the Σ moves to the group caption. A child row is one line (state mark, kind mark, title, state word, time) plus a meta line while it is active; a finished, ended or stopped child (`.row.child.fin`) is one quiet line: muted 11.5 px title, state word, tokens in `--faint`, time. The fold row ("+ 18 finished") is a 22 px violet button that fills with `--accent-fill` under the pointer.
 - Chips: one compact row, no borders, 22 px, 11 px words with a dot and the count inline; the active chip sits on a `--panel-3` block with 6 px corners (the reference "All 17"). The row wraps to a second line when the sidebar is narrow and scrolls sideways on a phone.
 - Heights: header buttons 32 px, tabs 28 px, chips 22 px, fact chips and usage cells 24 px, pills 18 px, row lines 18 px, fold row 22 px, group caption 30 px, feed toolbar 36 px, run view agent rows 30 px, plan rows 20 px, the side panel back button 28 px.
 - Radii (`--r-panel` 10 px, `--r-btn` 8 px, `--r-chip` 6 px): the cards, menus and dialogs 10 px; buttons, inputs, overview cards, message cards, code blocks, the result card, the plans block, the Jump pill 8 px; chips, status pills, tabs, rows and the selected row band, usage cells, fact chips, toolbar buttons, message tags, menu entries 6 px; flags, tags and inline code 4 px; meters 3 px; the rail elbow 5 px. Nothing is square and nothing is a 999 px capsule except the `you` tag.
-- Borders: 1 px `--border` for the cards, message cards, inputs, usage cells, fact chips and header buttons; 1 px `--border-strong` for dialog buttons; 3 px left border for selection (`--selected-bar`); 2 px left border on a message card in the actor color at 70 %; overview cards have no colored bar (the kind word and marks say who works); 1 px rails in the group's rail color; 1 px dashed `--border-strong` for flags and the ghost mark; 1.5 px rings for marks and state marks.
+- Borders: 1 px `--border` for the cards, message cards, inputs, usage cells, fact chips and header buttons; 1 px `--border-strong` for dialog buttons and the auto-open switch when it is On; 1 px `--selected-bar` on a selected overview card. No colored edge stripes anywhere: cards, message cards and the result card have one even neutral border, a selected row is marked by its band fill alone, and no element says who works through a colored left edge (the kind word, marks and avatars do that); 1 px tree rails in the group's rail color; 1 px dashed `--border-strong` for flags and the ghost mark; 1.5 px rings for marks and state marks.
 - Fills: the header, toolbar and feed share the main card's `--panel`; message cards, overview cards, menus and dialogs are `--panel-2` with no actor tint; usage cells and fact chips have no fill.
-- The tree: `--indent` 18 px per level to level 4, `--indent-deep` 10 px per level after that (the cycle guard is at level 8); `--rail-x` 12 px for the level 1 rail. A child row is a grid (state box 10 px, mark box 16 px, title, time) with `--d` = depth and `--lx` the computed offset. Rails: `.rl.thru` for a continuing ancestor level (`--l`), `.rl.elbow` into this row, `.rl.stem` from a child's state mark down to its open children. Root rows draw no stem.
+- The tree: `--indent` 18 px per level to level 4, `--indent-deep` 10 px per level after that (the cycle guard is at level 8); `--rail-x` 15 px for the level 1 rail. A child row is a grid (state box 10 px, mark box 16 px, title, time) with `--d` = depth and `--lx` the computed offset. Rails: `.rl.thru` for a continuing ancestor level (`--l`), `.rl.elbow` into this row, `.rl.stem` from a child's state mark down to its open children. Root rows draw no stem.
 - The sidebar starts at 340 px (400 px from 2200 px viewport width), can be resized from 240 px to 55 % of the viewport, and remembers the chosen width. At 240 px the root row hides the source word and the roll-up word, the kind word is cut at 90 px, and the plans block hides its reset column (`#side` is the size container).
 - Content column: header, toolbar, result card and feed share one column of at most `--content-max` 1360 px, centered in the main card (`.inner`, `#feed-inner`, `.result-card-box`). The header's right-side controls sit on the column's right edge. The side panel (`#panel`) is a card of its own beside the main card (a sibling of `<main>`, shown by `body.panel-open`), so the column centers in the main card on its own. From 2200 px (`@media (min-width: 2200px)`) the side panel takes the width beyond the column (`--panel-w` up to 1400 px).
 - At 760 px and below, the sidebar is a drawer over a backdrop (`min(88vw, 340px)`); the header wraps into rows (menu button, counter and `...` first, then the title, facts, meta and usage); chips scroll sideways in one row with an edge fade (`#chips-wrap.more-left`, `.more-right`); the overview is one column; the side panel covers the pane with a back button; Jump to latest floats over the feed.
@@ -222,12 +225,12 @@ The project, the model and the effort are the facts you check first, so they are
 
 ## Feed behavior
 
-- The feed shows everything; there is no filter. A message is a card (`--panel-2`, 1 px border, 8 px corners, a 2 px actor-colored left edge): avatar, "sender → receiver" in the actor colors, a tag, the time. The actor never tints the card's fill. Chat actors: You → Claude, Claude → You, Claude work (clay rail, ring dot). Codex work folds into one "Codex work" row on a teal rail; a Claude agent's "Agent work" on the clay rail. Each run of injected context folds into one dashed System row.
+- The feed shows everything; there is no filter. A message is a card (`--panel-2`, one even 1 px `--border`, 8 px corners, no colored edge): avatar, "sender → receiver" in the actor colors, a tag, the time. The actor never tints the card's fill or its border. Chat actors: You → Claude, Claude → You, Claude work (clay ring dot). Codex work folds into one "Codex work" row, a Claude agent's work into one "Agent work" row; work rows sit indented under their message with no rail. Each run of injected context folds into one dashed System row.
 - Run markers (`.marker`) are thin centered rules: Turn started, ✓ Turn complete (green), Turn aborted (red), "Run 1 of 2 · finished 25m ago · show its result"; `.marker.warn` (amber) for a run that needs attention. The green confirmation row (`.done-row`) marks a finished handoff.
 - While the task is Running, the feed ends with "Codex is working · <latest step>" (or "Claude agent is working") in the Running blue.
 - Jump to latest (`#feed-pill`) floats over the bottom of the feed while the reader has scrolled up; it carries the "N new" count in `--tree-text`.
 - Messages, thinking steps and the result card render a safe Markdown subset built as DOM nodes with `textContent`; untrusted output never becomes `innerHTML` (the GL constants are the one trusted exception).
-- The "Result from Codex" card (teal rail and avatar, 8 px radius) sits between the toolbar and the feed; its question callout is pink; the answer box's primary button is `--accent-fill` with an `--accent` border.
+- The "Result from Codex" card (teal avatar, one even 1 px border, 8 px radius) sits between the toolbar and the feed; its question callout is pink; the answer box's primary button is `--accent-fill` with an `--accent` border.
 
 ## Motion and accessibility
 

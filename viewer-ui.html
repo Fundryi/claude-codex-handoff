@@ -17,7 +17,7 @@
       --panel-3: #313747;          /* nested fills: the active chip, inline code (reference "All 17" chip) */
       --hover: #242a3a;
       --selected: #41386f;         /* selected row band (reference) */
-      --selected-bar: #b693f4;     /* selected row left bar */
+      --selected-bar: #b693f4;     /* selected overview card border */
       --border: #2c3142;           /* panels, cards, inputs */
       --border-strong: #3a4054;    /* chips, buttons */
       --border-soft: #1f2431;      /* dividers between rows */
@@ -56,7 +56,7 @@
       --sidebar-width: 340px;      /* 400px from 2200 px viewport width */
       --indent: 18px;              /* one tree level (levels 1 to 4) */
       --indent-deep: 10px;         /* one tree level from level 5 on */
-      --rail-x: 12px;              /* level 1 rail, from the row's padding edge */
+      --rail-x: 15px;              /* level 1 rail, from the row's padding edge */
       --content-max: 1360px;       /* feed and header column on wide screens */
       --main-w: calc(100vw - var(--sidebar-width) - 3 * var(--gutter)); /* width of the main pane (gutters off) */
       --panel-w: clamp(320px, calc(var(--main-w) * .46), 760px);    /* side panel: an agent transcript */
@@ -298,11 +298,14 @@
       #plans.open .plan-row .pl-reset { font-size: 10px; line-height: 14px; margin-top: -3px; }
     }
     /* rows: shared bits. A row is a rounded band inset 4 px from the sidebar edges (reference: the selected row is a
-       rounded violet band with a bar on its left). */
-    .row { width: calc(100% - 8px); margin: 0 4px; text-align: left; border: 0; border-left: 3px solid transparent; border-radius: var(--r-chip); background: transparent; cursor: pointer; position: relative; color: var(--fg); transition: background-color .14s ease, border-color .14s ease; }
+       rounded violet band; the fill alone marks selection, no bar). */
+    .row { width: calc(100% - 8px); margin: 0 4px; text-align: left; border: 0; border-radius: var(--r-chip); background: transparent; cursor: pointer; position: relative; color: var(--fg); transition: background-color .14s ease; }
     .row:hover { background: var(--hover); }
-    .row.selected { background: var(--selected); border-left-color: var(--selected-bar); }
+    .row.selected { background: var(--selected); }
     .row-title { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    /* list titles rest in the dim text color (reference); only the selected, hovered or focused row lifts to --fg */
+    .row .row-title { color: var(--muted); }
+    .row:hover .row-title, .row.selected .row-title, .row:focus-visible .row-title { color: var(--fg); }
     .row.selected .row-title { font-weight: 600; }
     .row-meta { color: var(--muted); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     .row-meta b { color: var(--fg); font-weight: 600; }
@@ -316,7 +319,7 @@
     .row.selected .row-meta, .row.selected .row-time, .row.selected .row-sum, .row.selected .row-meta .fl { color: #c9cbe0; }
     /* root row: two lines. Line 1: state mark, kind mark, title, state word, time. Line 2: the kind word and the meta
        on the left, the quiet roll-up (kind counts, tree total) on the right. */
-    .row.root { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 1px; padding: 6px 10px 6px 7px; margin-top: 1px; }
+    .row.root { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 1px; padding: 6px 10px 6px 10px; margin-top: 1px; }
     .row-top { display: flex; align-items: center; gap: 6px; min-width: 0; height: 20px; grid-column: 1 / -1; }
     .row-top .row-title { flex: 1; font-size: 12.5px; }
     .row-top .state-word { margin-left: auto; }
@@ -352,7 +355,7 @@
     .rl.stem { top: 13px; bottom: 0; }
     /* fold and cap rows share the child grid */
     /* The fold row ("+ 18 finished") is a small rounded button in the structure violet, so the hidden work is one click away. */
-    .fold { display: grid; grid-template-columns: 10px 16px minmax(0, 1fr) auto; column-gap: 5px; align-items: center; height: 22px; width: calc(100% - 8px); margin: 1px 4px; text-align: left; border: 0; border-left: 3px solid transparent; border-radius: var(--r-chip); background: color-mix(in srgb, var(--accent-fill) 45%, transparent); color: var(--tree-text); font-size: 10.5px; font-weight: 600; padding: 0 10px 0 calc(var(--lx) + 13px); cursor: pointer; position: relative; }
+    .fold { display: grid; grid-template-columns: 10px 16px minmax(0, 1fr) auto; column-gap: 5px; align-items: center; height: 22px; width: calc(100% - 8px); margin: 1px 4px; text-align: left; border: 0; border-radius: var(--r-chip); background: color-mix(in srgb, var(--accent-fill) 45%, transparent); color: var(--tree-text); font-size: 10.5px; font-weight: 600; padding: 0 10px 0 calc(var(--lx) + 13px); cursor: pointer; position: relative; }
     .fold > .txt { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .fold:hover { background: var(--accent-fill); color: var(--fg); }
     /* cap row: the server sent at most N children of this chat. The rest live in History; the row says so and is not a link. */
@@ -387,7 +390,7 @@
     .ov-grid + .home-heading { margin-top: 18px; }
     .home-heading .n, .ov-heading .n { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
     .ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; margin-bottom: 16px; }
-    /* cards: only in the Live overview. A node page has no cards; the tree lists its children. The left bar is the worker color (--k). */
+    /* cards: only in the Live overview. A node page has no cards; the tree lists its children. One even neutral border, no colored bar. */
     .card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 3px; text-align: left; border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--panel-2); padding: 8px 12px 9px; cursor: pointer; color: var(--fg); min-width: 0; position: relative; transition: background-color .14s ease, border-color .14s ease; }
     .card:hover { background: var(--hover); border-color: var(--border-strong); }
     .card.selected { background: var(--selected); border-color: var(--selected-bar); }
@@ -398,7 +401,6 @@
     .card-head .row-time { flex: none; }
     .card-head .kind-label { overflow: hidden; text-overflow: ellipsis; }
     .card.selected .row-meta, .card.selected .row-time, .card.selected .kids { color: #c9cbe0; }
-    .card .row-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 1px; }
     .card .kids { margin-top: 4px; padding-left: 10px; border-left: 1px solid var(--rail, color-mix(in srgb, var(--tree) 55%, transparent)); font-size: 10.5px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
     .card .kids div { display: flex; align-items: center; gap: 5px; height: 18px; }
     .card .kids .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -526,16 +528,14 @@
     .claude-summary { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--panel-2); font-size: 12px; }
     .claude-summary-line { display: flex; flex-wrap: wrap; gap: 3px 12px; color: var(--muted); font-size: 11px; }
     .claude-summary-line b { color: var(--fg); font-weight: 650; }
-    .claude-running { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; color: var(--muted); font-size: 11px; }
-    .claude-running button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid #274a7d; border-radius: var(--r-chip); padding: 1px 8px; background: #172a45; color: var(--blue); cursor: pointer; font: 11px "Cascadia Code", Consolas, monospace; }
-    .claude-running button:hover { background: var(--hover); }
     /* Progress: the violet-to-sky fill for done, failed amber (a status color), the rest of the started agents on the track. */
     .claude-bar { display: flex; height: 4px; margin-top: 8px; border-radius: 2px; background: var(--meter-track); overflow: hidden; }
     .claude-bar span { display: block; height: 100%; }
     .claude-bar .bar-done { background: linear-gradient(90deg, #a855f7, #38bdf8); }
     .claude-bar .bar-failed { background: var(--amber); }
-    .claude-phase, .phase { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; padding: 0 0 0 8px; height: 18px; border-left: 3px solid var(--claude); color: var(--claude); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-    .claude-phase .phase-count, .phase .n { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+    /* phase caption: a plain caption like .ov-heading, no stripe */
+    .claude-phase { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; height: 18px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .claude-phase .phase-count { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
     .claude-phase .claude-bar { flex: 1; max-width: 120px; margin: 0 0 0 auto; height: 3px; }
     /* agent row: state mark, label (and tool while running), tail (last write, state word). The open row is selected; a running row has a faint blue tint. */
     .agent-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; width: 100%; height: 30px; padding: 0 8px 0 14px; border: 0; border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; font-size: 12px; cursor: pointer; transition: background-color .14s ease; }
@@ -634,7 +634,7 @@
     .fact { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--r-chip); background: transparent; color: var(--fg); font-size: 11px; white-space: nowrap; }
     .fact .fact-key, .fact .dim { color: var(--muted); font-weight: 400; white-space: nowrap; }
     .fact .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-    .fact-project { border-color: var(--fact-accent); font-weight: 600; }
+    .fact-project { font-weight: 600; }
     .fact-project.other { border-style: dashed; } /* a child that runs in another project (--cwd) */
     .fact-project b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
     .fact-project svg { flex: none; width: 13px; height: 13px; color: var(--fact-accent); }
@@ -684,7 +684,9 @@
       cursor: pointer;
       font-size: 11px;
     }
-    #auto-open-toggle:hover, #auto-open-toggle.on { color: var(--fg); background: var(--hover); }
+    #auto-open-toggle:hover { color: var(--fg); background: var(--hover); }
+    /* On rests on the card tone with a quiet border; the hover tone stays for the pointer only */
+    #auto-open-toggle.on { color: var(--fg); background: var(--panel-2); border-color: var(--border-strong); }
     #action-menu {
       position: absolute;
       right: 0;
@@ -855,14 +857,13 @@
     #legend { display: flex; align-items: center; gap: 4px 14px; min-width: 0; color: var(--muted); font-size: 11px; white-space: nowrap; }
     .legend-title { color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
     .legend-item { display: inline-flex; align-items: center; gap: 5px; cursor: default; }
-    .legend-note { min-width: 0; white-space: normal; }
     .legend-item::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--actor); flex: none; }
     .legend-item.actor-work::before, .legend-item.actor-claude-work::before, .legend-item.actor-chat-work::before, .legend-item.actor-workflow-script::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--actor); }
     .legend-item.actor-system::before { background: transparent; box-shadow: none; border: 1.5px dashed var(--system); width: 8px; height: 8px; }
     .started-by { display: inline-flex; align-items: center; gap: 6px; }
     .started-by b { color: var(--actor); font-weight: 650; }
     #result-card { flex: none; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
-    .result-card-box { border: 1px solid var(--border); border-left: 3px solid var(--codex); border-radius: var(--r-btn); background: var(--panel-2); }
+    .result-card-box { border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--panel-2); }
     .result-card-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 4px; }
     .result-card-toggle { display: flex; align-items: center; gap: 7px; border: 0; border-radius: var(--r-chip); padding: 4px 6px; background: transparent; color: var(--fg); cursor: pointer; font-size: 12px; font-weight: 650; transition: background-color 160ms; }
     .result-card-toggle:hover { background: var(--hover); }
@@ -945,7 +946,6 @@
       margin: 0 0 10px;
       padding: 8px 12px;
       border: 1px solid var(--border);
-      border-left: 2px solid color-mix(in srgb, var(--actor) 70%, transparent);
       border-radius: var(--r-btn);
       background: var(--panel-2);
     }
@@ -1019,10 +1019,10 @@
     .quiet-step { margin-top: 8px; }
     .quiet-step-head { display: flex; gap: 8px; color: var(--muted); font-size: 10px; }
     .quiet-step-head b { color: var(--fg); font-weight: 600; }
+    /* work rows keep their indent under the message (no rail) so the inner boxes never touch the message cards */
     details.work {
       margin: 2px 0 2px 9px;
       padding: 2px 0 2px 14px;
-      border-left: 2px solid color-mix(in srgb, var(--actor, var(--codex)) 40%, transparent);
     }
     details.work > summary { padding: 4px 0; }
     .work-list { display: grid; gap: 4px; padding: 3px 0 6px; }
@@ -1080,7 +1080,7 @@
     details.technical[open] { border-color: var(--border); }
     details.technical > summary { padding: 5px 9px; }
     details.technical > summary:hover, details.quiet > summary:hover .sum-text, details.work > summary:hover .sum-text { color: var(--fg); }
-    .step-kind { flex: none; min-width: 62px; color: color-mix(in srgb, var(--actor, var(--codex)) 80%, var(--muted)); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .step-kind { flex: none; min-width: 62px; color: color-mix(in srgb, var(--actor, var(--codex)) 80%, var(--muted)); font-size: 10px; font-weight: 600; }
     .step-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font: 11px "Cascadia Code", Consolas, monospace; }
     details.technical pre {
       margin: 0;
@@ -1131,13 +1131,13 @@
       /* the header wraps into rows: menu button, counter and ... first; title, facts, meta and usage below */
       #task-header { padding: 8px 12px; }
       #header-top { flex-wrap: wrap; gap: 8px; }
-      #header-actions { order: 2; }
+      /* the actions share row 1 with the menu button (a zero basis, so a wide counter never pushes them under it);
+         the title starts on row 2 at most */
+      #header-actions { order: 2; flex: 1 1 0; flex-wrap: wrap; min-width: 0; }
       #task-copy, .hd-main { order: 3; flex-basis: 100%; }
       #task-title-row { min-height: 0; }
       #task-meta { gap: 4px 9px; }
       #counter { padding: 0 8px; gap: 8px; min-width: 0; }
-      /* the counter and the auto-open switch share the row with the menu button; too narrow, they wrap under it */
-      #header-actions { flex: 1 1 auto; flex-wrap: wrap; min-width: 0; }
       #auto-open-toggle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .fact.fact-from { display: none; }
       #feed-toolbar { padding-left: 12px; padding-right: 12px; }
@@ -1209,7 +1209,7 @@
         <div id="header-actions">
           <button id="counter" type="button" title="Open Live: what runs or needs you" hidden></button>
           <button id="resume-session-button" class="toolbar-button" type="button" hidden>Resume</button>
-          <button id="auto-open-toggle" type="button" role="switch" aria-pressed="false" title="Automatically open the newest running task" hidden>Auto-open new runs: Off</button>
+          <button id="auto-open-toggle" type="button" role="switch" aria-pressed="false" title="Automatically open each new running task" hidden>Auto-open: Off</button>
           <button id="actions-button" class="icon-button" type="button" title="Task actions" aria-label="Task actions" aria-expanded="false">&#x22EF;</button>
         </div>
       </div>
@@ -2877,7 +2877,7 @@
       search.value = prefs.query || '';
       autoOpenToggle.classList.toggle('on', !!prefs.autoFollow);
       autoOpenToggle.setAttribute('aria-pressed', prefs.autoFollow ? 'true' : 'false');
-      autoOpenToggle.textContent = 'Auto-open new runs: ' + (prefs.autoFollow ? 'On' : 'Off');
+      autoOpenToggle.textContent = 'Auto-open: ' + (prefs.autoFollow ? 'On' : 'Off');
     }
 
     function currentRows() { return buildRows(sessions, jobs); }
