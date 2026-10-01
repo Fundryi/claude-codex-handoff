@@ -478,19 +478,25 @@ test("buildNodes joins chats, runs, handoffs and Codex agents into one tree, eve
   });
 });
 
-test("a handoff of a tracked chat that the frame did not send stays out of the roots", () => {
-  const { buildRows, buildNodes } = ctx();
+test("a handoff of a tracked chat that the frame did not send stays out of the roots, but History and search find it", () => {
+  const { buildRows, buildNodes, viewRoots } = ctx();
   const now = Date.now();
   const sid = "0b1c2d3e-0000-4000-8000-000000000001";
   const sessions = [{ id: "s-old", threadId: "T9", originator: "Claude Code", status: "DONE", lastGrow: now }];
   const jobs = [{ id: "task-old", threadId: "T9", sessionId: sid, status: "completed", updatedAt: new Date(now).toISOString() }];
   const frame = { chats: [{ id: "chat:" + sid, sessionId: sid, title: "t", state: "done", updatedMs: now, children: [], childrenHidden: 1 }], ghosts: [] };
-  const { roots } = buildNodes(frame, [], buildRows(sessions, jobs), jobs, now);
-  assert.deepEqual(plain(roots), ["chat:" + sid]);
+  const model = buildNodes(frame, [], buildRows(sessions, jobs), jobs, now);
+  assert.deepEqual(plain(model.roots), ["chat:" + sid]);
+  const history = (chip, query) => plain(viewRoots(model, { tab: "HISTORY", chip }, now, [], query || ""));
+  assert.deepEqual(history("EVERYTHING"), ["handoff:T9"]);
+  assert.deepEqual(history("FINISHED", "task-old"), ["handoff:T9"], "History search finds it by its job id");
+  assert.deepEqual(history("FINISHED", "no such thing"), []);
+  assert.deepEqual(history("DISMISSED"), []);
+  assert.deepEqual(plain(viewRoots(model, { tab: "HISTORY", chip: "DISMISSED" }, now, ["s-old"], "")), ["handoff:T9"]);
 });
 
 test("worstState, the Live window and saved views from before the redesign", () => {
-  const { worstState, liveRoot, nodeSavedView, nodeIdFor } = ctx();
+  const { worstState, liveRoot, liveHidden, nodeSavedView, nodeIdFor } = ctx();
   assert.equal(worstState("FINISHED", "RUNNING"), "RUNNING");
   assert.equal(worstState("ANSWER", "ATTENTION"), "ANSWER");
   assert.equal(worstState("", "ENDED"), "ENDED");
@@ -499,6 +505,9 @@ test("worstState, the Live window and saved views from before the redesign", () 
   assert.equal(liveRoot({ state: "FINISHED", rollup: "FINISHED", updatedMs: now - 30 * 3600e3 }, now, []), false, "old and done: History");
   assert.equal(liveRoot({ state: "ANSWER", rollup: "ANSWER", updatedMs: now - 90 * 3600e3 }, now, []), true, "an old question still shows");
   assert.equal(liveRoot({ state: "RUNNING", rollup: "RUNNING", updatedMs: now, row: { id: "s1" } }, now, ["s1"]), false, "dismissed");
+  assert.equal(liveHidden({ state: "FINISHED", row: { id: "s2" } }, ["s2"]), true, "a dismissed child leaves Live too");
+  assert.equal(liveHidden({ state: "ARCHIVED", row: { id: "s3" } }, []), true, "so does an archived one");
+  assert.equal(liveHidden({ state: "ARCHIVED" }, []), false, "a Claude node has no Codex row to dismiss");
   // Design 4.3: Now -> Live; Handoffs -> Live + Codex; Claude -> Live + Claude; History unchanged.
   const v = (p) => plain(nodeSavedView(p));
   assert.deepEqual(v({ tab: "NOW", chip: "ANSWER" }), { tab: "LIVE", chip: "ANSWER", kinds: { claude: false, codex: false } });
@@ -508,8 +517,10 @@ test("worstState, the Live window and saved views from before the redesign", () 
   assert.deepEqual(v({ tab: "LIVE", chip: "STOPPED", kinds: { codex: true } }), { tab: "LIVE", chip: "STOPPED", kinds: { claude: false, codex: true } });
   assert.deepEqual(v({ filter: "STALE" }), { tab: "LIVE", chip: "ATTENTION", kinds: { claude: false, codex: false } });
   // A saved Codex row id or Claude run maps to its node; a missing one gives null (the overview shows).
-  const model = { nodes: { "handoff:T1": { row: { id: "s-h1" } }, "workflow:s/wf_x": { kind: "workflow", runId: "wf_x" } }, roots: [] };
+  const model = { nodes: { "handoff:T1": { row: { id: "s-h1" } }, "workflow:s/wf_x": { kind: "workflow", runId: "wf_x" },
+    "wfagent:s/wf_x/a2": { kind: "wfagent", run: { id: "wf_x" }, agent: { id: "a2" } } }, roots: [] };
   assert.equal(nodeIdFor(model, { selected: "s-h1" }), "handoff:T1");
   assert.equal(nodeIdFor(model, { claudeRun: "wf_x" }), "workflow:s/wf_x");
+  assert.equal(nodeIdFor(model, { claudeRun: "wf_x", claudeAgent: "a2" }), "wfagent:s/wf_x/a2", "the v2.18 open agent opens again");
   assert.equal(nodeIdFor(model, { selected: "gone" }), null);
 });

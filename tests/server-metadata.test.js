@@ -271,6 +271,9 @@ test("Claude launcher ids: job ids and labelled thread ids only, never a bare UU
   // P1: the line every foreground result ends with
   assert.deepEqual(ids("Summary\n...\nCodex job: review-muocv3nt-l3eu18 · thread: 01A0F346-1111-7222-8333-444455556666\n"),
     { jobIds: ["review-muocv3nt-l3eu18"], threadIds: ["01a0f346-1111-7222-8333-444455556666"] });
+  // Another job the answer only mentions does not link: the closing line wins.
+  assert.deepEqual(ids("See task-aaaaaaaa-bbbbbb and thread: 01a0f347-0000-7000-8000-000000000000.\nCodex job: task-muocxq6w-uvy30z\n"),
+    { jobIds: ["task-muocxq6w-uvy30z"], threadIds: [] });
   assert.deepEqual(ids("Codex session ID: 01a0f348-aaaa-7bbb-8ccc-dddddddddddd\nResume in Codex: codex resume 01a0f348-aaaa-7bbb-8ccc-dddddddddddd").threadIds,
     ["01a0f348-aaaa-7bbb-8ccc-dddddddddddd"]);
   // A chat id in a path or a plain mention is no thread
@@ -278,7 +281,7 @@ test("Claude launcher ids: job ids and labelled thread ids only, never a bare UU
   assert.deepEqual(ids(null), { jobIds: [], threadIds: [] });
 });
 
-test("Claude head facts: first entrypoint, cwd and typed prompt; a cut last line is dropped", () => {
+test("Claude head facts: first entrypoint, cwd, typed prompt and slash command; a cut last line is dropped", () => {
   const head = (t) => ({ ...fns("claudeLineFacts", "claudeHeadFacts").claudeHeadFacts(t) });
   const l = (o) => JSON.stringify({ sessionId: "s", timestamp: "2026-10-01T09:00:00Z", ...o });
   const text = [
@@ -287,8 +290,16 @@ test("Claude head facts: first entrypoint, cwd and typed prompt; a cut last line
     l({ type: "user", entrypoint: "cli", cwd: "D:\\GIT\\other", message: { content: "  Tidy the KB routing tables  " } }),
     '{"type":"user","message":{"content":"cut',
   ].join("\n");
-  assert.deepEqual(head(text), { entrypoint: "cli", version: "2.1.186", cwd: "D:\\GIT\\redacted", forkedFrom: "", firstPrompt: "Tidy the KB routing tables" });
+  assert.deepEqual(head(text), { entrypoint: "cli", version: "2.1.186", cwd: "D:\\GIT\\redacted", forkedFrom: "", firstPrompt: "Tidy the KB routing tables", firstCommand: "" });
   assert.equal(head("").firstPrompt, "");
+  // A chat that only ran a slash command gets that command as its name.
+  const cmd = l({ type: "system", subtype: "local_command", content: "<command-name>/workflows</command-name>\n<command-message>workflows</command-message>" });
+  assert.equal(head(cmd + "\n").firstCommand, "/workflows");
+  // Many task-notification openers with no closer: linear, and no note.
+  const flood = l({ type: "user", message: { content: "<task-notification>".repeat(60000) } });
+  const t0 = Date.now();
+  assert.equal(fns("claudeLineFacts").claudeLineFacts(flood).notes, undefined);
+  assert.ok(Date.now() - t0 < 500, "the notification scan stays linear");
 });
 
 test("Claude plan usage: only the usage snapshot fields leave Claude Code's state file", () => {

@@ -692,8 +692,9 @@ function handleLaunch(res, body, args) {
 //   subagents/workflows/<runId>/{journal.jsonl, agent-<id>.jsonl, agent-<id>.meta.json}
 //   workflows/<runId>.json (snapshot, written at run end), workflows/scripts/<name>-<runId>.js
 // Polled, never fs.watch'ed (GBs, and every transcript write would fire). Nothing here writes.
-// Only ids, labels, phases, states, counts, times, tool names, token counts, models and efforts reach /events;
-// transcript text goes out only through /claude/transcript (and its alias /claude/agent), behind trustedControlOrigin.
+// Only ids, labels, titles, paths, phases, states, counts, times, tool previews (a tool name and the first line of
+// its input, the same a Codex feed shows), token counts, models and efforts reach /events; transcript text goes out
+// only through /claude/transcript (and its alias /claude/agent). Both sit behind trustedControlOrigin.
 const CLAUDE_SCAN_MS = 5000;              // new runs appear within this
 const CLAUDE_MAX_RUNS = 20;               // newest runs tracked; running runs always kept on top
 const CLAUDE_KEEP_MS = 24 * 60 * 60 * 1000; // no activity this long => dropped from memory (files stay)
@@ -1110,6 +1111,7 @@ function claudeDiscover() {
     for (const id of claudeRuns.keys()) if (!keep.has(id)) claudeRuns.delete(id);
     if (added) claudeTick();
     for (const id of claudeChatFiles.keys()) if (!seenChats.has(id)) claudeChatFiles.delete(id);
+    for (const [key, link] of claudeLinks) if (!claudeChatFiles.has(link.chat)) claudeLinks.delete(key); // its chat file is gone
     // A tracked chat's own reader knows its newest write before the next sweep does.
     for (const chat of claudeChats.values()) { const c = claudeChatFiles.get(chat.id); if (c) c.mtimeMs = Math.max(c.mtimeMs, chat.reader.mtimeMs); }
     claudeChatsScan(now, sweep);
@@ -1129,7 +1131,9 @@ function claudeTranscriptPage(file, offset) {
   const data = buf.subarray(0, n);
   let skip = 0;
   if (from > 0 && from !== offset) { const nl = data.indexOf(10); skip = nl === -1 ? data.length : nl + 1; }
-  const end = Math.max(skip, data.lastIndexOf(10) + 1);
+  let end = Math.max(skip, data.lastIndexOf(10) + 1);
+  // ponytail: a line longer than the cap is skipped, not shown; without this the offset never moves.
+  if (end === skip && n === CAP) end = n;
   let events = [], contextTokens = 0;
   for (const line of data.toString("utf8", skip, end).split("\n")) {
     if (!line.trim()) continue;
@@ -1183,18 +1187,26 @@ function claudeLineFacts(line) {
   if (o.version) f.version = s(o.version);
   if (o.cwd) f.cwd = s(o.cwd);
   if (o.forkedFrom && o.forkedFrom.sessionId) f.forkedFrom = s(o.forkedFrom.sessionId);
+  // indexOf, not a lazy regex: many openers with no closer made the regex quadratic.
   const notes = (text) => {
-    for (const m of String(text).matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)) {
-      const id = (/<task-id>\s*([^<\s]+)\s*</.exec(m[1]) || [])[1];
-      if (id) (f.notes = f.notes || []).push({ id, status: ((/<status>\s*([^<\s]+)\s*</.exec(m[1]) || [])[1] || "") });
+    const t = String(text), open = "<task-notification>", close = "</task-notification>";
+    for (let at = t.indexOf(open); at !== -1; at = t.indexOf(open, at)) {
+      const end = t.indexOf(close, at);
+      if (end === -1) break;
+      const body = t.slice(at + open.length, end);
+      at = end;
+      const id = (/<task-id>\s*([^<\s]+)\s*</.exec(body) || [])[1];
+      if (id) (f.notes = f.notes || []).push({ id, status: ((/<status>\s*([^<\s]+)\s*</.exec(body) || [])[1] || "") });
     }
   };
+  const command = (text) => { if (!f.command) f.command = (/^\s*<command-name>\s*(\/?[\w:.-]{1,60})\s*</.exec(text) || [])[1]; };
   if (f.type === "custom-title") { f.title = s(o.customTitle); f.titleSource = "custom"; }
   else if (f.type === "ai-title") { f.title = s(o.aiTitle); f.titleSource = "ai"; }
   else if (f.type === "last-prompt") f.lastPrompt = s(o.lastPrompt).slice(0, 200);
   else if (f.type === "queue-operation") notes(s(o.content));
   else if (f.type === "system") {
     if (o.subtype === "compact_boundary") f.compact = true;
+    if (o.subtype === "local_command") command(s(o.content));
     if (o.subtype === "stop_hook_summary" || o.subtype === "turn_duration") f.turn = "done";
   } else if (f.type === "user") {
     const c = o.message && o.message.content;
@@ -1211,6 +1223,7 @@ function claudeLineFacts(line) {
       notes(t);
       if (/^\s*\[Request interrupted/.test(t)) { f.turn = "done"; continue; }
       if (/^\s*<task-notification>/.test(t)) { f.turn = "running"; continue; } // Claude wakes up for it
+      command(t);
       if (!t.trim() || o.isMeta || o.isCompactSummary || /^\s*<(?:system-reminder|command-|local-command-)/.test(t)) continue;
       if (!f.prompt) f.prompt = t;
       f.turn = "running";
@@ -1239,6 +1252,9 @@ function claudeLineFacts(line) {
 // labels the companion prints (never a bare UUID: chat ids are UUIDs too).
 function claudeLauncherIds(text) {
   const t = String(text || "");
+  // The companion ends its result with its own ids; any other id in the text may be one Codex only mentioned.
+  const own = [...t.matchAll(/Codex job: ((?:task|review)-[a-z0-9]{6,12}-[a-z0-9]{4,8})(?: · thread: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?/gi)].pop();
+  if (own) return { jobIds: [own[1]], threadIds: own[2] ? [own[2].toLowerCase()] : [] };
   const jobIds = [...new Set([...t.matchAll(/\b((?:task|review)-[a-z0-9]{6,12}-[a-z0-9]{4,8})\b/g)].map((m) => m[1]))];
   const threadIds = [...new Set([...t.matchAll(/(?:Codex session ID:|thread:|codex resume)\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi)].map((m) => m[1].toLowerCase()))];
   return { jobIds, threadIds };
@@ -1261,14 +1277,15 @@ function claudeUsageAdd(acc, u, count, setContext) {
 
 // The first entrypoint, version, cwd, fork parent and typed prompt in a head read.
 function claudeHeadFacts(text) {
-  const out = { entrypoint: "", version: "", cwd: "", forkedFrom: "", firstPrompt: "" };
+  const out = { entrypoint: "", version: "", cwd: "", forkedFrom: "", firstPrompt: "", firstCommand: "" };
   const lines = String(text || "").split("\n");
   lines.pop(); // the read may cut the last line
   for (const line of lines) {
     const f = claudeLineFacts(line);
     if (!f) continue;
-    for (const k of ["entrypoint", "version", "cwd", "forkedFrom"]) if (!out[k] && f[k]) out[k] = f[k];
+    for (const k of ["entrypoint", "version", "cwd", "forkedFrom"]) if (!out[k] && f[k]) out[k] = f[k].slice(0, 500);
     if (!out.firstPrompt && f.prompt) out.firstPrompt = f.prompt.trim().slice(0, 200);
+    if (!out.firstCommand && f.command) out.firstCommand = f.command;
     if (out.entrypoint && out.cwd && out.firstPrompt) break;
   }
   return out;
@@ -1382,7 +1399,7 @@ function claudeNewChat(id, c) {
 function claudeAgentMeta(chat, a) {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(chat.sDir, "subagents", "agent-" + a.id + ".meta.json"), "utf8"));
-    const s = (v) => typeof v === "string" ? v : "";
+    const s = (v) => typeof v === "string" ? v.slice(0, 200) : "";
     a.label = s(m.description); a.agentType = s(m.agentType); a.background = m.requestShape === "background";
     a.toolUseId = s(m.toolUseId); a.parentAgentId = CLAUDE_AGENT_ID.test(s(m.parentAgentId)) ? m.parentAgentId : "";
     a.stoppedByUser = m.stoppedByUser === true; a.worktree = s(m.worktreeBranch); a.metaModel = s(m.model);
@@ -1504,6 +1521,7 @@ function claudeBackfill(deadline) {
       if (r.scan.offset >= r.end) { r.scanDone = true; break; }
       const got = readAppended(r.file, r.scan, Math.min(1024 * 1024, r.end - r.scan.offset));
       if (!got) { r.scanDone = true; break; } // gone: its last facts stay until the chat drops
+      if (!got.lines.length && got.st.size <= r.scan.offset) { r.scanDone = true; break; } // shrunk under the cursor
       for (const line of got.lines) {
         if (!/"assistant"|tool_result|task-notification|compact_boundary/.test(line)) continue; // cheap skip of attachments and prompts
         const f = claudeLineFacts(line);
@@ -1633,10 +1651,11 @@ function claudeChatView(chat, now, runs, hands) {
   const pend = [...r.pending.values()].pop();
   const state = claudeChatState(chat, now, childRunning);
   const h = chat.head || {};
-  const title = r.title || h.firstPrompt || r.lastPrompt || chat.id.slice(0, 8);
+  // A chat that only ran a slash command (/usage, /workflows) is named after that command.
+  const title = r.title || h.firstPrompt || r.lastPrompt || (h.firstCommand ? "Ran " + h.firstCommand : chat.id.slice(0, 8));
   return {
     id: chat.nodeId, sessionId: chat.id, title: title.slice(0, 200),
-    titleSource: r.title ? r.titleSource : h.firstPrompt ? "first-prompt" : r.lastPrompt ? "last-prompt" : "id",
+    titleSource: r.title ? r.titleSource : h.firstPrompt ? "first-prompt" : r.lastPrompt ? "last-prompt" : h.firstCommand ? "command" : "id",
     project: (h.cwd && h.cwd.split(/[\\/]/).filter(Boolean).pop()) || chat.slug.replace(/^[a-z]--/i, ""), cwd: h.cwd,
     source: h.entrypoint, version: h.version, forkedFrom: h.forkedFrom && h.forkedFrom !== chat.id ? h.forkedFrom : "",
     model: r.model, effort: r.effort, state, alive: claudePids.has(chat.id), tool: state === "running" && pend ? pend.preview : "",
@@ -1970,6 +1989,8 @@ const server = http.createServer((req, res) => {
     tick();
     res.end(JSON.stringify({ ok: true, id }));
   } else if (req.url.startsWith("/search?q=")) {
+    // Reads need the Host check too: a DNS-rebound page would otherwise read titles, prompts and paths.
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     let q;
     try { q = decodeURIComponent(req.url.slice("/search?q=".length)).trim().toLowerCase(); } catch { res.writeHead(400); return res.end("bad query"); }
     const terms = q.split(/\s+/).filter(Boolean).slice(0, 8);
@@ -1988,6 +2009,7 @@ const server = http.createServer((req, res) => {
       })),
     }));
   } else if (req.url === "/events") {
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     sseClients.add(res);
     // initial state: session list + full event snapshots

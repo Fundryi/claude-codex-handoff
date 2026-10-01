@@ -1357,7 +1357,7 @@
     var historySearchTimer = null;
     var jobsLoaded = false;
     // Claude workflows (the Claude tab): the claudeRuns SSE frame, and the open agent's transcript,
-    // polled from /claude/agent (transcripts never ride /events).
+    // polled from /claude/transcript (transcripts never ride /events).
     var claudeRuns = [];
     var claudeLoaded = false;
     // The run view and the agent panel rebuild on their own signatures, so one never redraws the other.
@@ -1979,14 +1979,6 @@
         childIds[s.id] = true;
       });
       return { byParent: byParent, isChild: function (id) { return !!childIds[id]; } };
-    }
-    function agentChip(nickname, count) {
-      var chip = document.createElement('span');
-      chip.className = 'status AGENT';
-      chip.textContent = nickname ? nickname : count + (count === 1 ? ' agent' : ' agents');
-      chip.title = nickname === 'lead' ? 'Parent session that spawned the agents below'
-        : nickname ? 'Child agent spawned by the parent session' : 'This session spawned child agents';
-      return chip;
     }
     function fastChip() {
       var chip = document.createElement('span');
@@ -2686,11 +2678,20 @@
       // buildRows nests one level; a deeper Codex agent comes as its own row and nests here by thread.
       var threadNode = {};
       Object.keys(nodes).forEach(function (id) { var r = nodes[id].row; if (r && r.threadId) threadNode[r.threadId] = id; });
-      var deep = [];
+      var deep = [], older = [];
       (rows || []).forEach(function (row) {
         var key = rowHandoffKey(row);
         if (placedRows[key]) return;
-        if (threadChat[key] && trackedChats[threadChat[key]]) return;
+        if (threadChat[key] && trackedChats[threadChat[key]]) {
+          // Past the chat's child cap: no root and no parent, but History and search still find it.
+          var old = codexNode(row, 'handoff');
+          old.parentId = null;
+          old.chatId = threadChat[key];
+          old.flags.push('older, not in Live');
+          codexKids(old, row);
+          older.push(old.id);
+          return;
+        }
         var parentThread = row.session && row.session.parentThreadId;
         if (parentThread && parentThread !== row.threadId) { deep.push(row); return; }
         var claude = !!row.job || (row.session && row.session.originator === 'Claude Code');
@@ -2746,7 +2747,7 @@
         n.tree = { claude: claude, codex: codex, total: claude + codex, partial: partial };
         return n;
       }
-      roots.forEach(function (id) { walk(id, 0); });
+      roots.concat(older).forEach(function (id) { walk(id, 0); });
       return { nodes: nodes, roots: roots };
     }
     // Live tab chips, in the design's fixed order (4.2). History keeps its own chips.
@@ -2754,10 +2755,13 @@
     // Live: a root that changed in the root window (24 h), or one that still needs something,
     // so an old "Needs answer" stays as visible as it was in the Now tab.
     function liveRoot(node, now, dismissedIds) {
-      if (!node || node.state === 'ARCHIVED') return false;
-      if (node.row && (dismissedIds || []).indexOf(node.row.id) !== -1) return false;
+      if (!node || node.state === 'ARCHIVED' || liveHidden(node, dismissedIds)) return false;
       var urgent = { ANSWER: 1, ATTENTION: 1, RUNNING: 1, BACKGROUND: 1, WAITING: 1 };
       return now - (node.updatedMs || 0) < 24 * 3600 * 1000 || !!urgent[node.rollup];
+    }
+    // A Codex session you dismissed or archived leaves Live at any depth (History keeps it).
+    function liveHidden(node, dismissedIds) {
+      return !!node.row && (node.state === 'ARCHIVED' || (dismissedIds || []).indexOf(node.row.id) !== -1);
     }
     function nodeKind(node) {
       return node.kind === 'handoff' || node.kind === 'codex' || node.kind === 'codexagent' ? 'codex' : node.kind === 'ghost' ? 'ghost' : 'claude';
@@ -2785,7 +2789,8 @@
       var row = node.row || {};
       var session = row.session || {};
       var job = row.job || {};
-      return [node.title, node.project, node.id, node.model, node.sessionId, session.id, job.id, row.threadId, job.title, node.chat && node.chat.sessionId]
+      return [node.title, node.project, node.id, node.model, node.sessionId, session.id, job.id, row.threadId, job.title, node.chat && node.chat.sessionId,
+        node.phase, session.agentNickname]
         .some(function (v) { return String(v || '').toLowerCase().indexOf(needle) !== -1; });
     }
     function nodeSearch(nodes, id, query, depth) {
@@ -2797,15 +2802,21 @@
     // The roots a view shows, and the count per chip (a chip's count is what clicking it shows).
     function viewRoots(model, view, now, dismissedIds, query) {
       var nodes = model.nodes;
-      return model.roots.filter(function (id) {
-        var node = nodes[id];
-        if (view.tab === 'HISTORY') {
-          if (!node.row) return false; // stage 4 adds older chats
+      if (view.tab === 'HISTORY') {
+        // Every Codex session, also the ones under a chat: each is its own row here, its agents under it.
+        // Stage 4 adds older chats.
+        return Object.keys(nodes).filter(function (id) {
+          var node = nodes[id];
+          if (!node.row || (node.kind === 'codexagent' && node.parentId)) return false;
+          if (query && !nodeSearch(nodes, id, query)) return false;
           if (view.chip === 'EVERYTHING') return true;
           var dismissed = (dismissedIds || []).indexOf(node.row.id) !== -1;
           if (view.chip === 'DISMISSED') return dismissed;
           return !dismissed && node.row.status === view.chip;
-        }
+        });
+      }
+      return model.roots.filter(function (id) {
+        var node = nodes[id];
         return liveRoot(node, now, dismissedIds) && nodeMatch(nodes, id, view.chip, view.kinds) && (!query || nodeSearch(nodes, id, query));
       });
     }
@@ -2838,6 +2849,8 @@
       if (saved.node && nodes[saved.node]) return saved.node;
       var ids = Object.keys(nodes);
       if (saved.claudeRun) {
+        var open = saved.claudeAgent && ids.find(function (id) { var n = nodes[id]; return n.kind === 'wfagent' && n.run && n.run.id === saved.claudeRun && n.agent.id === saved.claudeAgent; });
+        if (open) return open; // its workflow opens with it, in the side panel
         var wf = ids.find(function (id) { return nodes[id].kind === 'workflow' && nodes[id].runId === saved.claudeRun; });
         if (wf) return wf;
       }
@@ -2863,6 +2876,7 @@
       var page = pageKind();
       document.body.classList.toggle('claude-tab', page === 'workflow');
       document.body.classList.toggle('chat-page', page === 'chat' || page === 'ghost');
+      document.body.classList.toggle('overview-page', page === 'overview');
       document.body.classList.toggle('panel-open', !!prefs.panel || panelDocked());
       search.value = prefs.query || '';
       autoOpenToggle.classList.toggle('on', !!prefs.autoFollow);
@@ -2917,7 +2931,7 @@
       lastFilterSignature = signature;
       tabsBar.textContent = '';
       Object.keys(VIEW_TABS).forEach(function (tab) {
-        var count = counts[tab][VIEW_TABS[tab][0]];
+        var count = counts[tab][tab === 'HISTORY' ? 'EVERYTHING' : 'ALL'];
         var button = viewButton('tab-button', VIEW_LABELS[tab], '(' + count + ')', prefs.tab === tab);
         button.dataset.tab = tab;
         button.title = tab === 'LIVE' ? 'Everything from the last 24 hours, and what still needs you. Click again for the overview.' : 'Finished and older Codex sessions';
@@ -3010,7 +3024,15 @@
       var page = pageKind();
       if (page !== 'overview' && page !== 'codex') return;
       if (running.id !== selected) selectSession(running.id, false);
-      else savePrefs();
+      // The opened task's tree must be in the list: a chip or kind that hides it widens to everything.
+      var model = currentModel();
+      var root = prefs.node ? nodeRoot(model, prefs.node) : null;
+      if (root && viewRoots(model, currentView(), Date.now(), prefs.dismissed, '').indexOf(root.id) === -1) {
+        prefs.tab = 'LIVE';
+        prefs.chip = 'ALL';
+        prefs.kinds = {};
+      }
+      savePrefs();
     }
 
     // -- The sidebar tree (design 5). Groups by project, roots, children with rails, folds and the cap row.
@@ -3056,10 +3078,14 @@
       wrap.append(label, textSpan('you-tag', 'you'));
       return wrap;
     }
+    // A lower bound of 0 only means the backfill has not reached it yet.
+    function boundText(partial, total) {
+      if (partial && !total) return 'counting…';
+      return (partial ? '≥ ' : '') + compactCount(total);
+    }
     function nodeTokens(node) {
       if (!node.usage || node.usage.total == null) return null;
-      if (node.usage.partial && !node.usage.total) return 'counting…'; // the backfill has not reached it yet
-      return (node.usage.partial ? '≥ ' : '') + compactCount(node.usage.total);
+      return boundText(node.usage.partial, node.usage.total);
     }
     // The ancestors of a node, root first.
     function nodeChain(model, id) {
@@ -3138,7 +3164,12 @@
       if (node.fast) top.appendChild(fastChip());
       if (node.kind === 'chat' && node.source) top.appendChild(textSpan('src', SOURCE_NAMES[node.source] || node.source));
       var time = textSpan('row-time', relativeTime(node.updatedMs));
-      if (nodeUnread(node)) { var dot = textSpan('unread', ''); dot.title = 'New activity'; time.prepend(dot, document.createTextNode(' ')); }
+      // The root carries the dot for its whole tree, so a folded child's news still shows.
+      if ((function any(n, d) { return nodeUnread(n) || (d < 8 && n.children.some(function (c) { return model.nodes[c] && any(model.nodes[c], d + 1); })); })(node, 0)) {
+        var dot = textSpan('unread', '');
+        dot.title = 'New activity';
+        time.prepend(dot, document.createTextNode(' '));
+      }
       top.appendChild(time);
       var title = document.createElement('div');
       title.className = 'row-title';
@@ -3180,11 +3211,11 @@
         });
         if (controlsBlocked && node.kind === 'chat') {
           var blocked = textSpan('flag', 'handoffs blocked');
-          blocked.title = 'Controls are blocked at this address, so Codex handoffs cannot load. Open the viewer on the PC itself or through the tunnel link.';
+          blocked.title = 'Controls are blocked at this address, so Codex handoffs cannot load. Open the viewer on the PC itself or through the tunnel link. If a proxy serves it, add this name to CODEX_VIEWER_ALLOWED_HOSTS.';
           sum.appendChild(blocked);
         }
         if (node.children.length) {
-          var use = textSpan('use', (node.tree.partial ? '≥ ' : '') + 'Σ ' + compactCount(node.tree.total));
+          var use = textSpan('use', 'Σ ' + boundText(node.tree.partial, node.tree.total));
           use.title = 'Tokens of this tree: Claude ' + compactCount(node.tree.claude) + ', Codex ' + (controlsBlocked ? 'unknown (handoffs did not load)' : compactCount(node.tree.codex)) + (node.tree.partial ? '. A lower bound: some usage is unknown or over the read cap' : '');
           sum.appendChild(use);
         }
@@ -3245,7 +3276,8 @@
       return node.rollup === 'FINISHED' || node.rollup === 'ENDED' || node.rollup === 'STOPPED';
     }
     function appendChildren(container, model, node, depth, ancestors, view, reveal) {
-      var kids = node.children.map(function (id) { return model.nodes[id]; }).filter(Boolean);
+      var kids = node.children.map(function (id) { return model.nodes[id]; })
+        .filter(function (k) { return k && (view.tab !== 'LIVE' || !liveHidden(k, prefs.dismissed)); });
       var foldOpen = !!(prefs.openFolds || {})[node.id] || kids.some(function (k) { return reveal[k.id] || k.id === prefs.node || k.id === prefs.panel; });
       var folded = kids.filter(function (k) { return nodeFolded(model, k, view); });
       var shown = foldOpen ? kids : kids.filter(function (k) { return folded.indexOf(k) === -1; });
@@ -3285,9 +3317,13 @@
       }
     }
     // Every ancestor of the open node (and of the open panel agent) opens, and so does any fold on the way.
-    function revealSet(model) {
+    // A search opens the way to every hit too.
+    function revealSet(model, query) {
       var set = {};
       [prefs.node, prefs.panel].forEach(function (id) { if (id) nodeChain(model, id).slice(0, -1).forEach(function (n) { set[n.id] = true; }); });
+      if (query) Object.keys(model.nodes).forEach(function (id) {
+        if (model.nodes[id].parentId && nodeSearchHit(model.nodes[id], query)) nodeChain(model, id).forEach(function (n) { set[n.id] = true; });
+      });
       return set;
     }
     function currentView() { return { tab: prefs.tab, chip: prefs.chip, kinds: prefs.tab === 'LIVE' ? prefs.kinds || {} : null }; }
@@ -3313,7 +3349,7 @@
       var now = Date.now();
       var query = String(prefs.query || '').trim();
       var rootIds = viewRoots(model, view, now, prefs.dismissed, query);
-      var reveal = revealSet(model);
+      var reveal = revealSet(model, query);
       var signature = JSON.stringify([dataVersion, view, query, prefs.node, prefs.panel, prefs.openNodes, prefs.openFolds, prefs.closedGroups,
         Math.floor(now / 10000), Array.from(unread), prefs.dismissed, controlsBlocked, historyResults.map(function (entry) { return entry.id; })]);
       if (signature === lastTreeSignature) return;
@@ -3328,7 +3364,7 @@
       list.textContent = '';
       if (query) list.appendChild(textDiv('search-count', rootIds.length + (rootIds.length === 1 ? ' result' : ' results')));
       // Groups by project: the most recent activity first; inside, urgent roots first, then the newest.
-      var groups = [], byKey = {}, ghosts = [];
+      var groups = [], byKey = Object.create(null), ghosts = [];
       rootIds.forEach(function (id) {
         var node = model.nodes[id];
         if (node.kind === 'ghost') { ghosts.push(node); return; }
@@ -3354,7 +3390,7 @@
         caption.setAttribute('aria-expanded', String(!closed));
         var total = 0, low = false;
         group.roots.forEach(function (r) { total += r.tree.total; low = low || r.tree.partial; });
-        var use = textSpan('use', (low ? '≥ ' : '') + compactCount(total));
+        var use = textSpan('use', boundText(low, total));
         use.title = 'Tokens of every tree in this group';
         caption.append(textSpan('caret', '▼'), group.ghost ? markElement('ghost', 'system', 'ghost', 'Not on this PC') : folderIcon(), textSpan('nm', group.key), textSpan('n', String(group.roots.length)), use);
         caption.addEventListener('click', function () {
@@ -3378,7 +3414,12 @@
           : query ? 'Nothing matches this search.' : view.tab === 'HISTORY' ? 'No sessions match this filter.' : 'Nothing matches this filter.'));
       }
       // Older Codex sessions from the server's search (not in the live lists): click loads one.
-      var history = query ? mergeHistoryResults(historyResults, sessions.map(function (s) { return s.id; })) : [];
+      // Only the sessions drawn above drop out of the server's results; a tracked one that is not drawn stays findable.
+      var drawn = Array.from(list.querySelectorAll('.row[data-id]')).map(function (el) {
+        var n = model.nodes[el.dataset.id];
+        return n && n.row && n.row.session ? n.row.session.id : '';
+      });
+      var history = query ? mergeHistoryResults(historyResults, drawn) : [];
       if (history.length) {
         list.appendChild(textDiv('history-caption', 'History — older sessions (' + history.length + ')'));
         history.forEach(function (entry) {
@@ -3413,80 +3454,6 @@
       chip.textContent = text;
       chip.title = title;
       return chip;
-    }
-
-    // One list row: 3 lines (badges / title / project · model · effort · tokens), detail in the tooltip.
-    function rowElement(row, depth, hint) {
-      var session = row.session;
-      var job = row.job;
-      var element = document.createElement('div');
-      element.className = 'session' + (depth ? ' child' : '') + (row.id === selected ? ' selected' : '') + (isDismissed(row.id) ? ' dismissed' : '');
-      var open = document.createElement('button');
-      open.type = 'button';
-      open.className = 'row-open';
-      open.setAttribute('aria-pressed', row.id === selected ? 'true' : 'false');
-      open.title = rowTooltip(row, Date.now());
-
-      var top = document.createElement('div');
-      top.className = 'session-top';
-      var badgeClass = rowBadge(row.status);
-      top.appendChild(statusChip(badgeClass, STATUS[badgeClass].label, rowReason(row) || STATUS[badgeClass].help));
-      if (job) {
-        var handoff = statusChip('HANDOFF', 'Handoff', 'Handoff from Claude to Codex' + (row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : ''));
-        handoff.prepend(glyph('claude'));
-        top.appendChild(handoff);
-      }
-      if (row.fast) top.appendChild(fastChip());
-      if (row.needsAnswer) top.appendChild(statusChip('NEEDS_ANSWER', '?', 'Codex asked: ' + firstLine(job.needsDecision, 200)));
-      if (depth) top.appendChild(agentChip(session.agentNickname || 'agent'));
-      else if (row.children.length) top.appendChild(agentChip('lead'));
-      if (unread.has(row.id)) {
-        var marker = document.createElement('span');
-        marker.className = 'unread';
-        marker.title = 'New activity';
-        top.appendChild(marker);
-      }
-      var time = document.createElement('span');
-      time.className = 'session-time';
-      time.textContent = relativeTime(row.updatedMs);
-      top.appendChild(time);
-
-      var title = document.createElement('div');
-      title.className = 'session-title';
-      title.textContent = row.title;
-      var meta = document.createElement('div');
-      meta.className = 'session-project';
-      // rowMetaLine always starts with the project name: that part in bold.
-      var metaText = rowMetaLine(row);
-      var projectLabel = projectName(row.project);
-      meta.append(textSpan('row-project', projectLabel), document.createTextNode(metaText.slice(projectLabel.length)));
-      open.append(top, title, meta);
-      if (hint) {
-        var matched = document.createElement('div');
-        matched.className = 'match-hint';
-        matched.textContent = 'matched: ' + hint;
-        open.appendChild(matched);
-      }
-      open.addEventListener('click', function () {
-        if (session) selectSession(session.id, true);
-        else openJob(job);
-      });
-      element.addEventListener('contextmenu', function (event) { openContextMenu(event, row); });
-      element.appendChild(open);
-
-      // Inline Resume for a dead or failed handoff; Cancel job lives in the task menus.
-      var target = job ? resumeTarget(row) : null;
-      if (target) {
-        var actions = document.createElement('div');
-        actions.className = 'job-actions';
-        var resume = document.createElement('button');
-        resume.type = 'button';
-        resume.textContent = 'Resume';
-        resume.addEventListener('click', function () { openResumeModal(target, row.title); });
-        actions.appendChild(resume);
-        element.appendChild(actions);
-      }
-      return element;
     }
 
     // The open task's row (child agents included; buildRows draws every session).
@@ -3539,8 +3506,9 @@
       taskStatus.className = 'status ' + badgeClass;
       taskStatus.textContent = STATUS[badgeClass].label;
       taskStatus.title = reason || STATUS[badgeClass].help;
-      taskHandoff.hidden = !row.job;
-      taskHandoff.title = row.job ? 'Handoff from Claude to Codex' + (row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : '') : '';
+      var handoffNode = pageNode();
+      taskHandoff.hidden = !row.job && !(handoffNode && handoffNode.kind === 'handoff');
+      taskHandoff.title = 'Handoff from Claude to Codex' + (row.job ? row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : '' : ' · its job record is gone, so there is no result card');
       taskFast.hidden = !row.fast;
       taskTitle.textContent = row.title;
       taskTitle.title = row.title;
@@ -3781,7 +3749,7 @@
       foot.className = 'plan-foot';
       foot.title = 'Tokens of every root in Live (last 24 h)' + (live.partial ? '. A lower bound: some usage is unknown or over the read cap' : '');
       var all = textSpan('', 'Live 24 h ');
-      all.appendChild(document.createElement('b')).textContent = (live.partial ? '≥ ' : '') + compactCount(live.claude + live.codex);
+      all.appendChild(document.createElement('b')).textContent = boundText(live.partial, live.claude + live.codex);
       var sc = textSpan('sc', '');
       sc.append(glyphSpan('claude'), document.createTextNode(' '));
       sc.appendChild(document.createElement('b')).textContent = compactCount(live.claude);
@@ -3924,18 +3892,22 @@
           else { var unk = textSpan('unk', 'window unknown'); unk.title = 'The window size is not on disk for Claude'; ctx.appendChild(unk); }
         }
         cells.push(ctx);
-        var total = usageCell('Total', 'Input (cached included) plus output, every call, this node only', usage && usage.partial);
+        var total = usageCell('Total', 'Input (cached included) plus output, every call, this node only', usage && usage.partial && usage.total);
         if (node.kind === 'ghost') total.appendChild(textSpan('unk', 'no chat file'));
         else if (!usage || usage.total == null) total.appendChild(textSpan('unk', 'unknown'));
+        else if (usage.partial && !usage.total) total.appendChild(textSpan('unk', 'counting…'));
         else {
           total.appendChild(bold(compactCount(usage.total)));
           if (usage.output) { var out = textSpan('', '↓ ' + compactCount(usage.output)); out.title = 'Output tokens'; total.appendChild(out); }
         }
         cells.push(total);
         if (node.children.length) {
-          var tree = usageCell('Tree', 'This node plus every child' + (node.tree.partial ? '. A lower bound: some usage is unknown or over the read cap' : ''), node.tree.partial);
-          tree.appendChild(bold(compactCount(node.tree.total)));
-          treeParts(tree, node.tree);
+          var tree = usageCell('Tree', 'This node plus every child' + (node.tree.partial ? '. A lower bound: some usage is unknown or over the read cap' : ''), node.tree.partial && node.tree.total);
+          if (node.tree.partial && !node.tree.total) tree.appendChild(textSpan('unk', 'counting…'));
+          else {
+            tree.appendChild(bold(compactCount(node.tree.total)));
+            treeParts(tree, node.tree);
+          }
           cells.push(tree);
         }
       }
@@ -4011,7 +3983,7 @@
         item('last write ' + relativeTime(node.updatedMs), new Date(node.updatedMs || 0).toLocaleString());
       }
       if (controlsBlocked) {
-        var blocked = item('Codex handoffs are blocked at this address', 'Controls are blocked at this address, so Codex handoffs cannot load. Open the viewer on the PC itself or through the tunnel link.', 'flag');
+        var blocked = item('Codex handoffs are blocked at this address', 'Controls are blocked at this address, so Codex handoffs cannot load. Open the viewer on the PC itself or through the tunnel link. If a proxy serves it, add this name to CODEX_VIEWER_ALLOWED_HOSTS.', 'flag');
         blocked.classList.add('flag');
       }
     }
@@ -4042,7 +4014,7 @@
       if (node.kind === 'chat' || node.kind === 'ghost') {
         event.preventDefault();
         fillChatMenu(contextMenu, node, function () { closeContextMenu(); });
-        showContextMenuAt(event.clientX, event.clientY);
+        showContextMenuAt(event);
       }
     }
 
@@ -4322,7 +4294,7 @@
       var model = currentModel();
       var now = Date.now();
       var rootIds = viewRoots(model, { tab: 'LIVE', chip: 'ALL', kinds: {} }, now, prefs.dismissed, '');
-      var colors = {};
+      var colors = Object.create(null);
       var cards = [];
       rootIds.forEach(function (id) {
         var root = model.nodes[id];
@@ -4330,7 +4302,7 @@
         if (!(key in colors)) colors[key] = PROJECT_COLORS[Object.keys(colors).length % PROJECT_COLORS.length];
         (function walk(node, depth) {
           if (depth === 0 || node.kind === 'handoff') cards.push({ node: node, color: colors[key] });
-          if (depth < 8) node.children.forEach(function (cid) { if (model.nodes[cid]) walk(model.nodes[cid], depth + 1); });
+          if (depth < 8) node.children.forEach(function (cid) { var c = model.nodes[cid]; if (c && !liveHidden(c, prefs.dismissed)) walk(c, depth + 1); });
         })(root, 0);
       });
       var kindOrder = { handoff: 0, codex: 0, chat: 1, agent: 2, workflow: 3, codexagent: 4, ghost: 5 };
@@ -4438,7 +4410,7 @@
     function pageKind() {
       if (prefs.home || !prefs.node) return 'overview';
       var kind = String(prefs.node).split(':')[0];
-      if (kind === 'handoff' || kind === 'codex' || kind === 'codexagent') return 'codex';
+      if (kind === 'handoff' || kind === 'codex' || kind === 'codexagent') return selected ? 'codex' : 'overview';
       return kind === 'chat' || kind === 'workflow' || kind === 'ghost' ? kind : 'overview';
     }
     function claudeRunId() { var n = pageNode(); return n && n.kind === 'workflow' ? n.runId : null; }
@@ -4451,6 +4423,8 @@
     function selectNode(id, byUser) {
       var model = currentModel();
       var node = model.nodes[id];
+      // A handoff with no session yet has no page: its job dialog is all there is.
+      if (node && node.row && !node.row.session) { if (byUser && node.row.job) openJob(node.row.job); return; }
       if (byUser) { prefs.autoFollow = false; prefs.home = false; }
       if (node && (node.kind === 'agent' || node.kind === 'wfagent')) {
         // The agent opens in the side panel; its nearest chat or workflow shows in the main pane.
@@ -4551,7 +4525,7 @@
       state.busy = true;
       try {
         var response = await fetch(state.key + '&offset=' + state.offset, { cache: 'no-store' });
-        if (response.status === 403) { state.error = 'Transcripts are refused at this address. Open the viewer on the PC itself or through the tunnel link.'; state.stopped = true; }
+        if (response.status === 403) { state.error = 'Transcripts are refused at this address. Open the viewer on the PC itself or through the tunnel link. If a proxy serves it, add this name to CODEX_VIEWER_ALLOWED_HOSTS.'; state.stopped = true; }
         else if (response.status === 404) { state.error = 'This transcript is not on this PC any more.'; state.stopped = true; }
         else if (response.ok) {
           var data = await response.json();
@@ -4734,7 +4708,7 @@
       if (t.state === 'running' && t.tool) item(t.tool, 'Tool it is running now', true);
       if (t.contextTokens) item('context ' + compactCount(t.contextTokens), t.contextTokens.toLocaleString() + ' tokens in its context');
       var total = p && p.usage && p.usage.total;
-      if (total != null) item('total ' + (p.usage.partial ? '≥ ' : '') + compactCount(total) + (p.usage.output ? ' · ↓ ' + compactCount(p.usage.output) : ''), 'Input (cached included) plus output, every call; ↓ output tokens');
+      if (total != null) item('total ' + boundText(p.usage.partial, total) + (p.usage.output ? ' · ↓ ' + compactCount(p.usage.output) : ''), 'Input (cached included) plus output, every call; ↓ output tokens');
       copy.append(top, meta);
       var close = document.createElement('button');
       close.type = 'button';
@@ -4752,13 +4726,6 @@
     function claudeRunById(id) { return claudeRuns.find(function (run) { return run.id === id; }) || null; }
     function newClaudeFeed(key) {
       return { key: key, events: [], offset: 0, tool: '', contextTokens: 0, state: '', error: '', loaded: false, busy: false, final: false, stopped: false };
-    }
-    function claudeMark() {
-      var mark = document.createElement('span');
-      mark.className = 'status CLAUDE_WF';
-      mark.title = 'A Claude Code workflow (Workflow tool), not a Codex task';
-      mark.append(glyph('flow'), document.createTextNode('Claude workflow'));
-      return mark;
     }
     function textDiv(className, text) {
       var div = document.createElement('div');
@@ -4950,7 +4917,6 @@
 
     // A workflow page: the run view fills the main pane; an open workflow agent shows in #panel.
     function renderClaudeBody() {
-      document.body.classList.remove('claude-run-open', 'claude-panel-open');
       renderClaudeOverview();
     }
 
@@ -5077,7 +5043,7 @@
         }
         var data = await response.json();
         if (!response.ok) return;
-        var previousRow = findRow(currentRows(), selected);
+        var previousRow = rowById(currentRows(), selected);
         var previousFeedStatus = (selectedRow() || {}).status;
         jobs = data.jobs || [];
         dataVersion++;
@@ -5435,7 +5401,7 @@
             prompt: prompt.value.trim(), effort: effort.value, model: model.value.trim(),
             fast: fast.input.checked, sandbox: sandbox.value
           }),
-          onSuccess: function () { chooseView('HANDOFFS', 'ALL'); }
+          onSuccess: function () { chooseView('LIVE', 'ALL'); }
         };
       };
       prompt.focus();
@@ -5944,7 +5910,7 @@
     events.onmessage = function (message) {
       var data = JSON.parse(message.data);
       if (data.type === 'sessions') {
-        var previousSelectedRow = findRow(currentRows(), selected);
+        var previousSelectedRow = rowById(currentRows(), selected);
         var previousSelectedStatus = previousSelectedRow ? previousSelectedRow.status : null;
         var previousSelected = selected;
         var previousFeedStatus = (selectedRow() || {}).status;
@@ -6033,7 +5999,7 @@
     // Prefs saved before the tabs carry filter/home instead of tab/chip. TABS exists only from here on.
     Object.assign(prefs, nodeSavedView(prefs));
     // A selection saved before the redesign (a Codex row id, a Claude run) maps to its node once the data is in.
-    var legacySelection = prefs.node === undefined && (prefs.selected || prefs.claudeRun) ? { selected: prefs.selected, claudeRun: prefs.claudeRun } : null;
+    var legacySelection = prefs.node === undefined && (prefs.selected || prefs.claudeRun) ? { selected: prefs.selected, claudeRun: prefs.claudeRun, claudeAgent: prefs.claudeAgent } : null;
     function migrateSelection() {
       if (!legacySelection) return;
       var id = nodeIdFor(currentModel(), legacySelection);
