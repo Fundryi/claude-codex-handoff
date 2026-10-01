@@ -496,7 +496,16 @@ test("a handoff of a tracked chat that the frame did not send stays out of the r
 });
 
 test("worstState, the Live window and saved views from before the redesign", () => {
-  const { worstState, liveRoot, liveHidden, nodeSavedView, nodeIdFor } = ctx();
+  const { worstState, liveRoot, liveHidden, nodeSavedView, nodeIdFor, childOrder } = ctx();
+  // Children: active first (newest started on top), then finished (newest finished on top).
+  const kids = [
+    { id: "old-done", rollup: "FINISHED", startedMs: 1, updatedMs: 10 },
+    { id: "run-old", rollup: "RUNNING", startedMs: 2, updatedMs: 99 },
+    { id: "new-done", rollup: "FINISHED", startedMs: 3, updatedMs: 20 },
+    { id: "run-new", rollup: "RUNNING", startedMs: 4, updatedMs: 5 },
+    { id: "asks", rollup: "ANSWER", startedMs: 3, updatedMs: 1 },
+  ];
+  assert.deepEqual(kids.sort(childOrder).map((k) => k.id), ["run-new", "asks", "run-old", "new-done", "old-done"]);
   assert.equal(worstState("FINISHED", "RUNNING"), "RUNNING");
   assert.equal(worstState("ANSWER", "ATTENTION"), "ANSWER");
   assert.equal(worstState("", "ENDED"), "ENDED");
