@@ -162,7 +162,7 @@ The project, the model and the effort are the facts you check first, so they are
 ## Navigation behavior
 
 - The viewer does not start new Codex runs. Runs start from Claude (`/codex:handoff`) or a Codex CLI; the viewer resumes, answers and cancels them.
-- Two tabs, Live and History (the unified view; until the logic lands, the four tabs Now, Handoffs, History, Claude keep working with the new styles). Live holds seven status chips (All, Running, Needs you, Needs attention, Waiting, Finished, Stopped) and, after a divider, the two kind chips Claude and Codex (`.chip-kinds`, one wrapping unit). Order and position never change when counts update.
+- Two tabs, Live and History (the unified view). Live holds seven status chips (All, Running, Needs you, Needs attention, Waiting, Finished, Stopped) and, after a divider, the two kind chips Claude and Codex (`.chip-kinds`, one wrapping unit). Order and position never change when counts update.
 - One tree: projects as groups (caption with count and tree total), root rows (3 lines plus the roll-up line: state dots with counts per child state and the tree total), child rows on rails. A root's roll-up carries the states of its children, so a chat with a child that needs you shows "needs answer" on the root. The fold row hides the finished middle of a long child list ("12 finished agents"); the cap row says how many older children live in History.
 - The overview (Live, nothing selected) shows four card sections: Needs you, Needs attention, Running, Recently finished. A node page has no cards; the tree lists its children.
 - The header counter shows running, need you and needs attention for every kind, from every tab; clicking it opens Live.

@@ -17,6 +17,7 @@
 - **Codex sessions report their context.** The viewer now reads the context size, the context window and the plan limit from each Codex session.
 - **Removed test:** "claudeTranscriptAllowed: this PC's browser or the tunnel link only" in `tests/remote-access.test.js`. The function is gone, because transcripts now use `trustedControlOrigin`, which has its own tests. The serve test checks that the transcript routes refuse a foreign origin.
 - **Removed tests:** "Follow newest keeps a thread resumed after its handoff finished in the running view" and "Follow newest deliberately returns to the running view" in `tests/viewer-ui-state.test.js`. Auto-open no longer switches the tab or chip, so there is no view to return to. The new test "Auto-open follows a running Codex task, never away from an open Claude page or panel" covers what is left, and adds the case that auto-open never leaves an open chat or side panel.
+- **Removed test:** "child sessions render nested with a nickname chip" in `tests/ui-agents.test.js`. It only checked that two CSS rules exist, and both rules are gone with the old list rows. The buildNodes test checks that Codex agents nest at every level, and `tests/stopped-status.test.js` keeps the "Needs attention" label check.
 - **Changed tests:** four navigation tests in `tests/viewer-ui-state.test.js` now check the Live and History tabs instead of Now, Handoffs and Claude. The parts about the Handoffs tab are gone with that tab.
 
 ## 2.18.0
