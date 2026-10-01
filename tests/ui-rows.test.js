@@ -509,13 +509,17 @@ test("worstState, the Live window and saved views from before the redesign", () 
   assert.equal(liveHidden({ state: "ARCHIVED", row: { id: "s3" } }, []), true, "so does an archived one");
   assert.equal(liveHidden({ state: "ARCHIVED" }, []), false, "a Claude node has no Codex row to dismiss");
   // Design 4.3: Now -> Live; Handoffs -> Live + Codex; Claude -> Live + Claude; History unchanged.
-  const v = (p) => plain(nodeSavedView(p));
+  const v = (p) => { const r = plain(nodeSavedView(p)); assert.equal(r.viewV, 2); delete r.viewV; return r; };
   assert.deepEqual(v({ tab: "NOW", chip: "ANSWER" }), { tab: "LIVE", chip: "ANSWER", kinds: { claude: false, codex: false } });
   assert.deepEqual(v({ tab: "HANDOFFS", chip: "FINISHED" }), { tab: "LIVE", chip: "FINISHED", kinds: { claude: false, codex: true } });
   assert.deepEqual(v({ tab: "CLAUDE", chip: "RUNNING" }), { tab: "LIVE", chip: "RUNNING", kinds: { claude: true, codex: false } });
   assert.deepEqual(v({ tab: "HISTORY", chip: "ARCHIVED" }), { tab: "HISTORY", chip: "ARCHIVED", kinds: { claude: false, codex: false } });
   assert.deepEqual(v({ tab: "LIVE", chip: "STOPPED", kinds: { codex: true } }), { tab: "LIVE", chip: "STOPPED", kinds: { claude: false, codex: true } });
   assert.deepEqual(v({ filter: "STALE" }), { tab: "LIVE", chip: "ATTENTION", kinds: { claude: false, codex: false } });
+  // Running is the default: a first start, and a saved Live "All" from before, open on Running once.
+  assert.deepEqual(v({}), { tab: "LIVE", chip: "RUNNING", kinds: { claude: false, codex: false } });
+  assert.deepEqual(v({ tab: "LIVE", chip: "ALL" }), { tab: "LIVE", chip: "RUNNING", kinds: { claude: false, codex: false } });
+  assert.deepEqual(v({ tab: "LIVE", chip: "ALL", viewV: 2 }), { tab: "LIVE", chip: "ALL", kinds: { claude: false, codex: false } }, "All picked after the switch stays");
   // A saved Codex row id or Claude run maps to its node; a missing one gives null (the overview shows).
   const model = { nodes: { "handoff:T1": { row: { id: "s-h1" } }, "workflow:s/wf_x": { kind: "workflow", runId: "wf_x" },
     "wfagent:s/wf_x/a2": { kind: "wfagent", run: { id: "wf_x" }, agent: { id: "a2" } } }, roots: [] };

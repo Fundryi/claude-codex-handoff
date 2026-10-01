@@ -52,56 +52,6 @@ test("picking a tab or chip pauses automatic following and closes the overview",
   assert.equal(context.prefs.home, false);
 });
 
-test("the chip widens only when the open node's status change takes its root out of the view", () => {
-  const context = navigation();
-  context.prefs.chip = "RUNNING";
-  // No status change: an explicit choice is never overridden.
-  context.followSelectedStatus("RUNNING");
-  assert.deepEqual(view(context), ["LIVE", "RUNNING"]);
-  // Running -> Waiting while Live/Running is open: the root leaves Running, so the chip widens to All.
-  context.sessions[0].status = "IDLE";
-  context.followSelectedStatus("RUNNING");
-  assert.deepEqual(view(context), ["LIVE", "ALL"]);
-  // Still visible after the change: no move.
-  context.prefs.chip = "WAITING";
-  context.followSelectedStatus("RUNNING");
-  assert.deepEqual(view(context), ["LIVE", "WAITING"]);
-  // History: a finished session stopped while History/Finished is open widens to Everything.
-  context.prefs.tab = "HISTORY";
-  context.prefs.chip = "FINISHED";
-  context.sessions[0].status = "STOPPED";
-  context.followSelectedStatus("FINISHED");
-  assert.deepEqual(view(context), ["HISTORY", "EVERYTHING"]);
-});
-
-test("Everything stays Everything when the open node changes", () => {
-  const context = navigation();
-  context.prefs.tab = "HISTORY";
-  context.prefs.chip = "EVERYTHING";
-  context.sessions[0].status = "DONE";
-  context.followSelectedStatus("RUNNING");
-  assert.deepEqual(view(context), ["HISTORY", "EVERYTHING"]);
-});
-
-test("an open Codex child agent follows the view of its root", () => {
-  const now = Date.now();
-  const context = navigation({
-    selected: "kid",
-    sessions: [
-      { id: "lead", threadId: "L", status: "DONE", lastGrow: now - 2 },
-      { id: "kid", threadId: "K", parentThreadId: "L", status: "LIVE", lastGrow: now - 1 },
-    ],
-  });
-  context.prefs.node = "codexagent:kid";
-  context.prefs.chip = "RUNNING";
-  // While the child runs, its root is in Live/Running through the roll-up.
-  context.followSelectedStatus("WAITING");
-  assert.deepEqual(view(context), ["LIVE", "RUNNING"]);
-  context.sessions[1].status = "DONE";
-  context.followSelectedStatus("RUNNING");
-  assert.deepEqual(view(context), ["LIVE", "ALL"], "the root is what the tree draws");
-});
-
 test("Auto-open follows a running Codex task, never away from an open Claude page or panel", () => {
   const running = { id: "running", threadId: "t-run", status: "LIVE", lastGrow: Date.now() };
   const context = navigation();

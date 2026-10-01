@@ -2763,16 +2763,24 @@
       return counts;
     }
     // Saved tab and chip from before the redesign map to Live plus a kind (design 4.3).
+    // Running is the default Live chip: a saved Live "All" from before (viewV < 2) switches to it once.
     function nodeSavedView(prefs) {
       var saved = prefs && typeof prefs === 'object' ? prefs : {};
       var kinds = saved.kinds && typeof saved.kinds === 'object' ? { claude: !!saved.kinds.claude, codex: !!saved.kinds.codex } : { claude: false, codex: false };
-      if (Object.prototype.hasOwnProperty.call(VIEW_TABS, saved.tab) && VIEW_TABS[saved.tab].indexOf(saved.chip) !== -1) return { tab: saved.tab, chip: saved.chip, kinds: kinds };
-      var old = savedView(saved); // NOW, HANDOFFS, CLAUDE, HISTORY
-      if (old.tab === 'HISTORY') return { tab: 'HISTORY', chip: old.chip, kinds: kinds };
-      var chip = VIEW_TABS.LIVE.indexOf(old.chip) !== -1 ? old.chip : 'ALL';
-      if (old.tab === 'HANDOFFS') kinds = { claude: false, codex: true };
-      if (old.tab === 'CLAUDE') kinds = { claude: true, codex: false };
-      return { tab: 'LIVE', chip: chip, kinds: kinds };
+      var view;
+      if (Object.prototype.hasOwnProperty.call(VIEW_TABS, saved.tab) && VIEW_TABS[saved.tab].indexOf(saved.chip) !== -1) view = { tab: saved.tab, chip: saved.chip, kinds: kinds };
+      else {
+        var old = savedView(saved); // NOW, HANDOFFS, CLAUDE, HISTORY
+        if (old.tab === 'HISTORY') view = { tab: 'HISTORY', chip: old.chip, kinds: kinds };
+        else {
+          if (old.tab === 'HANDOFFS') kinds = { claude: false, codex: true };
+          if (old.tab === 'CLAUDE') kinds = { claude: true, codex: false };
+          view = { tab: 'LIVE', chip: VIEW_TABS.LIVE.indexOf(old.chip) !== -1 ? old.chip : 'ALL', kinds: kinds };
+        }
+      }
+      if (saved.viewV !== 2 && view.tab === 'LIVE' && view.chip === 'ALL') view.chip = 'RUNNING';
+      view.viewV = 2;
+      return view;
     }
     // A saved selection from before the redesign: a Codex row id (session id or job:<id>), or a
     // Claude run and agent. Returns the node id, or null when the node is not loaded.
@@ -2930,17 +2938,6 @@
 
     // previousStatus: the open Codex node's status before the update. When the change takes its root out
     // of the view, the chip widens to All (History: Everything), so the open node stays in the tree.
-    function followSelectedStatus(previousStatus) {
-      if (pageKind() !== 'codex') return;
-      var model = currentModel();
-      var node = pageNode();
-      if (!node || !previousStatus || node.state === previousStatus) return;
-      var root = nodeRoot(model, node.id);
-      if (!root || viewRoots(model, currentView(), Date.now(), prefs.dismissed, '').indexOf(root.id) !== -1) return;
-      prefs.chip = prefs.tab === 'HISTORY' ? 'EVERYTHING' : 'ALL';
-      savePrefs();
-    }
-
     // The Auto-open toggle lives on the overview. Turning it on leaves the overview and opens the running
     // Codex task now. It never pulls the view away from an open Claude chat, workflow or agent.
     function setAutoOpen(on, running) {
@@ -3343,8 +3340,18 @@
         list.appendChild(box);
       });
       if (!rootIds.length) {
-        list.appendChild(textDiv('empty-list', !seeded && !claudeChatsLoaded ? 'Loading…'
-          : query ? 'Nothing matches this search.' : view.tab === 'HISTORY' ? 'No sessions match this filter.' : 'Nothing matches this filter.'));
+        var empty = textDiv('empty-list', !seeded && !claudeChatsLoaded ? 'Loading…'
+          : query ? 'Nothing matches this search.' : view.tab === 'HISTORY' ? 'No sessions match this filter.'
+          : view.chip === 'RUNNING' ? 'Nothing is running right now.' : 'Nothing matches this filter.');
+        if ((seeded || claudeChatsLoaded) && !query && view.tab === 'LIVE' && view.chip !== 'ALL') {
+          var all = document.createElement('button');
+          all.type = 'button';
+          all.className = 'empty-action';
+          all.textContent = 'Show everything from today';
+          all.addEventListener('click', function () { chooseView('LIVE', 'ALL'); });
+          empty.appendChild(all);
+        }
+        list.appendChild(empty);
       }
       // Older Codex sessions from the server's search (not in the live lists): click loads one.
       // Only the sessions drawn above drop out of the server's results; a tracked one that is not drawn stays findable.
@@ -4244,9 +4251,9 @@
           .sort(function (a, b) { return (kindOrder[a.node.kind] || 0) - (kindOrder[b.node.kind] || 0) || (b.node.updatedMs || 0) - (a.node.updatedMs || 0); })
           .slice(0, max || 99);
       }
-      var sections = [['Needs you', pick(['ANSWER'])], ['Needs attention', pick(['ATTENTION'])], ['Running', pick(['RUNNING', 'BACKGROUND'])],
-        ['Recently finished', cards.filter(function (c) { return c.node.state === 'FINISHED'; }).sort(function (a, b) { return (b.node.updatedMs || 0) - (a.node.updatedMs || 0); }).slice(0, 4)]];
-      var signature = JSON.stringify([dataVersion, Math.floor(now / 10000), prefs.node, sections.map(function (s) { return s[1].map(function (c) { return c.node.id; }); })]);
+      var sections = [['Running', pick(['RUNNING', 'BACKGROUND'])], ['Needs you', pick(['ANSWER'])], ['Needs attention', pick(['ATTENTION'])]];
+      var finished = cards.filter(function (c) { return c.node.state === 'FINISHED'; }).length;
+      var signature = JSON.stringify([dataVersion, Math.floor(now / 10000), prefs.node, finished, sections.map(function (s) { return s[1].map(function (c) { return c.node.id; }); })]);
       if (signature === (docked ? dockedHomeSignature : lastHomeSignature)) return;
       if (docked) dockedHomeSignature = signature; else lastHomeSignature = signature;
       var focusHost = inner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
@@ -4266,11 +4273,11 @@
         wrap.appendChild(grid);
       });
       if (!sections[0][1].length && !sections[1][1].length && !sections[2][1].length) wrap.insertBefore(textDiv('home-heading', 'Nothing running right now'), wrap.firstChild);
-      if (sections[3][1].length) {
+      if (finished) {
         var more = document.createElement('button');
         more.type = 'button';
         more.className = 'toolbar-button home-more';
-        more.textContent = 'Show more';
+        more.textContent = 'Show finished (' + finished + ')';
         more.addEventListener('click', function () { chooseView('LIVE', 'FINISHED'); });
         wrap.appendChild(more);
       }
@@ -4976,13 +4983,9 @@
         }
         var data = await response.json();
         if (!response.ok) return;
-        var previousRow = rowById(currentRows(), selected);
         var previousFeedStatus = (selectedRow() || {}).status;
         jobs = data.jobs || [];
         dataVersion++;
-        // A handoff finishing changes its row's status just like a session update does. Not on the
-        // first load: jobs arriving would look like status changes and move a restored tab/chip.
-        if (jobsLoaded) followSelectedStatus(previousRow ? previousRow.status : null);
         jobsLoaded = true;
         renderFilters();
         renderList();
@@ -5843,8 +5846,6 @@
     events.onmessage = function (message) {
       var data = JSON.parse(message.data);
       if (data.type === 'sessions') {
-        var previousSelectedRow = rowById(currentRows(), selected);
-        var previousSelectedStatus = previousSelectedRow ? previousSelectedRow.status : null;
         var previousSelected = selected;
         var previousFeedStatus = (selectedRow() || {}).status;
         data.sessions.forEach(function (session) {
@@ -5863,7 +5864,6 @@
         if (selected && !sessions.some(function (session) { return session.id === selected; })) selected = null;
         migrateSelection();
         followRunningSession(newestRunning());
-        followSelectedStatus(previousSelectedStatus);
         renderFilters();
         renderList();
         renderHeader();
