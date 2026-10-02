@@ -147,8 +147,7 @@ const pinnedFiles = new Map(); // file -> last-open timestamp (LRU, max 10)
 const MAX_PINNED = 10;
 let searchIndexReady = false;
 const rolloutStats = new Map(); // file -> { mtimeMs, size } from the last stat, or null
-const rolloutGrewAt = new Map(); // file -> when a full pass saw an untracked rollout grow
-const rolloutLastGrow = new Map(); // file -> lastGrow of a session when it left the newest 40
+const resumedFiles = new Set(); // untracked rollouts a full pass saw grow, followed until read to the end
 
 // full: restat every file (the 30 s index rebuild). Otherwise (the 1 s tick) stat only new
 // and tracked files: stat is ~90% of this walk, ~120 ms for 2,600 rollouts.
@@ -170,22 +169,18 @@ function collectRolloutFiles(full) {
   // A tracked session also sorts by its newest record: Codex 0.146+ pins mtime at creation
   // on Windows, so a long run would drop out of the top 40 while it is still writing.
   // A full pass also catches an untracked rollout that grew (an old session resumed; its mtime
-  // stays pinned), so it sorts up into the newest 40 instead of staying hidden for good. That
-  // rank holds only until the file is read to its end; then its newest record decides.
-  // A session that left the 40 keeps its newest record time (rolloutLastGrow), so it can return.
+  // stays pinned). tick follows it as an extra next to the newest 40 (resumedFiles); it never
+  // takes a place in the 40, so no other session is pushed out.
   const before = full ? new Map(rolloutStats) : null;
-  const now = Date.now();
   if (full) rolloutStats.clear();
   const mtime = new Map(out.map(p => {
     let st = rolloutStats.get(p);
     if (st === undefined || sessions.has(p)) { st = null; try { const s = fs.statSync(p); st = { mtimeMs: s.mtimeMs, size: s.size }; } catch {} rolloutStats.set(p, st); }
     const old = before && before.get(p);
-    const tracked = sessions.get(p);
-    if (old && st && st.size > old.size && !tracked) rolloutGrewAt.set(p, now);
-    if (tracked && tracked.offset >= tracked.size) rolloutGrewAt.delete(p);
-    return [p, Math.max(st?.mtimeMs || 0, tracked?.lastGrow || 0, rolloutLastGrow.get(p) || 0, rolloutGrewAt.get(p) || 0)];
+    if (old && st && st.size > old.size && !sessions.has(p)) resumedFiles.add(p);
+    return [p, Math.max(st?.mtimeMs || 0, sessions.get(p)?.lastGrow || 0)];
   }));
-  if (full) for (const map of [rolloutGrewAt, rolloutLastGrow]) for (const p of map.keys()) if (!rolloutStats.has(p)) map.delete(p);
+  if (full) for (const p of resumedFiles) if (!rolloutStats.has(p)) resumedFiles.delete(p);
   out.sort((a, b) => mtime.get(b) - mtime.get(a));
   return out;
 }
@@ -544,8 +539,15 @@ function tick() {
       if (!fs.existsSync(file)) { pinnedFiles.delete(file); continue; }
       if (!files.includes(file)) files.push(file);
     }
+    // A resumed old rollout is an extra until it ranks in on its own or is read to its end
+    // (offset against this tick's fresh stat, so bytes written since the last read keep it).
+    for (const file of resumedFiles) {
+      const s = sessions.get(file), st = rolloutStats.get(file);
+      if (files.includes(file) || (s && st && s.offset >= st.size)) { resumedFiles.delete(file); continue; }
+      files.push(file);
+    }
     for (const f of files) ingest(f);
-    for (const [key, s] of sessions) if (!files.includes(key)) { rolloutLastGrow.set(key, s.lastGrow); sessions.delete(key); }
+    for (const key of sessions.keys()) if (!files.includes(key)) sessions.delete(key);
     const threadJobStatus = threadJobStatuses(listCompanionJobs());
     const list = files.map(f => sessions.get(f)).filter(Boolean).map(s => sessionSummary(s, threadJobStatus));
     codexActive = list.filter(s => s.status === "LIVE").length;
