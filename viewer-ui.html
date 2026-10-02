@@ -4416,8 +4416,11 @@
     function selectNode(id, byUser) {
       var model = currentModel();
       var node = model.nodes[id];
-      // A handoff with no session yet has no page: its job dialog is all there is.
-      if (node && node.row && !node.row.session) { if (byUser && node.row.job) openJob(node.row.job); return; }
+      // A handoff with no session has no page: load its session by thread first, else its job dialog.
+      if (node && node.row && !node.row.session) {
+        if (byUser && node.row.job) { if (node.row.job.threadId) openOldHandoff(id, node.row.job); else openJob(node.row.job); }
+        return;
+      }
       if (byUser) { prefs.autoFollow = false; prefs.home = false; }
       if (node && (node.kind === 'agent' || node.kind === 'wfagent')) {
         // The agent opens in the side panel; its nearest chat or workflow shows in the main pane.
@@ -4993,6 +4996,25 @@
       button.textContent = message;
       button.title = message;
       window.setTimeout(function () { button.textContent = old; }, 4000);
+    }
+
+    // Live keeps a question for you after its session left the server's newest 40. Load that
+    // session by thread and open the row when it arrives. No session file: the job dialog.
+    var pendingOpen = null;
+    async function openOldHandoff(id, job) {
+      pendingOpen = id;
+      try {
+        var response = await fetch('/open?id=' + encodeURIComponent(job.threadId), { method: 'POST' });
+        if (response.ok) { openPending(); return; }
+      } catch (_) {}
+      pendingOpen = null;
+      openJob(job);
+    }
+    function openPending() {
+      var node = pendingOpen && currentModel().nodes[pendingOpen];
+      if (!node || !node.row || !node.row.session) return;
+      pendingOpen = null;
+      selectNode(node.id, true);
     }
 
     async function openHistorySession(id) {
@@ -5901,6 +5923,7 @@
         }
         if (selected && !sessions.some(function (session) { return session.id === selected; })) selected = null;
         migrateSelection();
+        openPending();
         followRunningSession(newestRunning());
         renderFilters();
         renderList();

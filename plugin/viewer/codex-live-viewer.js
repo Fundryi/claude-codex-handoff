@@ -2023,7 +2023,8 @@ const server = http.createServer((req, res) => {
     if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     let id;
     try { id = decodeURIComponent(req.url.slice("/open?id=".length)); } catch { res.writeHead(400); return res.end("bad id"); }
-    const entry = [...searchIndex.values()].find(e => e.id === id);
+    // A session id, or a thread id (a handoff row whose session left the newest 40; the file name ends with it).
+    const entry = [...searchIndex.values()].find(e => e.id === id || e.threadId === id || e.id.endsWith("-" + id));
     res.writeHead(entry ? 200 : 404, { "Content-Type": "application/json" });
     if (!entry) return res.end(JSON.stringify({ ok: false, error: "unknown session id" }));
     pinnedFiles.set(entry.file, Date.now());
@@ -2034,7 +2035,7 @@ const server = http.createServer((req, res) => {
     }
     ingest(entry.file);
     tick();
-    res.end(JSON.stringify({ ok: true, id }));
+    res.end(JSON.stringify({ ok: true, id: entry.id }));
   } else if (req.url.startsWith("/search?q=")) {
     // Reads need the Host check too: a DNS-rebound page would otherwise read titles, prompts and paths.
     if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
