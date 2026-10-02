@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.21.0
+
+- **The viewer uses much less CPU.** Before, each write to a Codex session started a full check, often several times per second, and each check sent the full task list to every open tab. Now the time between checks grows with the number of tasks that run: about 0.3 s with one task, 2 s with 20 or more. The viewer does not send a task list again when nothing in it changed. It reads a job state file again only when the file changed. Measured at the same time with the same load (19 live Codex sessions and running Claude agents): 21.4 % of one CPU core before, 4.7 % after. Task list updates went from 4 per second to 0.5.
+- **With no browser open, the viewer does very little work.** It checks for changes every 5 s and looks for new Claude chats every 25 s. When you open the page, it catches up first, so the first view is current. Measured: 14.9 % of one core before, 2.8 % after.
+- **New sessions still show quickly.** A new Codex session shows in about 0.1 s when few tasks run, and within 2 s when many run.
+- **A resumed old Codex session shows again.** The viewer follows the 40 newest Codex sessions. On Windows, Codex keeps the creation time on a session file, so an old session that you resumed did not sort up and never showed. Now the full scan every 30 s sees that the file grew. The viewer then follows that session next to the 40 until it has read the new lines. It does not push another session out of the list.
+- **An open question stays until you answer or dismiss it.** The viewer reads the 100 newest Codex jobs. On a busy day, a job with an open question fell past 100, and its "Needs answer" row left the list with no notice. Now the viewer also keeps older jobs that wait or run, and the newest job of each thread that has an open question.
+- **A click on an old handoff opens its page.** A handoff that waits for your answer stays in Live, but its Codex session can be older than the 40 newest. A click on its row showed only the result popup. Now the click loads the session and opens the full page with the transcript and the answer box. If the session file is gone, the popup opens as before.
+- **The "Waiting" time moves in 5 s steps.** This keeps a quiet task list the same from one check to the next, so the viewer does not send it again.
+- **Tests:** no test was added or removed. Real checks on a test copy with a fake sessions folder: a new session shows in 0.1 s; a resumed old session shows after about 27 s; while it is read, all 40 other sessions stay in the list and no old event is sent again.
+
 ## 2.20.0
 
 - **Claude limits stay current without /usage.** The plugin ships a status line script. Claude Code hands every status line your 5-hour and weekly limits after each reply. The script prints them at the bottom of the chat (for example "Opus 5.5 · 5h 2% · week 44%") and saves them to `~/.codex-companion/claude-limits.json`. The dashboard shows the newer of this file and the `/usage` snapshot. Numbers from the status line do not hide after one hour: they only grow while you use Claude, and a window whose reset passed shows "unknown". The per-model weekly limit (for example Fable) still comes only from `/usage`.
