@@ -678,7 +678,15 @@ function listCompanionJobs(fresh) {
   }
   for (const name of jobStateCache.keys()) if (!seen.has(name)) jobStateCache.delete(name);
   out.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
-  return out.slice(0, 100);
+  // The 100 newest, plus an older job that still needs someone: queued or running, or the newest
+  // job of its thread with an open question. A busy day pushed one past 100 (2026-10-02).
+  const threads = new Set();
+  return out.filter((job, i) => {
+    const newest = !job.threadId || !threads.has(job.threadId);
+    if (job.threadId) threads.add(job.threadId);
+    return i < 100 || job.status === "queued" || job.status === "running"
+      || (newest && job.status === "completed" && !!String(job.needsDecision || "").trim());
+  });
 }
 
 const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
