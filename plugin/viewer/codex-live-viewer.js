@@ -540,10 +540,11 @@ function tick() {
       if (!files.includes(file)) files.push(file);
     }
     // A resumed old rollout is an extra until it ranks in on its own or is read to its end
-    // (offset against this tick's fresh stat, so bytes written since the last read keep it).
+    // (offset against this tick's fresh stat, so bytes written since the last read keep it; a file
+    // that shrank is not "read to its end": ingest resets the reader and reads it again first).
     for (const file of resumedFiles) {
       const s = sessions.get(file), st = rolloutStats.get(file);
-      if (files.includes(file) || (s && st && s.offset >= st.size)) { resumedFiles.delete(file); continue; }
+      if (files.includes(file) || (s && st && st.size >= s.size && s.offset >= st.size)) { resumedFiles.delete(file); continue; }
       files.push(file);
     }
     for (const f of files) ingest(f);
