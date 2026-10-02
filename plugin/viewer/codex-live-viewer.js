@@ -147,6 +147,7 @@ const pinnedFiles = new Map(); // file -> last-open timestamp (LRU, max 10)
 const MAX_PINNED = 10;
 let searchIndexReady = false;
 const rolloutStats = new Map(); // file -> { mtimeMs, size } from the last stat, or null
+const rolloutGrewAt = new Map(); // file -> when a full pass saw an untracked rollout grow
 
 // full: restat every file (the 30 s index rebuild). Otherwise (the 1 s tick) stat only new
 // and tracked files: stat is ~90% of this walk, ~120 ms for 2,600 rollouts.
@@ -167,12 +168,19 @@ function collectRolloutFiles(full) {
   // One stat per file; stat inside the comparator cost ~60k stats per call (every tick).
   // A tracked session also sorts by its newest record: Codex 0.146+ pins mtime at creation
   // on Windows, so a long run would drop out of the top 40 while it is still writing.
+  // A full pass also catches an untracked rollout that grew (an old session resumed; its mtime
+  // stays pinned), so it sorts up into the newest 40 instead of staying hidden for good.
+  const before = full ? new Map(rolloutStats) : null;
+  const now = Date.now();
   if (full) rolloutStats.clear();
   const mtime = new Map(out.map(p => {
     let st = rolloutStats.get(p);
     if (st === undefined || sessions.has(p)) { st = null; try { const s = fs.statSync(p); st = { mtimeMs: s.mtimeMs, size: s.size }; } catch {} rolloutStats.set(p, st); }
-    return [p, Math.max(st?.mtimeMs || 0, sessions.get(p)?.lastGrow || 0)];
+    const old = before && before.get(p);
+    if (old && st && st.size > old.size && !sessions.has(p)) rolloutGrewAt.set(p, now);
+    return [p, Math.max(st?.mtimeMs || 0, sessions.get(p)?.lastGrow || 0, rolloutGrewAt.get(p) || 0)];
   }));
+  if (full) for (const p of rolloutGrewAt.keys()) if (!rolloutStats.has(p)) rolloutGrewAt.delete(p);
   out.sort((a, b) => mtime.get(b) - mtime.get(a));
   return out;
 }
@@ -508,7 +516,7 @@ function sessionSummary(s, threadJobStatus) {
     status,
     archived: s.file.startsWith(ARCHIVED_DIR),
     lastGrow: s.lastGrow,
-    quietMs: quiet,
+    quietMs: Math.floor(quiet / 5000) * 5000, // 5 s steps, so a quiet session does not change the list every tick
     lastKind: last ? last.kind : "",
     lastDone: !!(last && last.done), // a command that already finished
     lastText: last ? String(last.text).slice(0, 120) : "",
@@ -518,20 +526,35 @@ function sessionSummary(s, threadJobStatus) {
 }
 
 function broadcast(obj, clients = sseClients) {
+  if (!clients.size) return; // nobody listens: skip the stringify
   const line = "data: " + JSON.stringify(obj) + "\n\n";
   for (const res of clients) { try { res.write(line); } catch {} }
 }
 
 function tick() {
-  const files = listRolloutFiles();
-  for (const [file] of pinnedFiles) {
-    if (!fs.existsSync(file)) { pinnedFiles.delete(file); continue; }
-    if (!files.includes(file)) files.push(file);
+  lastTickAt = Date.now();
+  try {
+    const files = listRolloutFiles();
+    for (const [file] of pinnedFiles) {
+      if (!fs.existsSync(file)) { pinnedFiles.delete(file); continue; }
+      if (!files.includes(file)) files.push(file);
+    }
+    for (const f of files) ingest(f);
+    for (const key of sessions.keys()) if (!files.includes(key)) sessions.delete(key);
+    const threadJobStatus = threadJobStatuses(listCompanionJobs());
+    const list = files.map(f => sessions.get(f)).filter(Boolean).map(s => sessionSummary(s, threadJobStatus));
+    codexActive = list.filter(s => s.status === "LIVE").length;
+    // Unchanged list: no frame. A new tab gets the full list from /events on connect.
+    const sig = JSON.stringify(list);
+    if (sig !== sessionsSig) {
+      sessionsSig = sig;
+      broadcast({ type: "sessions", sessions: list });
+    }
+  } finally {
+    clearTimeout(tickTimer);
+    tickTimer = null;
+    scheduleTick(sseClients.size ? Math.max(POLL_MS, tickGap(codexActive + claudeActive)) : IDLE_POLL_MS);
   }
-  for (const f of files) ingest(f);
-  for (const key of sessions.keys()) if (!files.includes(key)) sessions.delete(key);
-  const threadJobStatus = threadJobStatuses(listCompanionJobs());
-  broadcast({ type: "sessions", sessions: files.map(f => sessions.get(f)).filter(Boolean).map(s => sessionSummary(s, threadJobStatus)) });
 }
 
 // newest job per thread wins - a cancelled thread that was resumed is running again
@@ -544,11 +567,24 @@ function threadJobStatuses(jobs) {
   return map;
 }
 
-// fs.watch makes updates near-instant (~50ms); the 1s poll stays as fallback
-let kickTimer = null;
+// Adaptive refresh. A file change (fs.watch) or a job notice pulls the next tick in, but never
+// closer than tickGap after the last one: the more tasks run at once, the longer the gap.
+// Without changes the poll runs every 1 s (or the gap, if longer); with no browser every 5 s.
+const IDLE_POLL_MS = 5000;
+let tickTimer = null, tickDue = 0, lastTickAt = 0, sessionsSig = "", codexActive = 0, claudeActive = 0;
+function tickGap(active) {
+  return Math.min(2000, 250 + 75 * (active || 0));
+}
+function scheduleTick(delay) {
+  const due = Date.now() + Math.max(0, delay);
+  if (tickTimer && tickDue <= due) return;
+  clearTimeout(tickTimer);
+  tickDue = due;
+  tickTimer = setTimeout(() => { tickTimer = null; tick(); }, due - Date.now());
+}
 function kick() {
-  if (kickTimer) return;
-  kickTimer = setTimeout(() => { kickTimer = null; tick(); }, 50);
+  if (!sseClients.size) return; // no browser: the 5 s poll is enough
+  scheduleTick(lastTickAt + tickGap(codexActive + claudeActive) - Date.now());
 }
 function watchSessions() {
   try { fs.watch(SESSIONS_DIR, { recursive: true }, kick); }
@@ -610,16 +646,29 @@ function pidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-function listCompanionJobs() {
+// Parsed state.json per workspace, reused while its mtime and size hold, for 10 s at most.
+// Callers still check pid and heartbeat on every use; the records are read-only.
+const jobStateCache = new Map(); // dir name -> { mtimeMs, size, at, jobs }
+function listCompanionJobs(fresh) {
   const out = [];
   let dirs = [];
   try { dirs = fs.readdirSync(COMPANION_STATE_ROOT, { withFileTypes: true }).filter(d => d.isDirectory()); } catch { return out; }
+  const now = Date.now();
+  const seen = new Set();
   for (const d of dirs) {
+    seen.add(d.name);
     try {
-      const state = JSON.parse(fs.readFileSync(path.join(COMPANION_STATE_ROOT, d.name, "state.json"), "utf8"));
-      for (const job of state.jobs || []) out.push({ ...job, stateDir: d.name });
-    } catch { /* partial write or foreign dir - skip */ }
+      const file = path.join(COMPANION_STATE_ROOT, d.name, "state.json");
+      const st = fs.statSync(file);
+      let cached = jobStateCache.get(d.name);
+      if (fresh || !cached || cached.mtimeMs !== st.mtimeMs || cached.size !== st.size || now - cached.at > 10000) {
+        cached = { mtimeMs: st.mtimeMs, size: st.size, at: now, jobs: JSON.parse(fs.readFileSync(file, "utf8")).jobs || [] };
+        jobStateCache.set(d.name, cached);
+      }
+      for (const job of cached.jobs) out.push({ ...job, stateDir: d.name });
+    } catch { jobStateCache.delete(d.name); /* partial write or foreign dir - skip, read again next time */ }
   }
+  for (const name of jobStateCache.keys()) if (!seen.has(name)) jobStateCache.delete(name);
   out.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
   return out.slice(0, 100);
 }
@@ -1728,17 +1777,19 @@ function claudeUsageCheck() {
 
 function claudeChatsTick() {
   const now = Date.now();
+  let running = 0; // running agents, for the adaptive Codex tick gap
   for (const chat of claudeChats.values()) {
     try {
       claudeFollow(chat.reader);
-      for (const a of chat.agents.values()) if (claudeAgentLiveState(chat, a, now) === "running") claudeFollow(a.reader);
+      for (const a of chat.agents.values()) if (claudeAgentLiveState(chat, a, now) === "running") { running++; claudeFollow(a.reader); }
     } catch { /* one bad chat never stops the timer */ }
   }
   for (const [key, r] of claudeWfReaders) {
     const [, runId, id] = key.split("/");
     const run = claudeRuns.get(runId), a = run && run.agents.get(id);
-    if (a && claudeAgentState(run, a) === "running") try { claudeFollow(r); } catch {}
+    if (a && claudeAgentState(run, a) === "running") { running++; try { claudeFollow(r); } catch {} }
   }
+  claudeActive = running;
   try { claudeBackfill(Date.now() + CLAUDE_SLICE_MS); } catch {}
   let frame;
   try { frame = claudeChatsBuild(now); } catch { return; }
@@ -2059,7 +2110,15 @@ const server = http.createServer((req, res) => {
   } else if (req.url === "/events") {
     if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    // First browser after a quiet spell (slow timers): catch up before the first frames go out.
+    if (!sseClients.size) {
+      try { claudeDiscover(); } catch {}
+      try { claudeTick(); } catch {}
+      try { claudeChatsTick(); } catch {}
+      try { tick(); } catch {}
+    }
     sseClients.add(res);
+    scheduleTick(POLL_MS); // that tick planned the 5 s idle poll: pull it in to the normal rate
     // initial state: session list + full event snapshots
     const threadJobStatus = threadJobStatuses(listCompanionJobs());
     res.write("data: " + JSON.stringify({ type: "sessions", sessions: [...sessions.values()].map(s => sessionSummary(s, threadJobStatus)) }) + "\n\n");
@@ -2098,7 +2157,7 @@ const server = http.createServer((req, res) => {
     if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     readJsonBody(req, body => {
       if (!body || !body.threadId || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "threadId and existing cwd required" });
-      const liveJob = listCompanionJobs().find(j => j.threadId === body.threadId && pidAlive(j.pid));
+      const liveJob = listCompanionJobs(true).find(j => j.threadId === body.threadId && pidAlive(j.pid));
       if (liveJob) return jsonReply(res, 409, { ok: false, error: "job " + liveJob.id + " is still running on this thread - stop it first" });
       handleLaunch(res, body, buildCompanionTaskArgs({
         ...body,
@@ -2122,6 +2181,7 @@ const server = http.createServer((req, res) => {
     if (!loopbackDirect(req) || req.headers.origin) return refuseUntrusted(req, res);
     readJsonBody(req, body => {
       if (body && body.jobId) {
+        jobStateCache.clear(); // the job just changed its state file: read it fresh
         broadcast({ type: "job", jobId: body.jobId, status: body.status || "", title: String(body.title || "").slice(0, 120) }, notificationClients);
         kick();
         refreshCodexLimits(true); // the job used some of the plan
@@ -2256,16 +2316,19 @@ function serve() {
     process.on("exit", () => { try { if (fs.readFileSync(PID_FILE, "utf8").trim() === String(process.pid)) fs.unlinkSync(PID_FILE); } catch {} });
     console.log("[OK] Watching: " + SESSIONS_DIR);
     if (fs.existsSync(CLAUDE_PROJECTS)) console.log("[OK] Claude workflows: " + CLAUDE_PROJECTS);
-    tick();
+    tick(); // reschedules itself (adaptive, see tickGap)
     watchSessions();
-    setInterval(tick, POLL_MS);
     // Own timers, so a Claude error never stalls Codex updates.
     // ponytail: poll only (1 s reads, 5 s discovery). A PostToolUse(Workflow) kick hook (scope graft 10) only if 5 s feels slow.
+    // With no browser connected they run every 5th time (5 s reads, 25 s discovery); /events catches up on connect.
     claudeDiscover();
     claudeTick();
-    setInterval(claudeDiscover, CLAUDE_SCAN_MS);
-    setInterval(claudeTick, POLL_MS);
-    setInterval(claudeChatsTick, POLL_MS);
+    let claudeIdleTurn = 0, claudeIdleScan = 0;
+    setInterval(() => { if (sseClients.size || ++claudeIdleScan % 5 === 0) claudeDiscover(); }, CLAUDE_SCAN_MS);
+    setInterval(() => {
+      if (!sseClients.size && ++claudeIdleTurn % 5 !== 0) return;
+      try { claudeTick(); } finally { claudeChatsTick(); } // one failing never skips the other
+    }, POLL_MS);
     setInterval(refreshCodexLimits, 60 * 1000, false);
     setTimeout(buildSearchIndex, 50);
     setInterval(buildSearchIndex, 30000);
