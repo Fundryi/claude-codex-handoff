@@ -58,7 +58,7 @@ Corner radii measured on the 2x crops: cards (the three panels) about 10 px; but
 | `--r-panel` / `--r-btn` / `--r-chip` | `10px` / `8px` / `6px` | the three radii; every surface uses one of them |
 | `--gutter` | `8px` | the backdrop gap around and between the cards |
 
-Status pills (`.status`) exist only in the task header's title row: pastel text on a dark fill of the same hue, 1 px border in a mid tint, 18 px tall, 10 px 700, 6 px corners. Running `#172a45` / `--blue` / `#274a7d`; Finished `#152929` / `--green` / `#1e5a44`; Waiting and Stopped `#252a3a` / `--muted` / `--border-strong`; Needs attention `#3a2618` / `--amber` / `#6b4522`; Needs answer transparent / `--amber` / `--amber`; FAST transparent / `--muted` / `--border-strong`; background tag (`.status.BG`) `--panel-3` / `--muted` / `--border-strong`, weight 600. The Running pill keeps its 8 px spinner. Rows and cards never carry a pill: they carry a state mark and a state word. Green confirmation row (`.done-row`): `#152929` / `#6ee7b7` / `#134b3e`. Progress fill: `linear-gradient(90deg, #a855f7, #38bdf8)`, the one gradient (the reference has it). No glows: the unread dot is a plain 6 px `--accent` dot. Danger (stop, cancel, kill) is the Failed red mixed into the panel with `color-mix`; there is no separate danger color.
+Status pills (`.status`) exist only in the task header's title row: pastel text on a dark fill of the same hue, 1 px border in a mid tint, 18 px tall, 10 px 700, 6 px corners. Running `#172a45` / `--blue` / `#274a7d`; Finished `#152929` / `--green` / `#1e5a44`; Waiting and Stopped `#252a3a` / `--muted` / `--border-strong`; Needs attention `#3a2618` / `--amber` / `#6b4522`; Needs answer transparent / `--amber` / `--amber`; FAST transparent / `--muted` / `--border-strong`; background tag (`.status.BG`) `--panel-3` / `--muted` / `--border-strong`, weight 600. The Running pill carries a 7 px blue dot that breathes (opacity only); the Running chip and the "is working" footer line use the same breathing dot. Nothing rotates. Rows and cards never carry a pill: the kind mark carries the state (arc, amber ring, dotted ring, dim) next to a state word. Green confirmation row (`.done-row`): `#152929` / `#6ee7b7` / `#134b3e`. Progress fill: `linear-gradient(90deg, #a855f7, #38bdf8)`, the one gradient (the reference has it). No glows: the unread dot is a plain 6 px `--accent` dot. Danger (stop, cancel, kill) is the Failed red mixed into the panel with `color-mix`; there is no separate danger color.
 
 ### Contrast (WCAG, computed)
 
@@ -113,11 +113,11 @@ Use Segoe UI Variable, Segoe UI, or the platform system font for the interface. 
 
 ## Status colors
 
-Status color has one meaning everywhere: list rows, filter chips, state marks and the selected-task header.
+Status color has one meaning everywhere: list rows, filter chips, state dots and the selected-task header.
 
 | Status | Token | Behavior |
 |---|---|---|
-| Running | `--blue` `#82aaff` | Circular spinner indicates active work |
+| Running | `--blue` `#82aaff` | State word, pill, chip and roll-up dot; the arc on a running mark is the actor color |
 | Waiting | `--gray` `#8087a8` (the reference "idle" grey) | Quiet for at least 20 seconds, no job evidence. The word "waiting" tells it from Stopped |
 | Needs attention | `--amber` `#f9b141` | The job process died or its heartbeat stopped, or it failed, and the session is not running again. Sessions without a job never get this |
 | Needs you | `--amber`, hollow pill | The chip that holds Needs answer (the finished job's result asks a question, no run on the thread is working, the session has not written since) and a chat's needs-you state. The row word is "needs answer" |
@@ -126,11 +126,11 @@ Status color has one meaning everywhere: list rows, filter chips, state marks an
 | Stopped, Ended | `--gray` `#8087a8` | Cancelled job, aborted turn, or an agent with no end record. Not an alarm |
 | All | `--blue` (same as Running) | Neutral collection, not a task state |
 
-State mark (`.sdot`): a 10 px box, one shape per state: Running a 10 px spinner ring, Finished a green dot, Background a blue dot, Waiting a gray dot, Needs attention an amber dot, Needs answer a hollow amber ring, Stopped a gray dot, Ended a darker gray dot. State words (`.state-word`, 10.5 px 600) use the same colors: "running", "background", "finished", "waiting", "needs attention", "needs answer", "stopped", "ended". The status set is the reference's: blue, green, amber, red, grey. `--yellow` survives only in the stop dialog's warning box; FAST is a small muted uppercase word (`.fl.fast`), not a color.
+Working mark: the kind mark carries the state through a halo slot 3 px outside it (`::after`, a 1.5 px ring). Running (`.mk-busy`): an arc in the actor color (`--k`) travels around the mark, 1.4 s per lap; only the gradient angle animates, the box never moves. Needs answer (`.mk-ask`): a solid amber ring. Needs attention (`.mk-warn`): a dotted amber ring. Finished, stopped, ended, archived and background (`.mk-dim`): the mark at 50 % (70 % on a selected row). Waiting: the plain mark. Under reduced motion the arc stands still as a three-quarter arc. The state dot (`.sdot`, a 10 px box, 8 px dot in the state color) survives only on the root roll-up line and the kind counts. State words (`.state-word`, 10.5 px 600) use the same colors: "running", "background", "finished", "waiting", "needs attention", "needs answer", "stopped", "ended". The status set is the reference's: blue, green, amber, red, grey. `--yellow` survives only in the stop dialog's warning box; FAST is a small muted uppercase word (`.fl.fast`), not a color.
 
 A row shows its state exactly as the reference list does: the mark on the left, the state word right-aligned before the time. A filter chip with a count of 0 (`.chip-button.zero`) dims to 45 %, like the reference's "Error 0".
 
-Do not animate an entire row or badge. Only the small Running spinner moves (and the "Codex is working" spinner at the end of a running feed, which is the same Running blue).
+Do not animate an entire row or badge. One language: a mark orbits (the arc on a running kind mark), a dot breathes (the Running pill, the Running chip, the "is working" line at the end of a running feed), nothing rotates.
 
 ## Actor colors
 
@@ -182,7 +182,7 @@ One SVG set (`GL` in `viewer-ui.html`: `claude`, `codex`, `flow`, `ghost`, `you`
 | Codex CLI | filled teal, `codex`, plus the `you` tag | Codex CLI run | `k-codex` |
 | Not on this PC | dashed slate ring, `ghost` | chat | `k-system` |
 
-Boxes: state mark 10 px, kind mark 16 px (glyph 10 px), kind word glyph 11 px, breadcrumb mark 14 px, feed avatar 18 px (glyph 11 px), work row avatar 16 px (glyph 9 px).
+Boxes: kind mark 16 px (glyph 10 px) with a 22 px halo, kind word glyph 11 px, breadcrumb mark 14 px, feed avatar 18 px (glyph 11 px), work row avatar 16 px (glyph 9 px).
 
 ## Usage
 
@@ -196,13 +196,13 @@ The project, the model and the effort are the facts you check first, so they are
 
 - Layout: three rounded cards (`.pane`: `#side`, `#main`, `#panel`) on the `--bg` backdrop with a `--gutter` (8 px) around and between them, like the reference. The splitter is the gutter between the sidebar and the main card and only shows itself (accent fill) under the pointer. On a phone the gutter is 0 and the cards lose their corners.
 - Grid: 4 px. Row padding 6 px 10 px (root), 3 px 10 px 4 px plus the level offset (child), 1 px top and bottom for a finished child. Header padding 10 px 16 px 8 px. Feed padding 12 px 16 px 56 px.
-- Rows: a root row is two lines. Line 1: state mark, kind mark, title, state word, time (20 px). Line 2: the kind word, source, "fast", model, effort, tokens and flags on the left; the roll-up (the children's worst state, kind counts, Σ tree total) on the right, 10 px `--muted`. Under 400 px (the default 340 px sidebar) the kind counts hide and the roll-up keeps the word and the Σ total; under 300 px the Σ moves to the group caption. A child row is one line (state mark, kind mark, title, state word, time) plus a meta line while it is active; a finished, ended or stopped child (`.row.child.fin`) is one quiet line: muted 11.5 px title, state word, tokens in `--faint`, time. The fold row ("+ 18 finished") is a 22 px violet button that fills with `--accent-fill` under the pointer.
+- Rows: a root row is two lines. Line 1: kind mark, title, state word, time (20 px). Line 2: the kind word, source, "fast", model, effort, tokens and flags on the left; the roll-up (the children's worst state, kind counts, Σ tree total) on the right, 10 px `--muted`. Under 400 px (the default 340 px sidebar) the kind counts hide and the roll-up keeps the word and the Σ total; under 300 px the Σ moves to the group caption. A child row is one line (kind mark, title, state word, time) plus a meta line that starts under the title while it is active; a finished, ended or stopped child (`.row.child.fin`) is one quiet line: muted 11.5 px title, state word, tokens in `--faint`, time. The fold row ("+ 18 finished") is a 22 px violet button that fills with `--accent-fill` under the pointer.
 - Chips: one compact row, no borders, 22 px, 11 px words with a dot and the count inline; the active chip sits on a `--panel-3` block with 6 px corners (the reference "All 17"). The row wraps to a second line when the sidebar is narrow and scrolls sideways on a phone.
 - Heights: header buttons 32 px, tabs 28 px, chips 22 px, fact chips and usage cells 24 px, pills 18 px, row lines 18 px, fold row 22 px, group caption 30 px, feed toolbar 36 px, run view agent rows 30 px, plan source lines 22 px, plan rows 20 px (32 px under 330 px, when the reset text takes a second line), the side panel back button 28 px.
 - Radii (`--r-panel` 10 px, `--r-btn` 8 px, `--r-chip` 6 px): the cards, menus and dialogs 10 px; buttons, inputs, message cards, code blocks, the result card, the plans block, the Jump pill 8 px; chips, status pills, tabs, rows and the selected row band, usage cells, fact chips, toolbar buttons, message tags, menu entries 6 px; flags, tags and inline code 4 px; meters 3 px; the rail elbow 5 px. Nothing is square and nothing is a 999 px capsule except the `you` tag.
-- Borders: 1 px `--border` for the cards, message cards, inputs, usage cells, fact chips and header buttons; 1 px `--border-strong` for dialog buttons and the auto-open switch when it is On. No colored edge stripes anywhere: cards, message cards and the result card have one even neutral border, a selected row is marked by its band fill alone, and no element says who works through a colored left edge (the kind word, marks and avatars do that); 1 px tree rails in the group's rail color; 1 px dashed `--border-strong` for flags and the ghost mark; 1.5 px rings for marks and state marks.
+- Borders: 1 px `--border` for the cards, message cards, inputs, usage cells, fact chips and header buttons; 1 px `--border-strong` for dialog buttons and the auto-open switch when it is On. No colored edge stripes anywhere: cards, message cards and the result card have one even neutral border, a selected row is marked by its band fill alone, and no element says who works through a colored left edge (the kind word, marks and avatars do that); 1 px tree rails in the group's rail color; 1 px dashed `--border-strong` for flags and the ghost mark; 1.5 px rings for marks and their halos.
 - Fills: the header, toolbar and feed share the main card's `--panel`; message cards, menus and dialogs are `--panel-2` with no actor tint; usage cells and fact chips have no fill.
-- The tree: `--indent` 18 px per level to level 4, `--indent-deep` 10 px per level after that (the cycle guard is at level 8); `--rail-x` 15 px for the level 1 rail. A child row is a grid (state box 10 px, mark box 16 px, title, time) with `--d` = depth and `--lx` the computed offset. Rails: `.rl.thru` for a continuing ancestor level (`--l`), `.rl.elbow` into this row, `.rl.stem` from a child's state mark down to its open children. Root rows draw no stem.
+- The tree: `--indent` 18 px per level to level 4, `--indent-deep` 10 px per level after that (the cycle guard is at level 8); `--rail-x` 15 px for the level 1 rail. A child row is a grid (mark box 16 px, title, time) with `--d` = depth and `--lx` the computed offset; the row starts at `--lx` + 10 px so the mark is centred on the next level's rail. Rails: `.rl.thru` for a continuing ancestor level (`--l`), `.rl.elbow` into this row (7 px wide, it ends at the halo edge), `.rl.stem` from under a child's mark down to its open children. Root rows draw no stem.
 - The sidebar starts at 340 px (400 px from 2200 px viewport width), can be resized from 240 px to 55 % of the viewport, and remembers the chosen width. At 240 px the root row hides the source word and the roll-up word, the kind word is cut at 90 px, and under 330 px a plan row writes its reset time on a second line (`#side` is the size container).
 - Content column: header, toolbar, result card and feed share one column of at most `--content-max` 1360 px, centered in the main card (`.inner`, `#feed-inner`, `.result-card-box`). The header's right-side controls sit on the column's right edge. The side panel (`#panel`) is a card of its own beside the main card (a sibling of `<main>`, shown by `body.panel-open`), so the column centers in the main card on its own. From 2200 px, an open agent keeps the wider transcript panel (`--panel-w` up to 1400 px). A page with no agent panel has the 320 px Activity rail.
 - Overview column: the header and feed can use up to 2080 px. See Live overview and Wide screens below.
@@ -216,7 +216,7 @@ Needs you and Needs attention. Each group has a small uppercase caption and
 a count. Each root row is 36 px high, with `--r-chip` corners and a `--hover`
 fill under the pointer. A thin `--border-soft` rule separates root rows.
 
-Columns, from left to right: a 10 px state mark; a 16 px kind mark; title
+Columns, from left to right: a 16 px kind mark (it carries the state); title
 `minmax(220px, 1.2fr)`, 13 px and weight 550; project, 150 px; doing now
 `minmax(160px, 1fr)`, 12 px; state word, 96 px; age, 54 px and right aligned.
 The title, project and doing-now text use an ellipsis when they do not fit.
@@ -257,7 +257,7 @@ existing right-panel slot. The main page uses the remaining space. Its
 "Activity", with a quiet running and needs-you count line.
 
 The rail shows Running and up to four Needs you rows. Rows are 32 px high:
-state mark, kind mark, title and age. Running children are 26 px high
+kind mark, title and age. Running children are 26 px high
 under their parent. Project and doing-now text are in the row title.
 The footer says "N more need you · N need attention · N finished · open
 Live". Use "needs" when either needs count is 1. A background count of 1
@@ -298,5 +298,5 @@ em dash or en dash in interface copy.
 - Hover, selection, border, and color transitions use 140 to 180 ms. The drawer slides in 180 ms. Nothing else moves.
 - Buttons, tabs, chips, rows, and the resize separator must remain keyboard accessible.
 - Focus uses a visible 2 px `--accent` outline on buttons, inputs, selects, text areas, disclosure summaries and the resize separator. Group captions use the same inset and corner radius as rows.
-- Reduced motion stops all status spinners and uses automatic feed scrolling.
+- Reduced motion freezes the arcs (a still three-quarter arc) and the breathing dots, and uses automatic feed scrolling.
 - Dangerous process controls stay inside the task-actions menu and require confirmation.

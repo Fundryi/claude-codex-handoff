@@ -231,14 +231,7 @@
     }
     .chip-button.hollow::before, .chip-button[data-chip="ANSWER"]::before { background: transparent; border: 1.5px solid var(--c); }
     .chip-button[data-chip="ALL"], .chip-button[data-chip="EVERYTHING"], .chip-button[data-chip="RUNNING"] { --c: var(--blue); }
-    .chip-button[data-chip="RUNNING"].has-sessions::before {
-      width: 9px;
-      height: 9px;
-      border: 1.5px solid var(--blue);
-      border-top-color: transparent;
-      background: transparent;
-      animation: spin 1s linear infinite;
-    }
+    .chip-button[data-chip="RUNNING"].has-sessions::before { width: 7px; height: 7px; background: var(--blue); animation: breathe 1.6s ease-in-out infinite; }
     .chip-button[data-chip="WAITING"] { --c: var(--yellow); }
     .chip-button[data-chip="ATTENTION"], .chip-button[data-chip="ANSWER"] { --c: var(--amber); }
     .chip-button[data-chip="FINISHED"] { --c: var(--green); }
@@ -289,7 +282,7 @@
     /* narrow sidebar (under 300 px): drop the words that repeat a nearby fact */
     @container (max-width: 299px) {
       .row.root .src, .row-sum .rollup i, .row-sum .use { display: none; } /* the tree total stays on the group caption */
-      .row.child.fin .state-word, .row.child.fin .row-use { display: none; } /* the dot says done; the tokens stay in the tooltip */
+      .row.child.fin .state-word, .row.child.fin .row-use { display: none; } /* the dimmed mark says done; the tokens stay in the tooltip */
       .row.root .kind-label { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
     }
     /* rows: shared bits. A row is a rounded band inset 4 px from the sidebar edges (reference: the selected row is a
@@ -312,7 +305,7 @@
     .row-time { color: var(--muted); font-size: 10.5px; white-space: nowrap; text-align: right; flex: none; }
     /* on the selected band the dim text lifts so it keeps its contrast on the violet */
     .row.selected .row-meta, .row.selected .row-time, .row.selected .row-sum, .row.selected .row-meta .fl { color: #c9cbe0; }
-    /* root row: two lines. Line 1: state mark, kind mark, title, state word, time. Line 2: the kind word and the meta
+    /* root row: two lines. Line 1: kind mark (it carries the state), title, state word, time. Line 2: the kind word and the meta
        on the left, the quiet roll-up (kind counts, tree total) on the right. */
     .row.root { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 1px; padding: 6px 10px 6px 10px; margin-top: 1px; }
     .row-top { display: flex; align-items: center; gap: 6px; min-width: 0; height: 20px; grid-column: 1 / -1; }
@@ -329,16 +322,17 @@
     .row-sum .cnt .mark { width: 12px; height: 12px; } .row-sum .cnt .mark svg { width: 8px; height: 8px; }
     .row-sum .use { margin-left: 2px; }
     .row-sum .rollup i { font-style: normal; font-weight: 600; }
-    /* child row: a grid. Columns: state box, mark box, title, state word, time. Line 2 (active work only) starts under the title.
-       Level offset --lx: one formula for rows, fold rows and rails. 18 px per level to level 4, 10 px per level after that. --d = depth. */
+    /* child row: a grid. Columns: mark box (it carries the state), title, state word, time. Line 2 (active work only) starts under the title.
+       Level offset --lx: one formula for rows, fold rows and rails. 18 px per level to level 4, 10 px per level after that. --d = depth.
+       The row starts at --lx + 10 px so the 16 px mark is centred on --lx + 18 px: the x of the next level's rail. */
     .row.child, .fold { --lx: calc(var(--rail-x) + var(--indent) * (min(var(--d, 1), 4) - 1) + var(--indent-deep) * max(var(--d, 1) - 4, 0)); }
-    .row.child { display: grid; grid-template-columns: 10px 16px minmax(0, 1fr) auto auto auto; grid-template-rows: 18px auto; column-gap: 5px; row-gap: 1px; align-items: center; padding: 3px 10px 4px calc(var(--lx) + 13px); }
-    .row.child:not(.fin) { grid-template-columns: 10px 16px minmax(0, 1fr) auto auto; }
-    .row.child .row-meta { grid-column: 3 / -1; }
+    .row.child { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto auto; grid-template-rows: 18px auto; column-gap: 5px; row-gap: 1px; align-items: center; padding: 3px 10px 4px calc(var(--lx) + 10px); }
+    .row.child:not(.fin) { grid-template-columns: 16px minmax(0, 1fr) auto auto; }
+    .row.child .row-meta { grid-column: 2 / -1; }
     .row.child .row-time { padding-left: 4px; }
     .row.child .state-word { padding-left: 6px; }
     /* finished work is small and quiet: one line, muted title, the state word and the tokens on the right */
-    .row.child.fin { grid-template-rows: 18px; padding: 1px 10px 1px calc(var(--lx) + 13px); }
+    .row.child.fin { grid-template-rows: 18px; padding: 1px 10px 1px calc(var(--lx) + 10px); }
     .row.child.fin .row-title { color: var(--muted); font-weight: 400; font-size: 11.5px; }
     .row.child.fin .row-meta { display: none; }
     .row.child.fin .state-word { font-weight: 400; }
@@ -347,12 +341,13 @@
     /* rails: full-height guides per continuing ancestor level (--l), an elbow into this row, a through line when not last */
     .rl { position: absolute; left: calc(var(--rail-x) + var(--indent) * (min(var(--l, 1), 4) - 1) + var(--indent-deep) * max(var(--l, 1) - 4, 0)); border-left: 1px solid var(--rail); pointer-events: none; }
     .rl.thru { top: 0; bottom: 0; }
-    .rl.elbow { top: 0; height: 13px; width: 10px; border-bottom: 1px solid var(--rail); border-radius: 0 0 0 5px; }
-    /* stem: from this child row's state mark (center at 13 px) down to its open children. Root rows draw no stem. */
-    .rl.stem { top: 13px; bottom: 0; }
+    .rl.elbow { top: 0; height: 13px; width: 7px; border-bottom: 1px solid var(--rail); border-radius: 0 0 0 5px; } /* ends at the mark's halo edge */
+    /* stem: from under this child row's mark (mark bottom 20 px, halo 23 px; a quiet .fin row sits 2 px higher) down to its open children. Root rows draw no stem. */
+    .rl.stem { top: 23px; bottom: 0; }
+    .row.child.fin .rl.stem { top: 20px; }
     /* fold and cap rows share the child grid */
     /* The fold row ("+ 18 finished") is a small rounded button in the structure violet, so the hidden work is one click away. */
-    .fold { display: grid; grid-template-columns: 10px 16px minmax(0, 1fr) auto; column-gap: 5px; align-items: center; height: 22px; width: calc(100% - 8px); margin: 1px 4px; text-align: left; border: 0; border-radius: var(--r-chip); background: color-mix(in srgb, var(--accent-fill) 45%, transparent); color: var(--tree-text); font-size: 10.5px; font-weight: 600; padding: 0 10px 0 calc(var(--lx) + 13px); cursor: pointer; position: relative; }
+    .fold { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 5px; align-items: center; height: 22px; width: calc(100% - 8px); margin: 1px 4px; text-align: left; border: 0; border-radius: var(--r-chip); background: color-mix(in srgb, var(--accent-fill) 45%, transparent); color: var(--tree-text); font-size: 10.5px; font-weight: 600; padding: 0 10px 0 calc(var(--lx) + 10px); cursor: pointer; position: relative; }
     .fold > .txt { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .fold:hover { background: var(--accent-fill); color: var(--fg); }
     /* cap row: the server sent at most N children of this chat. The rest live in History; the row says so and is not a link. */
@@ -362,7 +357,7 @@
     .rows { padding-bottom: 3px; }
 
     /* ---- kind marks: one 16 px box, one SVG set (GL), one stroke weight ---- */
-    .mark { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; flex: none; color: var(--k); }
+    .mark { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; flex: none; color: var(--k); position: relative; }
     .mark svg { width: 10px; height: 10px; display: block; }
     .mark.fill { background: var(--k); color: var(--bg); }
     .mark.ring { border: 1.5px solid var(--k); background: transparent; }
@@ -371,6 +366,25 @@
     .k-opencode { --k: var(--opencode); }
     .k-codex { --k: var(--codex); }
     .k-system { --k: var(--system); }
+    /* ---- working mark: the state lives on the kind mark. One halo slot (::after) around every mark, 3 px outside it.
+       mk-busy = a 1.5 px arc in the actor color travels around the mark (running). Only the gradient angle animates;
+               the box, the ring mask and the stroke never move, so it is identical at every DPR and zoom.
+       mk-ask = a solid amber ring (needs answer).   mk-warn = a dotted amber ring (needs attention).
+       mk-dim = the mark dims (finished, stopped, ended, archived, background). Waiting = the plain mark.
+       @property makes --mk-a interpolate; without it the arc stands still (nothing breaks). ---- */
+    @property --mk-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+    .mark.mk-busy::after, .mark.mk-ask::after, .mark.mk-warn::after {
+      content: ''; position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1.5px));
+      mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1.5px));
+    }
+    .mark.mk-busy::after { background: conic-gradient(from var(--mk-a), transparent 0 30%, color-mix(in srgb, var(--k) 20%, transparent) 30%, var(--k) 100%); animation: mk-orbit 1.4s linear infinite; }
+    .mark.mk-ask::after { background: var(--amber); }
+    .mark.mk-warn::after { background: repeating-conic-gradient(var(--amber) 0 24deg, transparent 24deg 45deg); }
+    .mark.mk-dim { opacity: .5; }
+    .row.selected .mark.mk-dim, .ov-row.selected .mark.mk-dim, .agent-row.open .mark.mk-dim { opacity: .7; } /* the violet band lifts dim text the same way */
+    @keyframes mk-orbit { to { --mk-a: 360deg; } }
+    @keyframes breathe { 50% { opacity: .35; } }
     /* kind word: the color is the actor who does the work. A starter glyph shows only when the starter is someone else. */
     .kind-label { font-size: 10px; font-weight: 700; color: var(--k); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; height: 18px; }
     .kind-label .g { display: inline-grid; place-items: center; width: 12px; height: 12px; }
@@ -388,7 +402,7 @@
     .ov-column { min-width: 0; container-type: inline-size; }
     .ov-section { margin: 18px 0 0; }
     .ov-section > .home-heading { margin: 0 0 4px; padding: 0 10px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .08em; }
-    .ov-row { display: grid; grid-template-columns: 10px 16px minmax(220px, 1.2fr) 150px minmax(160px, 1fr) 96px 54px; gap: 0 10px; align-items: center; width: 100%; height: 36px; padding: 0 10px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; cursor: pointer; min-width: 0; transition: background-color .14s ease; }
+    .ov-row { display: grid; grid-template-columns: 16px minmax(220px, 1.2fr) 150px minmax(160px, 1fr) 96px 54px; gap: 0 10px; align-items: center; width: 100%; height: 36px; padding: 0 10px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; cursor: pointer; min-width: 0; transition: background-color .14s ease; }
     .ov-row:hover { background: var(--hover); border-bottom-color: transparent; }
     .ov-row:last-child { border-bottom-color: transparent; }
     .ov-title, .ov-project, .ov-now { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
@@ -398,9 +412,9 @@
     .ov-row .state-word { text-align: right; white-space: nowrap; }
     .ov-age { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
     .ov-row.child { height: 28px; border: 0; }
-    .ov-row.child > .sdot, .ov-row.child > .mark, .ov-row.child > .ov-project { visibility: hidden; }
-    .ov-row.child .ov-title { padding-left: min(var(--ov-indent, 26px), max(0px, calc(100% - 24px))); position: relative; color: var(--muted); font-weight: 450; }
-    .ov-row.child .ov-title::before { content: ''; position: absolute; left: calc(min(var(--ov-indent, 26px), max(0px, calc(100% - 24px))) - 16px); top: -5px; width: 8px; height: 16px; border-left: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); border-radius: 0 0 0 4px; }
+    .ov-row.child > .mark, .ov-row.child > .ov-project { visibility: hidden; }
+    .ov-row.child .ov-title { padding: 4px 0 4px min(var(--ov-indent, 26px), max(0px, calc(100% - 24px))); position: relative; /* the vertical padding keeps the inline mark's halo inside the clipped box */ color: var(--muted); font-weight: 450; }
+    .ov-row.child .ov-title::before { content: ''; position: absolute; left: calc(min(var(--ov-indent, 26px), max(0px, calc(100% - 24px))) - 16px); top: 1px; /* the arm meets the inline mark's centre (the title has 4 px of vertical padding) */ width: 8px; height: 16px; border-left: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); border-radius: 0 0 0 4px; }
     .ov-row.child .ov-title .mark { display: inline-grid; vertical-align: -3px; margin-right: 6px; width: 14px; height: 14px; }
     .ov-row.child .ov-title .mark svg { width: 9px; height: 9px; }
     .ov-row.fin .ov-title { color: var(--muted); font-weight: 450; }
@@ -408,16 +422,16 @@
     .ov-show, .activity-live { padding: 0; border: 0; border-radius: var(--r-chip); background: transparent; color: var(--tree-text); font: inherit; cursor: pointer; }
     .ov-show:hover, .activity-live:hover { color: var(--fg); }
     @media (min-width: 2200px) { #home-view { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; } }
-    @container (max-width: 885px) { .ov-row { grid-template-columns: 10px 16px minmax(0, 1.2fr) 120px minmax(0, 1fr) 96px 54px; } }
-    @container (max-width: 640px) { .ov-row { grid-template-columns: 10px 16px minmax(0, 1.2fr) minmax(0, 1fr) 96px 44px; gap: 0 6px; } .ov-row > .ov-project { display: none; } }
-    @container (max-width: 440px) { .ov-row { grid-template-columns: 10px 16px minmax(0, 1fr) 80px 36px; } .ov-row > .ov-now { display: none; } .ov-row .state-word { font-size: 10px; } }
+    @container (max-width: 885px) { .ov-row { grid-template-columns: 16px minmax(0, 1.2fr) 120px minmax(0, 1fr) 96px 54px; } }
+    @container (max-width: 640px) { .ov-row { grid-template-columns: 16px minmax(0, 1.2fr) minmax(0, 1fr) 96px 44px; gap: 0 6px; } .ov-row > .ov-project { display: none; } }
+    @container (max-width: 440px) { .ov-row { grid-template-columns: 16px minmax(0, 1fr) 80px 36px; } .ov-row > .ov-now { display: none; } .ov-row .state-word { font-size: 10px; } }
     body.activity-open #panel { width: 320px; }
     body.activity-open #panel-head { padding: 12px 14px; border-bottom: 0; }
     body.activity-open #panel-body { padding: 4px 8px 12px; }
     .activity-count { color: var(--muted); font-size: 11px; margin-top: 4px; }
     .activity-list .ov-section { margin-top: 12px; }
     .activity-list .home-heading { padding: 0 8px; }
-    .activity-list .ov-row { grid-template-columns: 10px 16px minmax(0, 1fr) 46px; height: 32px; padding: 0 8px; }
+    .activity-list .ov-row { grid-template-columns: 16px minmax(0, 1fr) 46px; height: 32px; padding: 0 8px; }
     .activity-list .ov-row.child { height: 26px; }
     .activity-list .ov-title { font-size: 12.5px; font-weight: 500; }
     .activity-list .ov-row.selected { background: var(--selected); }
@@ -453,15 +467,7 @@
       transition: color .15s ease, background-color .15s ease;
     }
     .status.LIVE { background: #172a45; color: var(--blue); border-color: #274a7d; }
-    .status.LIVE::before {
-      content: '';
-      width: 8px;
-      height: 8px;
-      border: 1.5px solid var(--blue);
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
+    .status.LIVE::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); animation: breathe 1.6s ease-in-out infinite; }
     .status.DONE { background: #152929; color: var(--green); border-color: #1e5a44; }
     .status.IDLE { background: #252a3a; color: var(--muted); border-color: var(--border-strong); }
     .status.STALE { background: #3a2618; color: var(--amber); border-color: #6b4522; }
@@ -470,10 +476,10 @@
     .status.ARCHIVED { background: #252a3a; color: var(--muted); border-color: var(--border-strong); }
     .status.FAST { background: transparent; color: var(--muted); border-color: var(--border-strong); }
     .status.BG { background: var(--panel-3); color: var(--muted); border-color: var(--border-strong); font-weight: 600; }
-    /* state mark: a 10 px box, one shape per state (child rows, cards, run view rows) */
+    /* state dot: a 10 px box, one color per state. Survives only on the roll-up line and the kind counts; rows carry the state on the kind mark. */
     .sdot { width: 10px; height: 10px; display: inline-grid; place-items: center; flex: none; }
     .sdot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--s, var(--gray)); }
-    .sdot.LIVE::before, .sdot.running::before { width: 10px; height: 10px; background: transparent; border: 1.5px solid var(--blue); border-top-color: transparent; animation: spin 1s linear infinite; }
+    .sdot.LIVE, .sdot.running { --s: var(--blue); }
     .sdot.DONE, .sdot.done { --s: var(--green); }
     .sdot.IDLE { --s: var(--gray); }
     .sdot.BG { --s: var(--blue); }
@@ -563,8 +569,8 @@
     .claude-phase { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; height: 18px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
     .claude-phase .phase-count { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
     .claude-phase .claude-bar { flex: 1; max-width: 120px; margin: 0 0 0 auto; height: 3px; }
-    /* agent row: state mark, label (and tool while running), tail (last write, state word). The open row is selected; a running row has a faint blue tint. */
-    .agent-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; width: 100%; height: 30px; padding: 0 8px 0 14px; border: 0; border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; font-size: 12px; cursor: pointer; transition: background-color .14s ease; }
+    /* agent row: kind mark (ring, carries the state), label (and tool while running), tail (last write, state word). The open row is selected; a running row has a faint blue tint. */
+    .agent-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; width: 100%; height: 30px; padding: 0 8px 0 14px; border: 0; border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; font-size: 12px; cursor: pointer; transition: background-color .14s ease; }
     .agent-row:hover { background: var(--hover); }
     .agent-row.open { background: var(--selected); }
     .agent-row.running, .agent-row.live { background: color-mix(in srgb, var(--blue) 6%, transparent); }
@@ -573,10 +579,9 @@
     .agent-row .lab .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .agent-row .tool { color: var(--muted); font-size: 11px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .agent-row .tail { color: var(--muted); font-size: 10.5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
-    .agent-row.child { grid-template-columns: 10px 16px minmax(0, 1fr) auto; padding-left: 34px; position: relative; }
+    .agent-row.child { grid-template-columns: 16px minmax(0, 1fr) auto; padding-left: 34px; position: relative; }
     .agent-row.child .rl { left: 19px; }
     .claude-note { margin: 18px 0 0; color: var(--faint); font-size: 11px; }
-    @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
     /* The side panel holds an open Claude agent or the wide-screen Activity rail. */
     /* the third card: beside the main pane, after a gutter */
@@ -1069,16 +1074,7 @@
     .working { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; padding: 6px 0; color: var(--blue); font-size: 11px; min-width: 0; }
     .working-label { flex: none; }
     .working-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-    .working::before {
-      content: '';
-      flex: none;
-      width: 10px;
-      height: 10px;
-      border: 1.5px solid currentColor;
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
+    .working::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: breathe 1.6s ease-in-out infinite; }
     .event-body, .msg-body {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
@@ -1203,7 +1199,8 @@
       #claude-overview { min-width: 0; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .chip-button.on::before, .chip-button[data-chip="RUNNING"].has-sessions::before, .status.LIVE::before, .sdot.LIVE::before, .sdot.running::before, .working::before, #task-status.LIVE::before { animation: none; }
+      .mark.mk-busy::after { animation: none; --mk-a: 45deg; } /* a still three-quarter arc, head at the top right */
+      .chip-button.on::before, .chip-button[data-chip="RUNNING"].has-sessions::before, .status.LIVE::before, .working::before { animation: none; }
       #feed { scroll-behavior: auto; }
     }
   </style>
@@ -3121,7 +3118,8 @@
     }
     function nodeMark(node) {
       var info = KIND_INFO[node.kind] || KIND_INFO.chat;
-      return markElement(node.kind === 'opencode' && node.chat && node.chat.parentId ? 'ring' : info.shape, info.k, info.glyph, info.label);
+      var shape = node.kind === 'opencode' && node.chat && node.chat.parentId ? 'ring' : info.shape;
+      return markElement(shape, info.k, info.glyph, info.label + ' · ' + nodeStateLabel(node.state), nodeBadge(node.state));
     }
     function nodeKindLabel(node) {
       var info = KIND_INFO[node.kind] || KIND_INFO.chat;
@@ -3231,7 +3229,7 @@
         dot.title = 'New activity';
         time.prepend(dot, document.createTextNode(' '));
       }
-      top.append(stateDot(nodeBadge(node.state), nodeStateLabel(node.state)), nodeMark(node), title, word, time);
+      top.append(nodeMark(node), title, word, time);
       var meta = document.createElement('div');
       meta.className = 'row-meta';
       var lead = [nodeKindLabel(node)];
@@ -3297,7 +3295,7 @@
       if (node.children.length) el.setAttribute('aria-expanded', String(openKids));
       el.title = [node.title, (KIND_INFO[node.kind] || {}).label, node.row ? rowTooltip(node.row, Date.now()) : ''].filter(Boolean).join('\n');
       el.appendChild(rails(ancestors, depth, last, openKids));
-      el.append(stateDot(nodeBadge(node.state), nodeStateLabel(node.state)), nodeMark(node));
+      el.append(nodeMark(node));
       var title = textSpan('row-title', node.title);
       var word = textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase());
       word.title = nodeStateHelp(node);
@@ -3531,7 +3529,7 @@
           title.textContent = entry.title || 'Untitled Codex task';
           var word = textSpan('state-word STOPPED', entry.archived ? 'archived' : 'history');
           word.title = 'Not in the live list. Click to load this session.';
-          top.append(stateDot('ENDED', word.title), markElement('fill', 'codex', 'codex', 'Codex'), title, word, textSpan('row-time', relativeTime(entry.mtimeMs)));
+          top.append(markElement('fill', 'codex', 'codex', 'Codex · ' + word.title, 'ENDED'), title, word, textSpan('row-time', relativeTime(entry.mtimeMs)));
           var meta = document.createElement('div');
           meta.className = 'row-meta';
           meta.appendChild(document.createElement('b')).textContent = projectName(entry.cwd);
@@ -3718,10 +3716,14 @@
       return holder.content.firstChild;
     }
     // Kind mark: a 16 px box around a glyph. shape 'fill' (a root or a run), 'ring' (an agent) or 'ghost' (not on this PC);
-    // k 'claude' | 'codex' | 'system' is the color of who does the work.
-    function markElement(shape, k, name, title) {
+    // k 'claude' | 'codex' | 'system' is the color of who does the work. state (a badge or an agent state) picks the
+    // halo: mk-busy (arc), mk-ask (amber ring), mk-warn (dotted ring), mk-dim (finished and kin); waiting is the plain mark.
+    // The map lives inside the function: tests extract it by regex and run it bare.
+    function markElement(shape, k, name, title, state) {
+      var MARK_STATE = { LIVE: 'mk-busy', running: 'mk-busy', NEEDS_ANSWER: 'mk-ask', STALE: 'mk-warn', failed: 'mk-warn',
+        DONE: 'mk-dim', done: 'mk-dim', STOPPED: 'mk-dim', ENDED: 'mk-dim', ended: 'mk-dim', ARCHIVED: 'mk-dim', BG: 'mk-dim' };
       var mark = document.createElement('span');
-      mark.className = 'mark ' + shape + ' k-' + k;
+      mark.className = 'mark ' + shape + ' k-' + k + (MARK_STATE[state] ? ' ' + MARK_STATE[state] : '');
       if (title) mark.title = title;
       mark.appendChild(glyph(name));
       return mark;
@@ -3738,7 +3740,7 @@
       label.appendChild(document.createTextNode(text));
       return label;
     }
-    // State mark: a 10 px box, one shape per state (LIVE spinner, DONE, IDLE, STALE, NEEDS_ANSWER hollow, STOPPED, ENDED).
+    // State dot: a 10 px box, one color per state. Only the roll-up line and the kind counts use it; rows carry the state on the kind mark.
     function stateDot(state, title) {
       var dot = document.createElement('span');
       dot.className = 'sdot ' + state;
@@ -4448,7 +4450,7 @@
         title.appendChild(nodeMark(node));
       }
       title.appendChild(document.createTextNode(node.title));
-      el.append(stateDot(nodeBadge(node.state), nodeStateLabel(node.state)), nodeMark(node), title);
+      el.append(nodeMark(node), title);
       if (!rail) {
         var path = node.chat && node.chat.cwd || node.row && node.row.project || node.project || '';
         var project = textSpan('ov-project', projectName(path));
@@ -4893,7 +4895,7 @@
       var top = document.createElement('div');
       top.className = 'row-top';
       if (p) {
-        top.append(stateDot(nodeBadge(p.state), nodeStateLabel(p.state)), nodeKindLabel(p));
+        top.append(nodeMark(p), nodeKindLabel(p));
         if (p.flags.indexOf('background') !== -1) top.appendChild(textSpan('flag', 'background'));
       }
       var title = textSpan('t', p ? p.title : String(prefs.panel || ''));
@@ -5028,19 +5030,19 @@
       }
     }
 
-    // One agent in the run view: state dot, label, last write, and while running its tool and context.
+    // One agent in the run view: kind mark (a Claude ring that carries the state), label, last write, and while running its tool and context.
     // The open agent's row is highlighted (its transcript is in the side panel); running rows get a faint blue.
     function claudeAgentRow(agent, run) {
       var view = claudeAgentView(agent.state);
       var open = agent.id === panelAgentId();
       var button = document.createElement('button');
       button.type = 'button';
-      // .claude-agent stays as the hook the open/close code queries; .agent-row is the look (grid: state mark, label, tail).
+      // .claude-agent stays as the hook the open/close code queries; .agent-row is the look (grid: mark, label, tail).
       button.className = 'agent-row claude-agent ' + agent.state + (open ? ' open' : '');
       button.setAttribute('aria-pressed', open ? 'true' : 'false');
       button.dataset.key = 'agent:' + agent.id; // renderClaudeOverview puts focus back by this key
       button.title = [agent.label, view.label + ': ' + view.help, 'agent ' + agent.id, 'Click to open its transcript in the side panel'].join('\n');
-      var dot = stateDot(agent.state, view.label + ': ' + view.help);
+      var dot = markElement('ring', 'claude', 'claude', view.label + ': ' + view.help, agent.state);
       var lab = document.createElement('span');
       lab.className = 'lab';
       lab.appendChild(textSpan('t', agent.label || agent.id));
