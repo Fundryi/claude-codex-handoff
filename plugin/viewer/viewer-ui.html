@@ -2016,7 +2016,7 @@
     }
     function resumeBody(session, opts) {
       const b = { threadId: session.threadId, cwd: session.cwd };
-      if (session.engine === 'opencode') { b.engine = 'opencode'; b.write = !!session.write; }
+      if (session.engine === 'opencode') b.engine = 'opencode';
       if (opts.prompt) b.prompt = opts.prompt;
       if (opts.effort) b.effort = opts.effort;
       if (opts.model) b.model = opts.model;
@@ -2247,7 +2247,7 @@
       if (session && session.status === 'LIVE') return null;
       if (job) return job.threadId && (live === 'dead' || live === 'failed' || (job.engine === 'opencode' && (live === 'completed' || live === 'cancelled'))) ? {
         threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project,
-        ...(job.engine === 'opencode' ? { engine: 'opencode', write: !!job.write } : {})
+        ...(job.engine === 'opencode' ? { engine: 'opencode' } : {})
       } : null;
       if (session && session.status === 'STALE' && session.threadId && !session.archived) return { threadId: session.threadId, cwd: session.cwd };
       return null;
@@ -2318,7 +2318,7 @@
         return live === 'working' || live === 'possibly-stuck' || live === 'queued' || live === 'running';
       });
       return busy ? null : { threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project,
-        ...(job.engine === 'opencode' ? { engine: 'opencode', write: !!job.write } : {}) };
+        ...(job.engine === 'opencode' ? { engine: 'opencode' } : {}) };
     }
     // Dismissed row ids worth keeping: sessions still tracked, and job-only rows ('job:<id>') whose
     // job still exists. Before the first job list arrives every job id is kept.

@@ -554,7 +554,7 @@ async function executeTaskRun(request) {
     shouldCancel: request.shouldCancel,
     persistThread: true,
     threadName: resumeThreadId ? null : buildPersistentTaskThreadName(taskTitleFromPrompt(request.prompt) || request.prompt || DEFAULT_CONTINUE_PROMPT),
-    ...(engine === "opencode" ? { write: Boolean(request.write), title: resumeThreadId ? null : taskMetadata.title, onSpawn: request.onSpawn } : {})
+    ...(engine === "opencode" ? { title: resumeThreadId ? null : taskMetadata.title, onSpawn: request.onSpawn } : {})
   });
 
   const rawOutput = typeof result.finalMessage === "string" ? result.finalMessage : "";

@@ -48,7 +48,7 @@ export function createOpenCodeOutput({ onSession, onProgress } = {}) {
 
 export async function runOpenCode(cwd, options = {}) {
   const cli = resolveCliCommand("opencode");
-  const args = [...cli.args, "run", "--standalone", "--auto", "--format", "json", "--agent", options.write ? "build" : "plan"];
+  const args = [...cli.args, "run", "--standalone", "--auto", "--format", "json", "--agent", "build"];
   if (options.model) args.push("-m", options.model);
   if (options.resumeThreadId) args.push("-s", options.resumeThreadId);
   if (options.title) args.push("--title", options.title);

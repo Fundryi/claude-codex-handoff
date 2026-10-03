@@ -31,7 +31,7 @@ OpenCode tasks:
 - Forward `--engine opencode` to `task`. With no `--engine`, the helper uses Codex.
 - Pass `--model provider/model#variant` exactly as supplied. Do not apply Codex model shortcuts. With no model, OpenCode uses the user's configured default.
 - If the user supplies `--effort` and the model has no `#`, the helper adds `#<effort>` to the model. If a variant is already present, or no model is supplied, effort has no effect. There is no default effort for OpenCode.
-- Forward `--write` for edits: it selects OpenCode's `build` agent. Without it, the helper selects the read-only `plan` agent. The helper always uses `--standalone --auto` for a private headless run. OpenCode's plan agent still denies edits under `--auto`.
+- Every OpenCode run uses the `build` agent with `--standalone --auto` for full permission, like Codex's `danger-full-access` default. Forward `--write` for edits as a job label only. It enables the review hint and does not change permissions. For read-only intent, put "do not edit files" in the handoff rules.
 - `--fast` has no effect on OpenCode. Codex sandbox settings do not apply to OpenCode.
 - Resume uses the same task flags and default continue prompt. OpenCode uses only `ses_` session ids and only previous OpenCode jobs. Codex threads cannot be passed to OpenCode.
 - Review commands, the stop review gate, `limits`, `setup` and `transfer` support only Codex. Use `--engine` only on `task` and `task-resume-candidate`.
@@ -52,7 +52,7 @@ Command selection:
 - `task --resume-last`: internal helper for "keep going", "resume", "apply the top fix", or "dig deeper" after a previous rescue run.
 
 Safety rules:
-- For Codex, `--write` is a label, not a permission. Do not treat leaving it out as a read-only guarantee. For OpenCode, follow the plan/build mapping above.
+- For both engines, `--write` is a label only. It does not change permissions. For read-only intent, put "do not edit files" in the handoff rules.
 - Preserve the user's task text as-is apart from stripping routing flags.
 - Do not inspect the repository, read files, grep, monitor progress, poll status, cancel jobs, summarize output, or do any follow-up work of your own.
 - Return the stdout of the `task` command exactly as-is, or of the last `result --wait` call once the job has ended.

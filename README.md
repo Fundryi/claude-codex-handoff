@@ -132,6 +132,8 @@ Install the OpenCode CLI and run `opencode` once to set it up. Then use:
 
 The companion runs OpenCode as a detached job with its own process. Status, result, cancel and prompt-hook delivery work the same way as for Codex. Resume with `--resume` or `--resume-thread <ses_id>`. The [runtime skill](plugin/skills/codex-cli-runtime/SKILL.md) owns the engine, model, variant and write rules.
 
+Every OpenCode run uses the `build` agent with `--standalone --auto` for full permission, like Codex's `danger-full-access` default. `--write` is a job label only and enables the review hint. For read-only intent, put "do not edit files" in the handoff rules.
+
 The database is read only. The viewer reads only `session_v2` and `session_message`. It does not read account or credential tables. A read-only WAL connection can touch the `-shm` file. Transcripts use the same trusted-origin gate as Claude transcripts.
 
 Set `OPENCODE_DB` to use a different database. The default is `$XDG_DATA_HOME/opencode/opencode.db` when `XDG_DATA_HOME` is set, else `~/.local/share/opencode/opencode.db`, on Windows too. If the file or built-in SQLite support is missing, this source is off. The list uses the Claude 24-hour window: the 30 most recent roots plus every root with running work. A recent child keeps its parent in the window.
