@@ -417,6 +417,9 @@ test("dismissed ids: sessions and job-only rows stay while they exist; job ids w
   const jobs = [{ id: "j1" }];
   assert.deepEqual(plain(keptDismissed(["s1", "gone", "job:j1", "job:old"], sessions, jobs, true)), ["s1", "job:j1"]);
   assert.deepEqual(plain(keptDismissed(["s1", "gone", "job:j1", "job:old"], sessions, [], false)), ["s1", "job:j1", "job:old"], "jobs not loaded yet: keep every job id");
+  const open = ["opencode:ses_a", "opencode:ses_old"];
+  assert.deepEqual(plain(keptDismissed(open, sessions, jobs, true, [{ id: "opencode:ses_a" }])), ["opencode:ses_a"], "a listed OpenCode session stays dismissed");
+  assert.deepEqual(plain(keptDismissed(open, sessions, jobs, true, null)), open, "no OpenCode frame yet: keep every OpenCode id");
 });
 
 // The unified tree (design 13.2.1): one chat with a subagent, a workflow agent and handoffs; a ghost; your

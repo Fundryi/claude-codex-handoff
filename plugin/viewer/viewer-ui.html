@@ -1384,6 +1384,7 @@
     // dataVersion moves on every data update, so currentModel() rebuilds only when something changed.
     var claudeChats = { chats: [], ghosts: [] };
     var opencodeChats = { chats: [] };
+    var opencodeChatsLoaded = false;
     var claudeChatsLoaded = false;
     var claudeUsage = null; // Claude plan limits (claudeUsage frame), or null
     var dataVersion = 0;
@@ -2317,11 +2318,13 @@
       return busy ? null : { threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project,
         ...(job.engine === 'opencode' ? { engine: 'opencode' } : {}) };
     }
-    // Dismissed row ids worth keeping: sessions still tracked, and job-only rows ('job:<id>') whose
-    // job still exists. Before the first job list arrives every job id is kept.
-    function keptDismissed(ids, sessions, jobs, jobsLoaded) {
+    // Dismissed row ids worth keeping: sessions still tracked, job-only rows ('job:<id>') whose job
+    // still exists, and OpenCode sessions ('opencode:<id>') still listed. Before the first job list or
+    // OpenCode frame arrives (openChats null), those ids are kept.
+    function keptDismissed(ids, sessions, jobs, jobsLoaded, openChats) {
       return (ids || []).filter(function (id) {
         if (String(id).indexOf('job:') === 0) return !jobsLoaded || (jobs || []).some(function (job) { return 'job:' + job.id === id; });
+        if (String(id).indexOf('opencode:') === 0) return !openChats || openChats.some(function (chat) { return chat.id === id; });
         return (sessions || []).some(function (session) { return session.id === id; });
       });
     }
@@ -2803,6 +2806,7 @@
     }
     // A Codex session you dismissed or archived leaves Live at any depth (History keeps it).
     function liveHidden(node, dismissedIds) {
+      if (node.kind === 'opencode' && !node.row) return (dismissedIds || []).indexOf(node.id) !== -1;
       return !!node.row && (node.state === 'ARCHIVED' || (dismissedIds || []).indexOf(node.row.id) !== -1);
     }
     function nodeKind(node) {
@@ -2852,6 +2856,10 @@
         // Stage 4 adds older chats.
         return Object.keys(nodes).filter(function (id) {
           var node = nodes[id];
+          if (node.kind === 'opencode' && !node.row) {
+            if (node.parentId || (query && !nodeSearch(nodes, id, query))) return false;
+            return view.chip === 'EVERYTHING' || (view.chip === 'DISMISSED' && (dismissedIds || []).indexOf(id) !== -1);
+          }
           if (!node.row || (node.kind === 'codexagent' && node.parentId)) return false;
           if (query && !nodeSearch(nodes, id, query)) return false;
           if (view.chip === 'EVERYTHING') return true;
@@ -4118,6 +4126,18 @@
         button.addEventListener('click', function () { onPick(entry[0]); copyText(entry[3], button, 'Copied'); });
         container.appendChild(button);
       });
+      if (node.kind === 'opencode' && !node.row) {
+        var hidden = (prefs.dismissed || []).indexOf(node.id) !== -1;
+        container.appendChild(textDiv('menu-group', 'Session'));
+        var dismiss = document.createElement('button');
+        dismiss.type = 'button';
+        dismiss.setAttribute('role', 'menuitem');
+        dismiss.dataset.action = 'dismiss';
+        dismiss.textContent = hidden ? 'Restore task' : 'Dismiss task';
+        dismiss.title = 'Hide this task from every view except History > Dismissed and Everything. Viewer-only, undoable.';
+        dismiss.addEventListener('click', function () { onPick('dismiss'); toggleDismissed(node.id); });
+        container.appendChild(dismiss);
+      }
     }
     // Right-click on a tree row: the Codex menu for a Codex node, copy-only for Claude nodes.
     function nodeContextMenu(event, node) {
@@ -6123,6 +6143,22 @@
       if (again) again.focus();
     });
 
+    // Live updates rebuild rows, and a new element starts its animation at 0, so the working arc and the
+    // breathing dots jumped back on every update. Pin each looping animation to the page clock before the
+    // next paint: a rebuilt arc continues where the old one was.
+    var animationSyncQueued = false;
+    new MutationObserver(function () {
+      if (animationSyncQueued) return;
+      animationSyncQueued = true;
+      requestAnimationFrame(function () {
+        animationSyncQueued = false;
+        var now = document.timeline.currentTime;
+        document.getAnimations().forEach(function (animation) {
+          if (animation.animationName === 'mk-orbit' || animation.animationName === 'breathe') animation.currentTime = now;
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+
     var events = new EventSource('/events');
     events.onopen = function () { if (!controlsBlocked) setConnection('connected', 'Live updates connected'); };
     events.onerror = function () { setConnection('disconnected', 'Reconnecting\u2026'); };
@@ -6141,7 +6177,7 @@
         seeded = true;
         // forget dismissals for sessions and job-only rows that fell out of the tracked lists
         if (sessions.length && (prefs.dismissed || []).length) {
-          var kept = keptDismissed(prefs.dismissed, sessions, jobs, jobsLoaded);
+          var kept = keptDismissed(prefs.dismissed, sessions, jobs, jobsLoaded, opencodeChatsLoaded ? opencodeChats.chats : null);
           if (kept.length !== prefs.dismissed.length) { prefs.dismissed = kept; savePrefs(); }
         }
         if (selected && !sessions.some(function (session) { return session.id === selected; })) selected = null;
@@ -6171,6 +6207,7 @@
       }
       if (data.type === 'opencodeChats') {
         opencodeChats = { chats: data.chats || [] };
+        opencodeChatsLoaded = true;
         dataVersion++;
         migrateSelection();
         syncTranscripts();
