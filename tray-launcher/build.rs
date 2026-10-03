@@ -19,9 +19,9 @@ fn main() {
 
     let mut resource = winresource::WindowsResource::new();
     resource.set_icon(icon_path.to_str().expect("icon path is valid UTF-8"));
-    resource.set("FileDescription", "Codex Live Viewer");
-    resource.set("ProductName", "Codex Live Viewer");
-    resource.set("OriginalFilename", "Codex Live Viewer.exe");
+    resource.set("FileDescription", "AI Live Viewer");
+    resource.set("ProductName", "AI Live Viewer");
+    resource.set("OriginalFilename", "AI Live Viewer.exe");
     resource.compile().expect("embed Windows icon resource");
 }
 

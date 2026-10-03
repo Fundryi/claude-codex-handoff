@@ -25,10 +25,10 @@ jobs:
       - name: Create Windows ZIP
         shell: pwsh
         run: |
-          $folder = "dist/Codex-Live-Viewer-Windows-x64"
+          $folder = "dist/AI-Live-Viewer-Windows-x64"
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           New-Item -ItemType Directory -Force -Path "$folder/assets" | Out-Null
-          Copy-Item "tray-launcher/target/release/codex-live-viewer-tray.exe" "$folder/Codex Live Viewer.exe"
+          Copy-Item "tray-launcher/target/release/codex-live-viewer-tray.exe" "$folder/AI Live Viewer.exe"
           Copy-Item "codex-live-viewer.js", "viewer-ui.html", "README.md", "LICENSE" $folder
           Copy-Item "assets/logo.svg" "$folder/assets/logo.svg"
           # The companion Resume/Cancel run; the server finds it at plugin/scripts/.
@@ -37,12 +37,12 @@ jobs:
           Copy-Item "plugin/LICENSE", "plugin/NOTICE" "$folder/plugin/"
           Copy-Item "plugin/.claude-plugin/plugin.json" "$folder/plugin/.claude-plugin/plugin.json"
           Copy-Item "install-codex-notify-hook.bat" "$folder/install-codex-notify-hook.bat"
-          Compress-Archive -Path $folder -DestinationPath "dist/Codex-Live-Viewer-Windows-x64.zip"
+          Compress-Archive -Path $folder -DestinationPath "dist/AI-Live-Viewer-Windows-x64.zip"
 
       - uses: actions/upload-artifact@v7
         with:
           name: release-windows
-          path: dist/Codex-Live-Viewer-Windows-x64.zip
+          path: dist/AI-Live-Viewer-Windows-x64.zip
 
   linux:
     runs-on: ubuntu-latest
@@ -62,24 +62,24 @@ jobs:
 
       - name: Create Linux ZIP
         run: |
-          folder="dist/Codex-Live-Viewer-Linux-x64"
+          folder="dist/AI-Live-Viewer-Linux-x64"
           mkdir -p "$folder"
           mkdir -p "$folder/assets"
-          cp tray-launcher/target/release/codex-live-viewer-tray "$folder/codex-live-viewer-tray"
+          cp tray-launcher/target/release/codex-live-viewer-tray "$folder/ai-live-viewer-tray"
           cp codex-live-viewer.js viewer-ui.html README.md LICENSE "$folder/"
           cp assets/logo.svg "$folder/assets/logo.svg"
           # The companion Resume/Cancel run; the server finds it at plugin/scripts/.
           mkdir -p "$folder/plugin/.claude-plugin"
           cp -r plugin/scripts plugin/prompts plugin/schemas plugin/LICENSE plugin/NOTICE "$folder/plugin/"
           cp plugin/.claude-plugin/plugin.json "$folder/plugin/.claude-plugin/plugin.json"
-          chmod +x "$folder/codex-live-viewer-tray"
+          chmod +x "$folder/ai-live-viewer-tray"
           cd dist
-          zip -r Codex-Live-Viewer-Linux-x64.zip Codex-Live-Viewer-Linux-x64
+          zip -r AI-Live-Viewer-Linux-x64.zip AI-Live-Viewer-Linux-x64
 
       - uses: actions/upload-artifact@v7
         with:
           name: release-linux
-          path: dist/Codex-Live-Viewer-Linux-x64.zip
+          path: dist/AI-Live-Viewer-Linux-x64.zip
 
   release:
     needs: [windows, linux]
