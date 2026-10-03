@@ -187,7 +187,19 @@ node codex-live-viewer.js kill     # force-quit, also a hung viewer
 
 Or grab a tray app from [Releases](../../releases): `AI-Live-Viewer-Windows-x64.zip` (double-click `AI Live Viewer.exe`) or `AI-Live-Viewer-Linux-x64.zip` (run `ai-live-viewer-tray`; needs GTK 3 + Ayatana AppIndicator). The tray supervises the server and shows completion toasts. No macOS tray; use the Node CLI or the plugin's autostart.
 
-The Windows zip also holds `install-codex-notify-hook.bat`, an optional extra for Windows only. It points the `notify` setting in `~/.codex/config.toml` at a small PowerShell hook, with a backup first. The hook shows a Windows toast when a plain Codex CLI turn ends, but only when the tray app does not run (the tray shows its own toasts). The viewer, the plugin and Linux do not need it. On Linux the tray shows the toasts, and a headless server such as a CloudCLI box needs none: results reach Claude through the prompt hook and show in the viewer.
+### Integrations
+
+The viewer reads Codex rollouts and sends a turn toast with no setup, plugin or hook trust. It ignores old lines read at startup. Companion sessions use the job's own toast, so each event gets one toast. The integrations use the same files on Windows, macOS and Linux. A macOS viewer updates without a tray toast because no macOS tray is shipped.
+
+Run `/codex:setup` for optional Codex approval notices and the OpenCode viewer plugin. The Codex PermissionRequest hook ships inside `codex@fundryi`, separate from the Claude hooks. It runs synchronously with a 3-second hook timeout and a 1.5-second HTTP timeout. Codex substitutes the plugin path before it runs the command, so the command does not depend on shell variables or plugin versions.
+
+For approval notices, install the plugin in Codex and do this once: **open codex, run /hooks, trust the codex@fundryi hooks**. Approval requests occur only when Codex's approval policy is not `never`. This trust step enables only approval notices. Setup reports trusted or needs trust. It reads the saved trust but never edits Codex config.
+
+For OpenCode 2, setup asks before it copies `ai-live-viewer-notify.js` into the global `opencode/plugins/` config folder. It respects `XDG_CONFIG_HOME` and `OPENCODE_CONFIG_DIR`. Restart OpenCode after installation. Use `/codex:setup --remove-opencode-plugin` to remove the file. Setup removes only a file with our plugin id marker. It never edits `opencode.json`.
+
+The default policy sends a toast for every turn end, approval and question. Set `CODEX_VIEWER_NOTIFY_QUIET=1` for quiet mode: approval and question notices, failed turns, and turns of at least 60 seconds only. Duration starts at the newest user message the viewer knows. Set `CODEX_VIEWER_NOTIFICATIONS=0` to disable toasts. Companion jobs keep their own toast and get no second toast from these integrations.
+
+Old Windows `.bat` installs are left as they are. Setup reports a legacy `notify.ps1` setting and does not change it.
 
 Remote access: `--host 0.0.0.0` (or `CODEX_VIEWER_HOST=0.0.0.0`, which the plugin's autostart also uses) for your LAN, with no token, so anyone on that network can use it; `--tunnel` for a free Cloudflare quick tunnel (token-gated, URL printed on start), `--tunnel-token <t>` for a named tunnel on your own domain. Local access never needs a token.
 
@@ -207,6 +219,7 @@ Claude transcripts (chats, subagents and workflow agents) can hold text from eve
 | `CODEX_PLUGIN_UPDATE_CHECK` | `1` | `0` disables the daily update check |
 | `CODEX_VIEWER_AUTOSTART` | `1` | `0` disables the session-start dashboard autostart |
 | `CODEX_VIEWER_PORT` | `8377` | Dashboard port (also receives job-completion pushes) |
+| `CODEX_VIEWER_NOTIFY_QUIET` | `0` | `1` limits plain-run toasts to approval/question notices, failures and turns of at least 60 seconds |
 | `CODEX_VIEWER_HOST` | `127.0.0.1` | Bind address; `0.0.0.0` opens it to your LAN |
 | `CODEX_VIEWER_ALLOWED_HOSTS` | (none) | Comma list of names a reverse proxy serves the dashboard under; when set, the default bind becomes `0.0.0.0` |
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state (CLI + dashboard) |
@@ -224,7 +237,7 @@ Claude transcripts (chats, subagents and workflow agents) can hold text from eve
 - `codex-live-viewer.js`: Node server, CLI, rollout parser, control endpoints (one file, no dependencies)
 - `viewer-ui.html`: the whole frontend (one file)
 - `plugin/`: the Claude Code plugin, forked from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (keeps OpenAI's Apache-2.0 `LICENSE` and `NOTICE`; the changes fall under the root [LICENSE](LICENSE))
-- `plugin/.codex-plugin/plugin.json`: the manifest Codex reads when the plugin is installed there. Its empty `hooks` object keeps the Claude hooks out of Codex sessions; Codex loads only the skills. Keep its version equal to `plugin/.claude-plugin/plugin.json`
+- `plugin/.codex-plugin/plugin.json`: the manifest Codex reads when the plugin is installed there. It points at `codex-hooks/hooks.json` for optional approval notices and keeps the Claude hooks out of Codex. Keep its version equal to `plugin/.claude-plugin/plugin.json`
 - `plugin/viewer/`: bundled dashboard copies, refreshed by `npm run sync:viewer`, drift-guarded by tests
 - `handoff/`: ready-to-copy handoff contract templates
 - `scripts/upstream-diff.mjs`: diff `plugin/` against upstream for selective, manual cherry-picks

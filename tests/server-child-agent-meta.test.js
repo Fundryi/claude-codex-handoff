@@ -17,7 +17,7 @@ function serverContext() {
   ].join("\n");
   const context = {
     fs, path, Buffer, Date, JSON, Map, String, Math,
-    sessions: new Map(), searchIndex: new Map(),
+    sessions: new Map(), searchIndex: new Map(), rolloutNotificationOffsets: new Map(),
     ARCHIVED_DIR: "Z:\\archived", MAX_EVENTS_KEPT: 500, LIVE_WINDOW_MS: 20000,
     broadcast() {}, notificationClients: new Set(),
   };

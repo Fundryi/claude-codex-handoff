@@ -190,6 +190,16 @@ export function renderSetupReport(report) {
     ""
   ];
 
+  if (report.integrations) {
+    const { codexHooks, opencodePlugin, legacyNotifyHook } = report.integrations;
+    lines.push("Integrations:",
+      "- Codex turn toasts: automatic; no setup or hook trust required",
+      `- Codex approval notices: ${codexHooks.shipped ? "hook shipped" : "hook missing"}; ${codexHooks.trusted ? "trusted" : "needs trust"}; only when approval policy is not never`,
+      `- OpenCode 2: ${opencodePlugin.opencodeFound ? "found" : "not found"}; viewer plugin ${opencodePlugin.installed ? "installed" : "not installed"}`,
+      `- OpenCode plugin path: ${opencodePlugin.path}`,
+      `- Legacy notify.ps1 hook: ${legacyNotifyHook.found ? "found; left as it is" : "not found"}`, "");
+  }
+
   if (report.actionsTaken.length > 0) {
     lines.push("Actions taken:");
     for (const action of report.actionsTaken) {

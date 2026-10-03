@@ -42,7 +42,7 @@ const VIEWER_ID: &str = "codex-live-viewer";
 #[derive(Debug)]
 enum UserEvent {
     Menu(MenuEvent),
-    Completion(String),
+    Completion(String, String),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -306,8 +306,8 @@ fn main() {
                 tray.take();
                 *control_flow = ControlFlow::Exit;
             }
-            Event::UserEvent(UserEvent::Completion(title)) => {
-                show_completion(&title);
+            Event::UserEvent(UserEvent::Completion(summary, title)) => {
+                show_completion(&summary, &title);
             }
             _ => {}
         }
@@ -383,24 +383,44 @@ fn listen_for_notifications(port: u16, proxy: &EventLoopProxy<UserEvent>) -> std
         let Ok(event) = serde_json::from_str::<serde_json::Value>(data.trim()) else {
             continue;
         };
-        if event.get("type").and_then(|value| value.as_str()) != Some("complete") {
+        let kind = event.get("type").and_then(|value| value.as_str());
+        if kind != Some("complete") && kind != Some("job") {
             continue;
         }
+        let status = event
+            .get("status")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if kind == Some("job") && !matches!(status, "completed" | "failed" | "cancelled") {
+            continue;
+        }
+        let summary = event
+            .get("summary")
+            .and_then(|value| value.as_str())
+            .unwrap_or(match status {
+                "failed" => "AI task failed",
+                "cancelled" => "AI task stopped",
+                _ => "AI task complete",
+            })
+            .to_string();
         let title = event
             .get("title")
             .and_then(|value| value.as_str())
             .unwrap_or("Codex task")
             .to_string();
-        if proxy.send_event(UserEvent::Completion(title)).is_err() {
+        if proxy
+            .send_event(UserEvent::Completion(summary, title))
+            .is_err()
+        {
             return Ok(());
         }
     }
 }
 
-fn show_completion(title: &str) {
+fn show_completion(summary: &str, title: &str) {
     if let Err(error) = Notification::new()
         .appname("AI Live Viewer")
-        .summary("Codex task complete")
+        .summary(summary)
         .body(title)
         .show()
     {

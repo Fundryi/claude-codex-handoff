@@ -143,6 +143,7 @@ const MAX_EVENTS_KEPT = 500;   // per-session event ring buffer
 const sessions = new Map();
 const sseClients = new Set();
 const notificationClients = new Set();
+const rolloutNotificationOffsets = new Map(); // startup bytes and last complete read; never replay a toast
 const searchIndex = new Map(); // file -> { file, id, threadId, title, cwd, mtimeMs, archived }
 const pinnedFiles = new Map(); // file -> last-open timestamp (LRU, max 10)
 const MAX_PINNED = 10;
@@ -381,6 +382,7 @@ function buildSearchIndex() {
   const live = new Set(files);
   for (const f of files) indexEntry(f, rolloutStats.get(f));
   for (const key of searchIndex.keys()) if (!live.has(key)) searchIndex.delete(key);
+  for (const key of rolloutNotificationOffsets.keys()) if (!live.has(key)) rolloutNotificationOffsets.delete(key);
   searchIndexReady = true;
 }
 
@@ -396,10 +398,11 @@ function ingest(file) {
   try { st = fs.statSync(file); } catch { return; }
   let s = sessions.get(file);
   if (!s) {
-    s = { id: path.basename(file, ".jsonl"), file, offset: 0, partial: Buffer.alloc(0), meta: {}, events: [], callIds: new Set(), lastGrow: st.mtimeMs, size: 0 };
+    const seen = rolloutNotificationOffsets.get(file) || 0;
+    s = { id: path.basename(file, ".jsonl"), file, offset: 0, partial: Buffer.alloc(0), meta: {}, events: [], callIds: new Set(), lastGrow: st.mtimeMs, size: 0, notifyAfter: st.size < seen ? 0 : seen };
     sessions.set(file, s);
   }
-  if (st.size < s.size) { s.offset = 0; s.partial = Buffer.alloc(0); s.events = []; s.callIds.clear(); } // truncated/rotated
+  if (st.size < s.size) { s.offset = 0; s.partial = Buffer.alloc(0); s.events = []; s.callIds.clear(); s.notifyAfter = 0; } // truncated/rotated
   s.size = st.size;
   if (st.size <= s.offset) return;
 
@@ -416,9 +419,11 @@ function ingest(file) {
   const cut = data.lastIndexOf(10) + 1;
   s.partial = Buffer.from(data.subarray(cut)); // copy so the 5 MiB read buffer is not retained
   const lines = data.toString("utf8", 0, cut).split("\n");
-  const fresh = [];
+  const fresh = [], notifications = [];
+  let lineOffset = s.offset - data.length;
   let newest = 0;
   for (const line of lines) {
+    lineOffset += Buffer.byteLength(line) + 1;
     if (!line.trim()) continue;
     // lastGrow is the newest record time, not the file mtime (Codex 0.146+ pins that at
     // creation on Windows) and not Date.now() (a backfill of an old file is not live growth).
@@ -459,18 +464,18 @@ function ingest(file) {
     if (ev.kind === "user" && !ev.internal && !s.meta.title && !s.meta.parentThreadId) s.meta.title = promptTitle(ev.text);
     s.events.push(ev);
     fresh.push(ev);
+    if (notificationClients.size && lineOffset > s.notifyAfter && (ev.kind === "done" || ev.kind === "err")) {
+      const notification = plainRunNotification({ source: "codex", event: ev.kind, sessionId: s.meta.threadId || s.id, cwd: s.meta.cwd }, s);
+      if (notification) notifications.push(notification);
+    }
     if (s.events.length > MAX_EVENTS_KEPT) s.events.splice(0, s.events.length - MAX_EVENTS_KEPT);
   }
   s.lastGrow = Math.max(s.lastGrow, newest || st.mtimeMs); // mtime only for files without timestamps
+  s.notifyAfter = Math.max(s.notifyAfter, s.offset - s.partial.length);
+  rolloutNotificationOffsets.set(file, s.notifyAfter);
   if (fresh.length) {
     broadcast({ type: "events", session: s.id, events: fresh });
-    if (fresh.some(event => event.kind === "done")) {
-      broadcast({
-        type: "complete",
-        session: s.id,
-        title: String(s.meta.title || "Codex task").slice(0, 120),
-      }, notificationClients);
-    }
+    for (const notification of notifications) broadcast(notification, notificationClients);
   }
 }
 
@@ -563,7 +568,7 @@ function tick() {
   } finally {
     clearTimeout(tickTimer);
     tickTimer = null;
-    scheduleTick(sseClients.size ? Math.max(POLL_MS, tickGap(codexActive + claudeActive)) : IDLE_POLL_MS);
+    scheduleTick(sseClients.size || notificationClients.size ? Math.max(POLL_MS, tickGap(codexActive + claudeActive)) : IDLE_POLL_MS);
   }
 }
 
@@ -579,7 +584,7 @@ function threadJobStatuses(jobs) {
 
 // Adaptive refresh. A file change (fs.watch) or a job notice pulls the next tick in, but never
 // closer than tickGap after the last one: the more tasks run at once, the longer the gap.
-// Without changes the poll runs every 1 s (or the gap, if longer); with no browser every 5 s.
+// Without changes the poll runs every 1 s (or the gap, if longer); with no browser or tray every 5 s.
 const IDLE_POLL_MS = 5000;
 let tickTimer = null, tickDue = 0, lastTickAt = 0, sessionsSig = "", codexActive = 0, claudeActive = 0;
 function tickGap(active) {
@@ -592,8 +597,8 @@ function scheduleTick(delay) {
   tickDue = due;
   tickTimer = setTimeout(() => { tickTimer = null; tick(); }, due - Date.now());
 }
-function kick() {
-  if (!sseClients.size) return; // no browser: the 5 s poll is enough
+function kick(force) {
+  if (!sseClients.size && !notificationClients.size && force !== true) return;
   scheduleTick(lastTickAt + tickGap(codexActive + claudeActive) - Date.now());
 }
 function watchSessions() {
@@ -659,7 +664,7 @@ function pidAlive(pid) {
 // Parsed state.json per workspace, reused while its mtime and size hold, for 10 s at most.
 // Callers still check pid and heartbeat on every use; the records are read-only.
 const jobStateCache = new Map(); // dir name -> { mtimeMs, size, at, jobs }
-function listCompanionJobs(fresh) {
+function listCompanionJobs(fresh, all) {
   const out = [];
   let dirs = [];
   try { dirs = fs.readdirSync(COMPANION_STATE_ROOT, { withFileTypes: true }).filter(d => d.isDirectory()); } catch { return out; }
@@ -680,6 +685,7 @@ function listCompanionJobs(fresh) {
   }
   for (const name of jobStateCache.keys()) if (!seen.has(name)) jobStateCache.delete(name);
   out.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  if (all) return out;
   // The 100 newest, plus an older job that still needs someone: queued or running, or the newest
   // job of its thread with an open question. A busy day pushed one past 100 (2026-10-02).
   const threads = new Set();
@@ -1300,6 +1306,7 @@ function opencodeChatsTick() {
             UNION SELECT s.parent_id FROM session_v2 s JOIN selected c ON c.id = s.id WHERE s.parent_id IS NOT NULL
           ) SELECT s.id, s.parent_id, s.directory, s.title, s.model, s.cost, s.tokens_input, s.tokens_output,
             s.tokens_cache_read, s.tokens_cache_write, s.time_created, s.time_updated, s.time_idle, s.idle_outcome,
+            (SELECT m.time_created FROM session_message m WHERE m.session_id = s.id AND m.type = 'user' ORDER BY m.seq DESC LIMIT 1) AS user_time,
             (SELECT json_object('providerID', json_extract(m.data, '$.model.providerID'),
               'id', json_extract(m.data, '$.model.id'), 'variant', json_extract(m.data, '$.model.variant'))
               FROM session_message m WHERE m.session_id = s.id AND m.type = 'assistant' AND s.model IS NULL ORDER BY m.seq DESC LIMIT 1) AS assistant_model,
@@ -1345,6 +1352,39 @@ function opencodePublish(chats) {
   opencodeSig = sig;
   opencodeChatsFrame = frame;
   broadcast(frame);
+}
+
+function plainRunNotification(body, knownSession) {
+  if (process.env.CODEX_VIEWER_NOTIFICATIONS === "0" || typeof body.sessionId !== "string" || !body.sessionId) return null;
+  // Read fresh state: the worker can have recorded its session since the last poll.
+  if (listCompanionJobs(true, true).some(job => job.threadId === body.sessionId)) return null;
+  const codex = body.source === "codex";
+  const label = codex ? "Codex" : "OpenCode";
+  const approval = codex ? body.event === "PermissionRequest" : body.event === "permission.asked";
+  const question = !codex && body.event === "question.asked";
+  const end = codex ? body.event === "done" || body.event === "err"
+    : ["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted"].includes(body.event);
+  if (!approval && !question && !end) return null;
+  let start = 0, cwd = codex ? body.cwd : body.directory, failed = body.event === "err" || body.event === "session.execution.failed";
+  if (codex) {
+    const session = knownSession || [...sessions.values()].find(s => s.meta.threadId === body.sessionId);
+    if (session) {
+      cwd = session.meta.cwd || cwd;
+      const user = session.events.findLast(e => e.kind === "user" && !e.internal);
+      start = user ? Date.parse(user.ts) : 0;
+      failed = failed || session.events.at(-1)?.kind === "err";
+    }
+  } else {
+    const row = opencodeRows.find(r => r.id === body.sessionId);
+    if (row) { start = Number(row.user_time) || 0; cwd = row.directory || cwd; }
+  }
+  if (end && !failed && process.env.CODEX_VIEWER_NOTIFY_QUIET === "1"
+    && !(start > 0 && Date.now() - start >= 60000)) return null;
+  const project = typeof cwd === "string" ? path.basename(cwd.replace(/\\/g, "/")).slice(0, 120) : "";
+  const summary = `${label} ${question ? "asks you something" : approval ? "needs approval" : failed ? "turn failed" : body.event === "session.execution.interrupted" ? "turn stopped" : "turn complete"}`;
+  const tool = approval && typeof body.tool === "string" ? body.tool.slice(0, 160) : "";
+  return { type: "complete", source: body.source, session: body.sessionId, summary,
+    title: summary + (tool ? ": " + tool : "") + (project ? " in " + project : "") };
 }
 
 function opencodeTranscriptEvents(row) {
@@ -2428,6 +2468,11 @@ const server = http.createServer((req, res) => {
         broadcast({ type: "job", jobId: body.jobId, status: body.status || "", title: String(body.title || "").slice(0, 120) }, notificationClients);
         kick();
         refreshCodexLimits(true); // the job used some of the plan
+      } else if (body && ((body.source === "codex" && body.event === "PermissionRequest") || body.source === "opencode")) {
+        if (body.source === "codex") kick(true);
+        else { opencodeWatermark = ""; opencodeChatsTick(); }
+        const notification = plainRunNotification(body);
+        if (notification) broadcast(notification, notificationClients);
       }
       jsonReply(res, 200, { ok: true });
     });
@@ -2534,7 +2579,7 @@ function trustedControlOrigin(req) {
 // A request straight from this PC: loopback socket, no proxy in between, a loopback Host
 // (a DNS-rebound page in a local browser passes the socket check but not this).
 // ponytail: a local proxy that adds no forwarding headers (nginx's default proxy_pass sets Host to the
-// upstream and adds none) looks exactly like a local process; /notify only broadcasts a job id, that is the ceiling.
+// upstream and adds none) looks exactly like a local process; /notify sends bounded notification text only.
 function loopbackDirect(req) {
   const h = req.headers || {};
   if (h["x-forwarded-for"] || h.forwarded || h["x-real-ip"] || h["cf-connecting-ip"]) return false;
@@ -2567,6 +2612,9 @@ function serve() {
     process.on("exit", () => { try { if (fs.readFileSync(PID_FILE, "utf8").trim() === String(process.pid)) fs.unlinkSync(PID_FILE); } catch {} });
     console.log("[OK] Watching: " + SESSIONS_DIR);
     if (fs.existsSync(CLAUDE_PROJECTS)) console.log("[OK] Claude workflows: " + CLAUDE_PROJECTS);
+    // Seed every existing rollout, including files outside the newest 40 and large
+    // backfills read over several ticks. Appended bytes and new files can notify.
+    for (const file of collectRolloutFiles(true)) rolloutNotificationOffsets.set(file, rolloutStats.get(file)?.size || 0);
     tick(); // reschedules itself (adaptive, see tickGap)
     watchSessions();
     // Own timers, so a Claude error never stalls Codex updates.

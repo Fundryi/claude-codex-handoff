@@ -27,6 +27,7 @@ import { readStdinIfPiped } from "./lib/fs.mjs";
 import { collectReviewContext, ensureGitRepository, resolveReviewTarget } from "./lib/git.mjs";
 import { binaryAvailable, terminateProcessTree } from "./lib/process.mjs";
 import { ensureOpenCodeAvailable, runOpenCode } from "./lib/opencode.mjs";
+import { manageOpenCodePlugin, readViewerIntegrations } from "./lib/viewer-integrations.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
 import {
   addJobPointer,
@@ -92,7 +93,7 @@ function printUsage() {
   console.log(
     [
       "Usage:",
-      "  node scripts/codex-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--json]",
+      "  node scripts/codex-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--install-opencode-plugin|--remove-opencode-plugin] [--json]",
       "  node scripts/codex-companion.mjs review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>]",
       "  node scripts/codex-companion.mjs adversarial-review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>] [--effort <low|medium|high|xhigh|max|ultra>] [focus text]",
       "  node scripts/codex-companion.mjs task [--engine <codex|opencode>] [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--resume-thread <id>] [--model <model|astra|sol|terra|luna|daybreak-blue>] [--effort <low|medium|high|xhigh|max|ultra>] [prompt]",
@@ -240,8 +241,16 @@ async function buildSetupReport(cwd, actionsTaken = []) {
   const codexStatus = getCodexAvailability(cwd);
   const authStatus = await getCodexAuthStatus(cwd);
   const config = getConfig(workspaceRoot);
+  const integrations = readViewerIntegrations(ROOT_DIR);
 
   const nextSteps = [];
+  if (!integrations.codexHooks.shipped) nextSteps.push("Optional: update codex@fundryi to get the approval notice hook.");
+  if (!integrations.codexHooks.trusted) nextSteps.push(`Optional Codex approval notices (only when approval policy is not never): ${integrations.codexHooks.step}.`);
+  if (integrations.opencodePlugin.opencodeFound && !integrations.opencodePlugin.installed) {
+    nextSteps.push("Choose Install OpenCode viewer plugin in /codex:setup.");
+  } else if (!integrations.opencodePlugin.opencodeFound) {
+    nextSteps.push("Optional: install OpenCode 2, then run /codex:setup to add its viewer plugin.");
+  }
   if (!codexStatus.available) {
     nextSteps.push("Install Codex with `npm install -g @openai/codex`.");
   }
@@ -261,6 +270,7 @@ async function buildSetupReport(cwd, actionsTaken = []) {
     auth: authStatus,
     sessionRuntime: getSessionRuntimeStatus(),
     reviewGateEnabled: Boolean(config.stopReviewGate),
+    integrations,
     actionsTaken,
     nextSteps
   };
@@ -269,7 +279,7 @@ async function buildSetupReport(cwd, actionsTaken = []) {
 async function handleSetup(argv) {
   const { options } = parseCommandInput(argv, {
     valueOptions: ["cwd"],
-    booleanOptions: ["json", "enable-review-gate", "disable-review-gate"]
+    booleanOptions: ["json", "enable-review-gate", "disable-review-gate", "install-opencode-plugin", "remove-opencode-plugin"]
   });
 
   if (options["enable-review-gate"] && options["disable-review-gate"]) {
@@ -279,6 +289,13 @@ async function handleSetup(argv) {
   const cwd = resolveCommandCwd(options);
   const workspaceRoot = resolveCommandWorkspace(options);
   const actionsTaken = [];
+
+  if (options["install-opencode-plugin"] && options["remove-opencode-plugin"]) {
+    throw new Error("Choose either --install-opencode-plugin or --remove-opencode-plugin.");
+  }
+  if (options["install-opencode-plugin"] || options["remove-opencode-plugin"]) {
+    actionsTaken.push(manageOpenCodePlugin(ROOT_DIR, Boolean(options["install-opencode-plugin"])));
+  }
 
   if (options["enable-review-gate"]) {
     setConfig(workspaceRoot, "stopReviewGate", true);

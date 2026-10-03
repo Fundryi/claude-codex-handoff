@@ -25,6 +25,20 @@ test("viewerPort defaults to 8377 and accepts an override", async () => {
   assert.equal(viewerPort({ CODEX_VIEWER_PORT: "9123" }), 9123);
 });
 
+test("incomplete integrations show one hint per plugin version in companion state", async () => {
+  const { firstIntegrationHint } = await import(hookUrl);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "viewer-hint-"));
+  const pluginRoot = path.join(__dirname, "..", "plugin");
+  const env = { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot, CODEX_HOME: dir,
+    XDG_CONFIG_HOME: dir, CODEX_COMPANION_STATE_ROOT: path.join(dir, "state") };
+  try {
+    assert.equal(firstIntegrationHint(env), true);
+    assert.equal(firstIntegrationHint(env), false);
+    assert.equal(fs.readdirSync(env.CODEX_COMPANION_STATE_ROOT).length, 1);
+    assert.deepEqual(fs.readdirSync(dir).sort(), ["state"], "the hint does not install a plugin or edit Codex config");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("checkViewerHealth recognizes the viewer and a foreign server", async () => {
   const { checkViewerHealth } = await import(hookUrl);
   for (const [application, expected] of [["codex-live-viewer", "running"], ["something-else", "foreign"]]) {

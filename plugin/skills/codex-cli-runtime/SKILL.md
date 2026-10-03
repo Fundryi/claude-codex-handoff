@@ -36,7 +36,7 @@ OpenCode tasks:
 - Every OpenCode run uses the `build` agent with `--standalone --auto` for full permission, like Codex's `danger-full-access` default. Forward `--write` for edits as a job label only. It enables the review hint and does not change permissions. For read-only intent, put "do not edit files" in the handoff rules.
 - `--fast` has no effect on OpenCode. Codex sandbox settings do not apply to OpenCode.
 - Resume uses the same task flags and default continue prompt. OpenCode uses only `ses_` session ids and only previous OpenCode jobs. Codex threads cannot be passed to OpenCode.
-- Review commands, the stop review gate, `limits`, `setup` and `transfer` support only Codex. Use `--engine` only on `task` and `task-resume-candidate`.
+- Review commands, the stop review gate, `limits` and `transfer` support only Codex. `setup` also checks viewer integrations and manages the OpenCode plugin with consent. Use `--engine` only on `task` and `task-resume-candidate`.
 
 Command selection:
 - Use exactly one `task` invocation per rescue handoff, followed by `result <job-id> --wait` calls only if the job is still running when `task` returns.

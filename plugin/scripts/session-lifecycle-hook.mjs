@@ -10,6 +10,7 @@ import { pathToFileURL } from "node:url";
 
 import { TRANSCRIPT_PATH_ENV } from "./lib/claude-session-transfer.mjs";
 import { checkForUpdate, compareVersions } from "./lib/update-check.mjs";
+import { readViewerIntegrations } from "./lib/viewer-integrations.mjs";
 
 export const SESSION_ID_ENV = "CODEX_COMPANION_SESSION_ID";
 
@@ -189,6 +190,7 @@ async function handleSessionStart(input) {
   appendEnvVar(SESSION_ID_ENV, input.session_id);
   appendEnvVar(TRANSCRIPT_PATH_ENV, input.transcript_path);
   syncStatusLineScript();
+  if (firstIntegrationHint()) console.log("Run /codex:setup for optional Codex approval notices and the OpenCode viewer plugin.");
   const viewer = await maybeStartViewer();
   if (viewer === "port-busy") {
     console.log(`[codex plugin] An older Codex viewer on port ${viewerPort()} did not stop, so the updated viewer could not start. Run /codex:viewer restart, or /codex:viewer kill if it hangs. This is not retried for this plugin version.`);
@@ -197,6 +199,25 @@ async function handleSessionStart(input) {
   }
   const notice = await sessionUpdateNotice();
   if (notice) console.log(notice);
+}
+
+export function firstIntegrationHint(env = process.env) {
+  try {
+    const root = env.CLAUDE_PLUGIN_ROOT;
+    if (!root) return false;
+    const version = pluginVersion(root);
+    const record = path.join(env.CODEX_COMPANION_STATE_ROOT || path.join(os.homedir(), ".codex-companion", "state"),
+      `viewer-integrations-hint-${version}.json`);
+    if (fs.existsSync(record)) return false;
+    const { codexHooks, opencodePlugin } = readViewerIntegrations(root, env);
+    const approvalNotices = codexHooks.shipped && codexHooks.enabled && !codexHooks.trusted;
+    const openCodeMissing = opencodePlugin.opencodeFound && !opencodePlugin.installed;
+    if (!approvalNotices && !openCodeMissing) return false;
+    fs.mkdirSync(path.dirname(record), { recursive: true });
+    // Exclusive create also limits simultaneous SessionStart hooks to one hint.
+    fs.writeFileSync(record, "{}\n", { flag: "wx" });
+    return true;
+  } catch { return false; }
 }
 
 async function main() {

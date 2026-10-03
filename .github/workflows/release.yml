@@ -33,10 +33,9 @@ jobs:
           Copy-Item "assets/logo.svg" "$folder/assets/logo.svg"
           # The companion Resume/Cancel run; the server finds it at plugin/scripts/.
           New-Item -ItemType Directory -Force -Path "$folder/plugin/.claude-plugin" | Out-Null
-          Copy-Item -Recurse "plugin/scripts", "plugin/prompts", "plugin/schemas" "$folder/plugin/"
+          Copy-Item -Recurse "plugin/scripts", "plugin/prompts", "plugin/schemas", "plugin/.codex-plugin", "plugin/codex-hooks", "plugin/opencode" "$folder/plugin/"
           Copy-Item "plugin/LICENSE", "plugin/NOTICE" "$folder/plugin/"
           Copy-Item "plugin/.claude-plugin/plugin.json" "$folder/plugin/.claude-plugin/plugin.json"
-          Copy-Item "install-codex-notify-hook.bat" "$folder/install-codex-notify-hook.bat"
           Compress-Archive -Path $folder -DestinationPath "dist/AI-Live-Viewer-Windows-x64.zip"
 
       - uses: actions/upload-artifact@v7
@@ -70,7 +69,7 @@ jobs:
           cp assets/logo.svg "$folder/assets/logo.svg"
           # The companion Resume/Cancel run; the server finds it at plugin/scripts/.
           mkdir -p "$folder/plugin/.claude-plugin"
-          cp -r plugin/scripts plugin/prompts plugin/schemas plugin/LICENSE plugin/NOTICE "$folder/plugin/"
+          cp -r plugin/scripts plugin/prompts plugin/schemas plugin/.codex-plugin plugin/codex-hooks plugin/opencode plugin/LICENSE plugin/NOTICE "$folder/plugin/"
           cp plugin/.claude-plugin/plugin.json "$folder/plugin/.claude-plugin/plugin.json"
           chmod +x "$folder/ai-live-viewer-tray"
           cd dist

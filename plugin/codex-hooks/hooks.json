@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/codex-viewer-hook.mjs\"",
+            "commandWindows": "node \"${PLUGIN_ROOT}/scripts/codex-viewer-hook.mjs\"",
+            "async": false,
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
