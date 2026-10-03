@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.23.2
+
+- **OpenCode handoffs need OpenCode 2, and now say so.** The handoff uses `opencode run --standalone`, which exists only in OpenCode 2.0 and newer. With OpenCode 1.x, the handoff now stops at once with a clear message: "OpenCode 2.0 or newer is needed" and the install command `npm install -g @opencode/cli`. Before, it failed with an unclear error from OpenCode.
+- **The docs name the OpenCode version.** The README, `/codex:setup` and the runtime skill say that OpenCode 2.0 or newer is needed. The viewer reads OpenCode 2 sessions only; with OpenCode 1.x it shows no OpenCode sessions, and the rest of the viewer works as before.
+- **Tests:** no test was added or removed. Real check: the installed OpenCode 2.0.22 passes the version check.
+
 ## 2.23.1
 
 - **The release files use the new name.** The tray downloads are now `AI-Live-Viewer-Windows-x64.zip` and `AI-Live-Viewer-Linux-x64.zip`. The Windows app is `AI Live Viewer.exe`, and Task Manager shows it as AI Live Viewer. The Linux app is `ai-live-viewer-tray`. Releases up to 2.23.0 keep their old file names.
