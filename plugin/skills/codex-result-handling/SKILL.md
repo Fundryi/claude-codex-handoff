@@ -19,11 +19,13 @@ When the helper returns Codex output:
 - CRITICAL: After presenting review findings, STOP. Do not make any code changes. Do not fix any issues. You MUST explicitly ask the user which issues, if any, they want fixed before touching a single file. Auto-applying fixes from a review is strictly forbidden, even if the fix is obvious.
 - If the helper reports malformed output or a failed Codex run, include the most actionable stderr lines and stop there instead of guessing.
 - If the helper reports that setup or authentication is required, direct the user to `/codex:setup` and do not improvise alternate auth flows.
-- A result ends with the line `Codex job: <job id> · thread: <thread id>`. It tells the viewer which transcript started the job. Keep the thread id for a follow-up (`--resume-thread`); you need not show the line to the user.
+- A result ends with `Codex job: <job id> · thread: <thread id>` or `OpenCode job: <job id> · thread: <ses_id>`. It tells the viewer which transcript started the job. Keep the thread id and engine for a follow-up; you need not show the line to the user.
 
 ## When Codex asks a question
 
 A task result can end with a "Needs decision" section, and the prompt hook can show it as "Codex asks:". Codex has stopped and waits for the answer on the same thread.
+
+These steps also apply to OpenCode. For an OpenCode result or `ses_` session id, put `--engine opencode --resume-thread <ses_id>` on the first line of every answer handoff. Keep the same engine and session. The [runtime skill](../codex-cli-runtime/SKILL.md) owns the engine flag rules.
 
 1. Answer by yourself only when you are sure beyond reasonable doubt: the answer is plain from this conversation, the repository, or the spec. Then resume the same thread: launch the `codex:codex-rescue` agent (`run_in_background: true`) with `--resume-thread <thread-id>` on the first line and the answer below it, starting with `Answer from Claude (automatic N of 2):`.
 2. If you have any doubt, ask the user first with `AskUserQuestion`. Offer the options Codex listed, and put your recommendation first. Then forward the answer the same way, starting with `Answer from the user:`.

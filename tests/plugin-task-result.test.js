@@ -10,6 +10,49 @@ const scripts = path.join(__dirname, "..", "plugin", "scripts");
 const mjs = (name) => pathToFileURL(path.join(scripts, "lib", name)).href;
 const companionSrc = fs.readFileSync(path.join(scripts, "codex-companion.mjs"), "utf8");
 
+test("OpenCode keeps the text parts of the last message that produced text", async () => {
+  const { createOpenCodeOutput } = await import(mjs("opencode.mjs"));
+  const output = createOpenCodeOutput();
+  for (const event of [
+    { type: "text", part: { messageID: "msg-1", text: "Working" } },
+    { type: "text", part: { messageID: "msg-2", text: "Final" } },
+    { type: "text", part: { messageID: "msg-2", text: "answer" } },
+    { type: "step_finish", part: { messageID: "msg-3" } }
+  ]) output.readLine(JSON.stringify(event));
+  assert.equal(output.finalMessage, "Final\nanswer");
+});
+
+test("OpenCode captures the session on the first valid line", async () => {
+  const { createOpenCodeOutput } = await import(mjs("opencode.mjs"));
+  const sessions = [];
+  const output = createOpenCodeOutput({ onSession: id => sessions.push(id) });
+  output.readLine('{"type":"step_start","sessionID":"ses_test","part":{}}');
+  output.readLine('{"type":"text","sessionID":"ses_test","part":{"messageID":"msg-1","text":"OK"}}');
+  assert.equal(output.threadId, "ses_test");
+  assert.deepEqual(sessions, ["ses_test"]);
+});
+
+test("OpenCode error lines preserve the failure even when text exists", async () => {
+  const { createOpenCodeOutput } = await import(mjs("opencode.mjs"));
+  const output = createOpenCodeOutput();
+  output.readLine('{"type":"text","part":{"messageID":"msg-1","text":"Partial"}}');
+  output.readLine('{"type":"error","error":{"name":"APIError","data":{"message":"Unavailable"}}}');
+  assert.equal(output.error.message, "Unavailable");
+  assert.equal(output.finalMessage, "Partial");
+});
+
+test("OpenCode skips malformed lines, wrong shapes and unknown event types", async () => {
+  const { createOpenCodeOutput } = await import(mjs("opencode.mjs"));
+  const output = createOpenCodeOutput();
+  for (const line of ["banner", "{", "null", "[]", '{"type":"text","part":null}', '{"type":"text","part":{"text":42}}', '{"type":"future","part":{"text":"skip"}}']) {
+    assert.doesNotThrow(() => output.readLine(line));
+  }
+  assert.equal(output.finalMessage, "");
+  assert.equal(output.error, null);
+  output.readLine('{"type":"text","part":{"messageID":"msg-1","text":"OK"}}');
+  assert.equal(output.finalMessage, "OK");
+});
+
 const ANSWER = [
   "Fixed the retry loop.",
   "",

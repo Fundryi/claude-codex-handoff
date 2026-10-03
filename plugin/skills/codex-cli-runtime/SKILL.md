@@ -4,7 +4,7 @@ description: Internal helper contract for calling the codex-companion runtime fr
 user-invocable: false
 ---
 
-# Codex Runtime
+# Companion Runtime
 
 Use this skill only inside the `codex:codex-rescue` subagent.
 
@@ -22,10 +22,19 @@ Execution rules:
 - Do not call `setup`, `review`, `adversarial-review`, `status`, or `cancel`; call `result` only as `result <job-id> --wait` for the job you just started.
 - Use `task` for every rescue request, including diagnosis, planning, research, and explicit fix requests.
 - Do not rewrite the handoff. Main Claude wrote it with context you do not have.
-- Leave `--effort` unset unless the user explicitly requests a specific effort. The helper then defaults to `xhigh`, never Codex's low built-in default. Use `max` or `ultra` only when the user asks for them.
+- For Codex, leave `--effort` unset unless the user explicitly requests a specific effort. The helper then defaults to `xhigh`, never Codex's low built-in default. Use `max` or `ultra` only when the user asks for them.
 - Leave model unset by default. Add `--model` only when the user explicitly asks for one.
 - Model shortcuts: `astra` → `--model gpt-6-astra`, `sol` → `--model gpt-6.1-sol`, `terra` → `--model gpt-5.6-terra`, `luna` → `--model gpt-6-luna`, `daybreak-blue` → `--model gpt-daybreak-blue-latest`. GPT-6 Sol (`gpt-6-sol`) and the GPT-5.6 Sol and Luna models are still reachable by their full names. Daybreak Blue is the security-specialty model: sol-class reasoning with fewer restrictions on defensive security analysis. Use it for security reviews, audits, vulnerability hunting, and reversing work. Daybreak access is verification-gated per account; the helper checks availability before starting the run and fails fast with a clear message if the account has no access, so do not pre-test access yourself. (A Red variant exists but is not available here.)
-- Add `--write` when the task may edit files. It only marks the job as an edit task (it turns on the `/codex:review` hint in status) and does not change permissions. Every run uses the configured sandbox (`CODEX_PLUGIN_SANDBOX`, default `danger-full-access`). For read-only intent, put "do not edit files" in the handoff rules.
+- For Codex, add `--write` when the task may edit files. It only marks the job as an edit task (it turns on the `/codex:review` hint in status) and does not change permissions. Every Codex run uses the configured sandbox (`CODEX_PLUGIN_SANDBOX`, default `danger-full-access`). For read-only intent, put "do not edit files" in the handoff rules.
+
+OpenCode tasks:
+- Forward `--engine opencode` to `task`. With no `--engine`, the helper uses Codex.
+- Pass `--model provider/model#variant` exactly as supplied. Do not apply Codex model shortcuts. With no model, OpenCode uses the user's configured default.
+- If the user supplies `--effort` and the model has no `#`, the helper adds `#<effort>` to the model. If a variant is already present, or no model is supplied, effort has no effect. There is no default effort for OpenCode.
+- Forward `--write` for edits: it selects OpenCode's `build` agent. Without it, the helper selects the read-only `plan` agent. The helper always uses `--standalone --auto` for a private headless run. OpenCode's plan agent still denies edits under `--auto`.
+- `--fast` has no effect on OpenCode. Codex sandbox settings do not apply to OpenCode.
+- Resume uses the same task flags and default continue prompt. OpenCode uses only `ses_` session ids and only previous OpenCode jobs. Codex threads cannot be passed to OpenCode.
+- Review commands, the stop review gate, `limits`, `setup` and `transfer` support only Codex. Use `--engine` only on `task` and `task-resume-candidate`.
 
 Command selection:
 - Use exactly one `task` invocation per rescue handoff, followed by `result <job-id> --wait` calls only if the job is still running when `task` returns.
@@ -33,17 +42,17 @@ Command selection:
 - `--background` is forwarded to `task` as-is, and the `task` output (the job id) is returned at once: no `result --wait` follows. `--wait` is a no-op alias for the default and must be stripped. Neither is ever part of the natural-language task text.
 - `--cwd <folder>` is a routing flag: pass it to `task` and to every `result --wait` call, and strip it from the task text. Quote the folder in Bash (`--cwd "<folder>"`) so spaces and backslashes survive. It runs Codex in that folder. On hosts where Claude cannot change folder (CloudCLI runs every session in one fixed folder), it is how a handoff targets another project. The job's result still reaches this folder's prompt hook, and `status` and `result` find its id here without `--cwd`.
 - If the forwarded request includes `--fast` or the user asks for fast mode / priority processing, strip that phrasing from the task text and add `--fast` to the `task` call. Never add `--fast` unless explicitly requested.
-- If the forwarded request includes `--model`, normalize the shortcuts above to their full model ids and pass it through to `task`.
+- If the forwarded request includes `--model`, normalize the shortcuts above only for Codex. Pass an OpenCode model unchanged to `task`.
 - If the forwarded request includes `--effort`, pass it through to `task`.
 - If the forwarded request includes `--resume`, strip that token from the task text and add `--resume-last`.
 - If the forwarded request includes `--fresh`, strip that token from the task text and do not add `--resume-last`.
 - `--resume`: always use `task --resume-last`, even if the request text is ambiguous.
 - `--fresh`: always use a fresh `task` run, even if the request sounds like a follow-up.
-- `--effort`: accepted values are `low`, `medium`, `high`, `xhigh`, `max`, `ultra`. `max` needs a GPT-6.1, GPT-6, GPT-5.6, or Daybreak model; `ultra` needs `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-daybreak-blue-latest`. The Luna models stop at `max`.
+- Codex `--effort`: accepted values are `low`, `medium`, `high`, `xhigh`, `max`, `ultra`. `max` needs a GPT-6.1, GPT-6, GPT-5.6, or Daybreak model; `ultra` needs `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-daybreak-blue-latest`. The Luna models stop at `max`.
 - `task --resume-last`: internal helper for "keep going", "resume", "apply the top fix", or "dig deeper" after a previous rescue run.
 
 Safety rules:
-- `--write` is a label, not a permission. Do not treat leaving it out as a read-only guarantee.
+- For Codex, `--write` is a label, not a permission. Do not treat leaving it out as a read-only guarantee. For OpenCode, follow the plan/build mapping above.
 - Preserve the user's task text as-is apart from stripping routing flags.
 - Do not inspect the repository, read files, grep, monitor progress, poll status, cancel jobs, summarize output, or do any follow-up work of your own.
 - Return the stdout of the `task` command exactly as-is, or of the last `result --wait` call once the job has ended.

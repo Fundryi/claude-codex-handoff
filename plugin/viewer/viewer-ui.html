@@ -69,7 +69,6 @@
     /* wide screens (2K, 4K at scale 1): the sidebar grows, and the side panel takes the width beyond the content column */
     @media (min-width: 2200px) { :root { --sidebar-width: 400px; --panel-w: clamp(560px, calc(var(--main-w) - var(--content-max) - 32px), 1400px); } }
 
-    :root[data-theme="light"] { --opencode: #36519e; }
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; }
     /* Three rounded cards on the backdrop (reference): the sidebar, the main pane and the side panel, with a gutter between. */
@@ -1251,7 +1250,7 @@
       </div>
     </div></div>
 
-    <section id="result-card" class="codex-only" aria-label="Handoff result" hidden></section>
+    <section id="result-card" aria-label="Handoff result" hidden></section>
 
     <div id="main-body">
       <section id="claude-overview" class="claude-only" aria-label="Claude workflow run"></section>
@@ -2017,6 +2016,7 @@
     }
     function resumeBody(session, opts) {
       const b = { threadId: session.threadId, cwd: session.cwd };
+      if (session.engine === 'opencode') { b.engine = 'opencode'; b.write = !!session.write; }
       if (opts.prompt) b.prompt = opts.prompt;
       if (opts.effort) b.effort = opts.effort;
       if (opts.model) b.model = opts.model;
@@ -2219,7 +2219,7 @@
         add('Job', 'cancel-job', 'Cancel job…', 'Cancel this handoff job (asks first)', true);
       }
       add('Session', 'dismiss', opts.dismissed ? 'Restore task' : 'Dismiss task', 'Hide this task from every view except History > Dismissed and Everything. Viewer-only, undoable.');
-      if (row.threadId && !archived) {
+      if (row.threadId && !archived && (!job || job.engine !== 'opencode')) {
         add('Terminal commands', 'copy-resume', 'Copy resume command', 'codex resume — reopen this conversation interactively');
         add('Terminal commands', 'copy-continue', 'Copy continue command', 'codex exec resume — continue this task headlessly where it left off');
         add('Terminal commands', 'copy-fork', 'Copy fork command', 'codex fork — experiment on a copy; the original session stays untouched');
@@ -2245,7 +2245,10 @@
       var session = row.session;
       var live = job ? job.live || job.status : '';
       if (session && session.status === 'LIVE') return null;
-      if (job) return job.threadId && (live === 'dead' || live === 'failed') ? { threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project } : null;
+      if (job) return job.threadId && (live === 'dead' || live === 'failed' || (job.engine === 'opencode' && (live === 'completed' || live === 'cancelled'))) ? {
+        threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project,
+        ...(job.engine === 'opencode' ? { engine: 'opencode', write: !!job.write } : {})
+      } : null;
       if (session && session.status === 'STALE' && session.threadId && !session.archived) return { threadId: session.threadId, cwd: session.cwd };
       return null;
     }
@@ -2268,7 +2271,7 @@
     // Every run on the job's thread, newest first (the job alone when it has no thread).
     function threadRuns(jobs, job) {
       if (!job.threadId) return [job];
-      return (jobs || []).filter(function (entry) { return entry.threadId === job.threadId; })
+      return (jobs || []).filter(function (entry) { return entry.threadId === job.threadId && (entry.engine || 'codex') === (job.engine || 'codex'); })
         .map(function (entry, index) { return { job: entry, index: index, ms: Date.parse(entry.updatedAt || entry.createdAt || '') || 0 }; })
         .sort(function (a, b) { return b.ms - a.ms || a.index - b.index; })
         .map(function (entry) { return entry.job; });
@@ -2314,7 +2317,8 @@
         var live = run.live || run.status;
         return live === 'working' || live === 'possibly-stuck' || live === 'queued' || live === 'running';
       });
-      return busy ? null : { threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project };
+      return busy ? null : { threadId: job.threadId, cwd: job.workspaceRoot || job.cwd || row.project,
+        ...(job.engine === 'opencode' ? { engine: 'opencode', write: !!job.write } : {}) };
     }
     // Dismissed row ids worth keeping: sessions still tracked, and job-only rows ('job:<id>') whose
     // job still exists. Before the first job list arrives every job id is kept.
@@ -2577,18 +2581,13 @@
         parent.children.push(node.id);
       }
       (openFrame && openFrame.chats || []).forEach(function (chat) {
-        add({ id: chat.id, kind: 'opencode', chat: chat, title: chat.title, state: claudeNodeState('agent', chat.state === 'quiet' ? 'failed' : chat.state),
+        add({ id: chat.id, kind: 'opencode', chat: chat, title: chat.title, state: claudeNodeState('agent', chat.state),
           project: chat.project, model: chat.model, effort: chat.effort, startedMs: chat.startedMs, updatedMs: chat.updatedMs, usage: chat.usage });
-      });
-      (openFrame && openFrame.chats || []).forEach(function (chat) {
-        var parent = chat.parentId, seen = {};
-        seen[chat.id] = true;
-        while (parent && nodes[parent] && !seen[parent]) { seen[parent] = true; parent = nodes[parent].chat.parentId; }
-        attach(nodes[chat.id], parent && seen[parent] ? null : chat.parentId);
       });
       // Which chat a Codex thread belongs to by job.sessionId (any job on the thread, scope rule 5).
       var threadChat = {};
       (jobs || []).forEach(function (job) {
+        if (job.engine === 'opencode') return;
         var key = job.threadId || job.id;
         if (job.sessionId && !threadChat[key]) threadChat[key] = job.sessionId;
       });
@@ -2653,7 +2652,9 @@
           var row = rowByKey[key];
           if (!row) return; // its rollout and job are not loaded (or /jobs is blocked): the counts still have it
           placedRows[key] = true;
-          var node = codexNode(row, 'handoff');
+          var node = row.job && row.job.engine === 'opencode' && nodes['opencode:' + row.threadId] || codexNode(row, 'handoff');
+          node.row = row;
+          if (node.kind === 'opencode') node.state = row.status;
           node.startedMs = kid.startedMs || node.startedMs;
           node.parentHint = kid.parentId;
           node.chatId = chat.sessionId;
@@ -2686,7 +2687,9 @@
           var row = rowByKey[key];
           if (!row) return;
           placedRows[key] = true;
-          var node = codexNode(row, 'handoff');
+          var node = row.job && row.job.engine === 'opencode' && nodes['opencode:' + row.threadId] || codexNode(row, 'handoff');
+          node.row = row;
+          if (node.kind === 'opencode') node.state = row.status;
           node.flags.push('agent not known');
           attach(node, g.id);
           codexKids(node, row);
@@ -2702,6 +2705,15 @@
       (rows || []).forEach(function (row) {
         var key = rowHandoffKey(row);
         if (placedRows[key]) return;
+        if (row.job && row.job.engine === 'opencode' && nodes['opencode:' + row.threadId]) {
+          var open = nodes['opencode:' + row.threadId];
+          open.row = row;
+          open.state = row.status;
+          var starter = nodes['chat:' + row.job.sessionId] || nodes['ghost:' + row.job.sessionId];
+          if (starter) open.parentHint = starter.id;
+          placedRows[key] = true;
+          return;
+        }
         if (threadChat[key] && trackedChats[threadChat[key]]) {
           // Past the chat's child cap: no root and no parent, but History and search still find it.
           var old = codexNode(row, 'handoff');
@@ -2721,6 +2733,16 @@
         codexKids(node, row);
         if (row.threadId) threadNode[row.threadId] = node.id;
         (row.children || []).forEach(function (kid) { if (kid.threadId) threadNode[kid.threadId] = 'codexagent:' + kid.session.id; });
+      });
+      // OpenCode sessions reuse the handoff parent found in Claude's transcript.
+      // job.sessionId supplies the same fallback when that link is not loaded.
+      (openFrame && openFrame.chats || []).forEach(function (chat) {
+        var node = nodes[chat.id];
+        if (node.parentId !== undefined) return;
+        var parent = node.parentHint || chat.parentId, seen = {};
+        seen[chat.id] = true;
+        while (parent && nodes[parent] && nodes[parent].chat && !seen[parent]) { seen[parent] = true; parent = nodes[parent].chat.parentId; }
+        attach(node, parent && seen[parent] ? null : node.parentHint || chat.parentId);
       });
       // Parents first: repeat while a pass places something; what is left has no loaded parent.
       for (var placed = true; placed && deep.length;) {
@@ -2787,7 +2809,7 @@
       return !!node.row && (node.state === 'ARCHIVED' || (dismissedIds || []).indexOf(node.row.id) !== -1);
     }
     function nodeKind(node) {
-      if (node.kind === 'opencode') return 'opencode';
+      if (node.kind === 'opencode' || (node.row && node.row.job && node.row.job.engine === 'opencode')) return 'opencode';
       return node.kind === 'handoff' || node.kind === 'codex' || node.kind === 'codexagent' ? 'codex' : node.kind === 'ghost' ? 'ghost' : 'claude';
     }
     // One node against a chip and the kind toggles (both off = every kind). FINISHED takes ENDED
@@ -3083,7 +3105,7 @@
       return state === 'BACKGROUND' ? 'Background' : state === 'ENDED' ? 'Ended' : state === 'ANSWER' ? 'Needs answer' : STATUS[rowBadge(state)].label;
     }
     function nodeStateHelp(node) {
-      if (node.kind === 'opencode') return node.chat.state === 'quiet' ? 'No idle record and no update for 5 minutes. This session may be paused or stopped.'
+      if (node.kind === 'opencode') return node.chat.state === 'ended' ? 'Finished: no end record was found for it.'
         : node.chat.state === 'running' ? 'OpenCode updated this session in the last 5 minutes.' : 'OpenCode reported ' + (node.chat.outcome || 'stopped') + '.';
       if (node.state === 'BACKGROUND') return 'The turn is done, and work it started still runs.';
       if (node.state === 'ENDED') return 'Finished: no end record was found for it.';
@@ -3101,6 +3123,7 @@
     }
     function nodeKindLabel(node) {
       var info = KIND_INFO[node.kind] || KIND_INFO.chat;
+      if (node.row && node.row.job && node.row.job.engine === 'opencode') info = { label: 'OpenCode task', k: 'opencode', kindGlyph: 'opencode' };
       var label = kindLabel(info.label, info.k, { title: info.starter ? 'Started by Claude, runs under Codex' : info.label, starter: info.starter, glyph: info.kindGlyph });
       if (node.kind !== 'codex') return label;
       var wrap = document.createDocumentFragment();
@@ -3509,6 +3532,7 @@
 
     // The open task's row (child agents included; buildRows draws every session).
     function selectedRow() {
+      if (pageKind() === 'opencode') { var node = pageNode(); return node && node.row || null; }
       var s = currentSession();
       return s ? rowById(currentRows(), s.id) : null;
     }
@@ -3916,7 +3940,7 @@
       var now = Date.now();
       if (!node) { usageBar.textContent = ''; usageBar.dataset.signature = ''; return; } // plan limits live in the sidebar block
       var usage = node.usage;
-      var context = node.kind === 'chat' ? usage && usage.context : node.row && node.row.session ? node.row.session.contextTokens : null;
+      var context = node.kind === 'opencode' ? transcripts.main.contextTokens : node.kind === 'chat' ? usage && usage.context : node.row && node.row.session ? node.row.session.contextTokens : null;
       var windowSize = node.row && node.row.session ? node.row.session.contextWindow : 0;
       var ctx = usageCell('Context', 'Context in the newest message' + (windowSize ? ' of a ' + compactCount(windowSize) + ' window' : ''));
       if (node.kind === 'ghost') ctx.appendChild(textSpan('unk', 'no chat file'));
@@ -4007,7 +4031,11 @@
         if (chat.parentId) item('Child session', 'Parent: ' + chat.parentId);
         if (chat.outcome) item(chat.outcome, 'OpenCode idle outcome');
         item('last update ' + relativeTime(node.updatedMs), new Date(node.updatedMs || 0).toLocaleString());
-        item('Read only', 'OpenCode sessions have no resume or cancel controls in this viewer');
+        if (node.row && node.row.job) {
+          item('OpenCode task', 'Tracked companion job ' + node.row.job.id);
+          var target = resumeTarget(node.row);
+          resumeSessionButton.hidden = !target;
+        } else item('Read only', 'This session has no companion job');
       } else {
         var who = item('', 'Chat source: ' + (chat.source || 'unknown'), 'started-by actor-you');
         who.append(actorAvatar('you', true), document.createTextNode('Started by: '), bold('you'), document.createTextNode(source ? ' (' + source + ')' : ''));
@@ -4394,6 +4422,7 @@
     function renderFeed(preservePosition) {
       feedRenderPending = false; // this rebuild covers any batch still waiting for a frame
       var page = pageKind();
+      renderResultCard();
       if (page === 'workflow') { lastHomeSignature = ''; renderClaudeBody(); return; }
       lastClaudeOverviewScope = null;
       if (page === 'ghost') { lastHomeSignature = ''; lastClaudeFeedSignature = ''; renderGhostPage(); return; }
@@ -4414,7 +4443,6 @@
       }
       lastClaudeFeedSignature = '';
       // showOverview() covers "no task open" too, so selected is always truthy past this point.
-      renderResultCard();
       if (showOverview()) { renderHome(); return; }
       var row = selectedRow();
       var rawEvents = store[selected] || [];
@@ -4469,7 +4497,7 @@
       var model = currentModel();
       var node = model.nodes[id];
       // A handoff with no session has no page: load its session by thread first, else its job dialog.
-      if (node && node.row && !node.row.session) {
+      if (node && node.kind !== 'opencode' && node.row && !node.row.session) {
         if (byUser && node.row.job) { if (node.row.job.threadId) openOldHandoff(id, node.row.job); else openJob(node.row.job); }
         return;
       }
@@ -4486,7 +4514,7 @@
       var page = model.nodes[prefs.node];
       if (page && page.row) {
         if (page.row.session) { selected = page.row.session.id; unread.delete(selected); unread.delete(page.row.id); }
-        else { selected = null; if (byUser && page.row.job) openJob(page.row.job); }
+        else { selected = null; if (page.kind !== 'opencode' && byUser && page.row.job) openJob(page.row.job); }
       } else if (pageKind() !== 'codex') selected = null;
       prefs.selected = selected;
       treeScrollPending = true;
@@ -4573,7 +4601,7 @@
       if (!state.key || state.key !== transcriptUrl(slot)) return;
       state.busy = true;
       try {
-        var response = await fetch(state.key + '&offset=' + state.offset, { cache: 'no-store' });
+        var response = await fetch(state.key + (state.loaded ? '&offset=' + state.offset : ''), { cache: 'no-store' });
         if (response.status === 403) { state.error = 'Transcripts are refused at this address. Open the viewer on the PC itself or through the tunnel link. If a proxy serves it, add this name to CODEX_VIEWER_ALLOWED_HOSTS.'; state.stopped = true; }
         else if (response.status === 404) { state.error = 'This transcript is not on this PC any more.'; state.stopped = true; }
         else if (response.ok) {
@@ -4604,7 +4632,7 @@
       if (!state.stopped && state.key === transcriptUrl(slot)) {
         transcriptTimers[slot] = window.setTimeout(function () { pollTranscript(slot); }, data && data.more ? 0 : state.state === 'running' ? 1500 : 4000);
       }
-      if (slot === 'main') requestFeedRender(); else renderPanel();
+      if (slot === 'main') { requestFeedRender(); renderResultCard(); } else renderPanel();
       renderHeader();
     }
 
@@ -5150,7 +5178,7 @@
     // #feed-inner and is rebuilt only when its content changes, so live feed updates
     // never touch it: a half-typed answer keeps its focus and cursor.
     function renderResultCard() {
-      if (pageKind() !== 'codex' && pageKind() !== 'overview') return; // .codex-only hides the card there; it stays as it was for the way back
+      if (pageKind() !== 'codex' && pageKind() !== 'overview' && pageKind() !== 'opencode') { resultCard.hidden = true; return; }
       var row = showOverview() ? null : selectedRow();
       var job = row && row.job;
       if (!job || job.status !== 'completed') {
@@ -5159,6 +5187,7 @@
         resultCard.textContent = '';
         return;
       }
+      resultCard.hidden = false;
       var stamp = (job.updatedAt || '') + '|' + job.status;
       var entry = resultDetails[job.id];
       if (!entry || entry.stamp !== stamp) {
@@ -5194,7 +5223,8 @@
       resultCard.textContent = '';
       resultCard.hidden = false;
       var box = document.createElement('div');
-      box.className = 'result-card-box actor-codex';
+      var engine = job.engine === 'opencode' ? 'opencode' : 'codex';
+      box.className = 'result-card-box actor-' + engine;
       var head = document.createElement('div');
       head.className = 'result-card-head';
       var toggle = document.createElement('button');
@@ -5203,8 +5233,8 @@
       var caret = document.createElement('span');
       caret.className = 'result-card-caret';
       var label = document.createElement('span');
-      label.textContent = 'Result from Codex';
-      toggle.append(caret, actorAvatar('codex', true), label);
+      label.textContent = 'Result from ' + (engine === 'opencode' ? 'OpenCode' : 'Codex');
+      toggle.append(caret, actorAvatar(engine, true), label);
       head.appendChild(toggle);
       if (runs > 1) {
         var runCount = document.createElement('span');
@@ -5310,6 +5340,7 @@
       fillRunPicker(job);
       jobModalTitle.textContent = job.title || job.kindLabel || 'Job result';
       jobModalMeta.textContent = '';
+      jobModalMeta.appendChild(modalRow('Engine', job.engine === 'opencode' ? 'OpenCode task' : 'Codex'));
       jobModalMeta.appendChild(modalRow('Summary', job.summary || ''));
       jobModalMeta.appendChild(modalRow('Thread', job.threadId || '', true));
       if (job.fast) jobModalMeta.appendChild(modalRow('Tier', 'fast (priority)'));
@@ -5330,6 +5361,7 @@
         if (token !== jobModalToken) return; // another run was picked meanwhile
         jobModalTitle.textContent = detail.title || job.title || 'Job result';
         jobModalMeta.textContent = '';
+        jobModalMeta.appendChild(modalRow('Engine', detail.engine === 'opencode' ? 'OpenCode task' : 'Codex'));
         jobModalMeta.appendChild(modalRow('Summary', detail.summary || ''));
         jobModalMeta.appendChild(modalRow('Thread', detail.threadId || '', true));
         if (job.fast) jobModalMeta.appendChild(modalRow('Tier', 'fast (priority)'));
@@ -5432,7 +5464,7 @@
     }
 
     function openResumeModal(session, title, promptText) {
-      showControlModal('Resume Codex thread?', 'Resume');
+      showControlModal('Resume ' + (session.engine === 'opencode' ? 'OpenCode' : 'Codex') + ' thread?', 'Resume');
       controlModalBody.appendChild(modalRow('Task', title || 'Codex task'));
       controlModalBody.appendChild(modalRow('Project', session.cwd || ''));
       controlModalBody.appendChild(modalRow('Thread', session.threadId || '', true));
@@ -5441,12 +5473,14 @@
       prompt.value = promptText || '';
       controlModalBody.appendChild(controlField('Prompt override', prompt));
       var effort = effortSelect();
+      if (session.engine === 'opencode') effort.options[0].textContent = 'OpenCode default variant';
       var model = textInput('default');
       var sandbox = sandboxSelect();
       var fast = controlCheckbox('Fast (priority processing \u2014 uses more quota)');
       var grid = document.createElement('div');
       grid.className = 'control-grid';
-      grid.append(controlField('Effort', effort), controlField('Model', model), controlField('Sandbox', sandbox), fast.label);
+      grid.append(controlField('Effort', effort), controlField('Model', model));
+      if (session.engine !== 'opencode') grid.append(controlField('Sandbox', sandbox), fast.label);
       controlModalBody.appendChild(grid);
       controlAction = function () {
         return {
@@ -5729,7 +5763,8 @@
       if (pageKind() === 'chat' || pageKind() === 'opencode' || pageKind() === 'ghost') {
         var node = pageNode();
         if (!node) return;
-        fillChatMenu(actionMenu, node, actionMenuPick);
+        if (node.row && node.row.job) fillMenu(actionMenu, node.row, actionMenuPick);
+        else fillChatMenu(actionMenu, node, actionMenuPick);
         actionMenu.hidden = false;
         actionsButton.setAttribute('aria-expanded', 'true');
         return;

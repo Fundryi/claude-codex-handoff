@@ -1,5 +1,27 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import process from "node:process";
+
+// Resolve npm's Windows shim to its executable or Node entry point. Free-text
+// arguments then use spawn's argv directly, without cmd.exe or PowerShell.
+export function resolveCliCommand(command) {
+  if (process.platform !== "win32") return { command, args: [] };
+  const found = runCommand("where.exe", [command], { shell: false });
+  for (const file of found.stdout.trim().split(/\r?\n/).filter(Boolean)) {
+    if (/\.exe$/i.test(file)) return { command: file, args: [] };
+    if (!/\.(cmd|ps1)$/i.test(file)) continue;
+    let shim;
+    try { shim = fs.readFileSync(file, "utf8"); } catch { continue; }
+    const target = shim.match(/(?:%dp0%|\$basedir)[\\/]([^"\r\n]+\.(?:exe|m?js))"/i)?.[1];
+    if (!target) continue;
+    const entry = path.resolve(path.dirname(file), target);
+    if (fs.existsSync(entry)) return /\.exe$/i.test(entry)
+      ? { command: entry, args: [] }
+      : { command: process.execPath, args: [entry] };
+  }
+  throw new Error(`${command} CLI executable not found`);
+}
 
 export function runCommand(command, args = [], options = {}) {
   const shell = options.shell ?? (process.platform === "win32" ? (process.env.SHELL || true) : false);

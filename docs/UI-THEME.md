@@ -140,7 +140,7 @@ Actor color says who sent a feed message, never a status. The avatar shape (fill
 | You | Pink `--you` `#f28fbf` | `you` | A message you typed in a Codex session or a chat |
 | You, relayed | Pink, dashed ring avatar, tag "relayed answer" | `you` | Your answer delivered through Claude or the answer box |
 | Claude | Clay `--claude` `#e0825e` | `claude` | A handoff prompt (tag "handoff"), Claude's own answer, or a chat reply (Claude → You) |
-| OpenCode | Periwinkle `--opencode` `#aabcf8` (dark), `#36519e` (light) | `opencode` | OpenCode replies and work. The light token uses the `data-theme="light"` override. |
+| OpenCode | Periwinkle `--opencode` `#aabcf8` | `opencode` | OpenCode replies and work. |
 | Claude work | Clay ring dot, indented work rows | `claude` | A chat's own tool calls and thinking (`.actor-claude-work`) |
 | Plugin | Lime `--plugin` `#c3e88d` | `plugin` | The return-format footer the plugin appends to a handoff prompt |
 | Codex | Teal `--codex` `#4fd1bd` | `codex` | Codex replies; tag "asks you" when the reply has a question |

@@ -26,6 +26,7 @@ import { resolveClaudeSessionPath } from "./lib/claude-session-transfer.mjs";
 import { readStdinIfPiped } from "./lib/fs.mjs";
 import { collectReviewContext, ensureGitRepository, resolveReviewTarget } from "./lib/git.mjs";
 import { binaryAvailable, terminateProcessTree } from "./lib/process.mjs";
+import { ensureOpenCodeAvailable, runOpenCode } from "./lib/opencode.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
 import {
   addJobPointer,
@@ -94,7 +95,8 @@ function printUsage() {
       "  node scripts/codex-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--json]",
       "  node scripts/codex-companion.mjs review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>]",
       "  node scripts/codex-companion.mjs adversarial-review [--background] [--fast] [--base <ref>] [--scope <auto|working-tree|branch>] [--effort <low|medium|high|xhigh|max|ultra>] [focus text]",
-      "  node scripts/codex-companion.mjs task [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--model <model|astra|sol|terra|luna|daybreak-blue>] [--effort <low|medium|high|xhigh|max|ultra>] [prompt]",
+      "  node scripts/codex-companion.mjs task [--engine <codex|opencode>] [--background] [--fast] [--write] [--resume-last|--resume|--fresh] [--resume-thread <id>] [--model <model|astra|sol|terra|luna|daybreak-blue>] [--effort <low|medium|high|xhigh|max|ultra>] [prompt]",
+      "    Engine default: codex. OpenCode model: provider/model#variant; --fast is ignored.",
       "  node scripts/codex-companion.mjs transfer [--source <claude-jsonl>] [--json]",
       "  node scripts/codex-companion.mjs status [job-id] [--all] [--json]",
       "  node scripts/codex-companion.mjs result [job-id] [--wait] [--timeout-ms <ms>] [--json]",
@@ -141,6 +143,19 @@ function normalizeRequestedModel(model) {
     return null;
   }
   return MODEL_ALIASES.get(normalized.toLowerCase()) ?? normalized;
+}
+
+function normalizeEngine(engine) {
+  if (engine == null) return "codex";
+  if (engine !== "codex" && engine !== "opencode") throw new Error(`Unsupported engine "${engine}". Use codex or opencode.`);
+  return engine;
+}
+
+function validateTaskThreadEngine(threadId, engine) {
+  if (!threadId) return;
+  if ((engine === "opencode") !== String(threadId).startsWith("ses_")) {
+    throw new Error(`Thread ${threadId} does not belong to the ${engine} engine.`);
+  }
 }
 
 function normalizeReasoningEffort(effort) {
@@ -338,11 +353,12 @@ function filterJobsForCurrentClaudeSession(jobs) {
   return jobs.filter((job) => job.sessionId === sessionId);
 }
 
-function findLatestResumableTaskJob(jobs) {
+function findLatestResumableTaskJob(jobs, engine = "codex") {
   return (
     jobs.find(
       (job) =>
         job.jobClass === "task" &&
+        (job.engine ?? "codex") === engine &&
         job.threadId &&
         job.status !== "queued" &&
         job.status !== "running"
@@ -354,13 +370,14 @@ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const sessionId = getCurrentClaudeSessionId();
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot)).filter((job) => job.id !== options.excludeJobId);
-  const visibleJobs = filterJobsForCurrentClaudeSession(jobs);
+  const engine = options.engine ?? "codex";
+  const visibleJobs = filterJobsForCurrentClaudeSession(jobs).filter(job => (job.engine ?? "codex") === engine);
   const activeTask = visibleJobs.find((job) => job.jobClass === "task" && (job.status === "queued" || job.status === "running"));
   if (activeTask) {
     throw new Error(`Task ${activeTask.id} is still running. Use /codex:status before continuing it.`);
   }
 
-  const trackedTask = findLatestResumableTaskJob(visibleJobs);
+  const trackedTask = findLatestResumableTaskJob(visibleJobs, engine);
   if (trackedTask) {
     return { id: trackedTask.threadId };
   }
@@ -369,7 +386,7 @@ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
     return null;
   }
 
-  return findLatestTaskThread(workspaceRoot);
+  return engine === "opencode" ? null : findLatestTaskThread(workspaceRoot);
 }
 
 async function executeReviewRun(request) {
@@ -494,29 +511,35 @@ async function executeReviewRun(request) {
 
 async function executeTaskRun(request) {
   const workspaceRoot = resolveWorkspaceRoot(request.cwd);
-  ensureCodexAvailable(request.cwd);
+  const engine = request.engine ?? "codex";
+  const engineLabel = engine === "opencode" ? "OpenCode" : "Codex";
+  if (engine === "opencode") ensureOpenCodeAvailable(request.cwd);
+  else ensureCodexAvailable(request.cwd);
 
   const taskMetadata = buildTaskRunMetadata({
     prompt: request.prompt,
-    resumeLast: request.resumeLast
+    resumeLast: request.resumeLast,
+    engine
   });
 
   let resumeThreadId = request.resumeThreadId ?? null;
   if (!resumeThreadId && request.resumeLast) {
     const latestThread = await resolveLatestTrackedTaskThread(workspaceRoot, {
-      excludeJobId: request.jobId
+      excludeJobId: request.jobId,
+      engine
     });
     if (!latestThread) {
-      throw new Error("No previous Codex task thread was found for this repository.");
+      throw new Error(`No previous ${engineLabel} task thread was found for this repository.`);
     }
     resumeThreadId = latestThread.id;
   }
+  validateTaskThreadEngine(resumeThreadId, engine);
 
   if (!request.prompt && !resumeThreadId) {
     throw new Error("Provide a prompt, a prompt file, piped stdin, --resume-last, or --resume-thread <id>.");
   }
 
-  const result = await runAppServerTurn(workspaceRoot, {
+  const result = await (request.runTask ?? runAppServerTurn)(workspaceRoot, {
     resumeThreadId,
     prompt: withReturnFormat(
       request.prompt || (resumeThreadId ? DEFAULT_CONTINUE_PROMPT : ""),
@@ -530,7 +553,8 @@ async function executeTaskRun(request) {
     onProgress: request.onProgress,
     shouldCancel: request.shouldCancel,
     persistThread: true,
-    threadName: resumeThreadId ? null : buildPersistentTaskThreadName(taskTitleFromPrompt(request.prompt) || request.prompt || DEFAULT_CONTINUE_PROMPT)
+    threadName: resumeThreadId ? null : buildPersistentTaskThreadName(taskTitleFromPrompt(request.prompt) || request.prompt || DEFAULT_CONTINUE_PROMPT),
+    ...(engine === "opencode" ? { write: Boolean(request.write), title: resumeThreadId ? null : taskMetadata.title, onSpawn: request.onSpawn } : {})
   });
 
   const rawOutput = typeof result.finalMessage === "string" ? result.finalMessage : "";
@@ -544,6 +568,7 @@ async function executeTaskRun(request) {
     },
     {
       title: taskMetadata.title,
+      ...(engine === "opencode" ? { engine } : {}),
       jobId: request.jobId ?? null,
       write: Boolean(request.write),
       threadId: result.threadId,
@@ -585,7 +610,7 @@ function buildReviewJobMetadata(reviewName, target) {
   };
 }
 
-function buildTaskRunMetadata({ prompt, resumeLast = false }) {
+function buildTaskRunMetadata({ prompt, resumeLast = false, engine = "codex" }) {
   if (!resumeLast && String(prompt ?? "").includes(STOP_REVIEW_TASK_MARKER)) {
     return {
       title: "Codex Stop Gate Review",
@@ -593,7 +618,8 @@ function buildTaskRunMetadata({ prompt, resumeLast = false }) {
     };
   }
 
-  const title = taskTitleFromPrompt(prompt) || (resumeLast ? "Codex Resume" : "Codex Task");
+  const label = engine === "opencode" ? "OpenCode" : "Codex";
+  const title = taskTitleFromPrompt(prompt) || (resumeLast ? `${label} Resume` : `${label} Task`);
   const fallbackSummary = resumeLast ? DEFAULT_CONTINUE_PROMPT : "Task";
   return {
     title,
@@ -635,18 +661,20 @@ function renderQueuedTaskLaunch(payload) {
   return `${payload.title} started in the background as ${payload.jobId}. Check /codex:status ${payload.jobId} for progress.\n`;
 }
 
-function getJobKindLabel(kind, jobClass) {
+function getJobKindLabel(kind, jobClass, engine = "codex") {
+  if (jobClass === "task" && engine === "opencode") return "OpenCode task";
   if (kind === "adversarial-review") {
     return "adversarial-review";
   }
   return jobClass === "review" ? "review" : "rescue";
 }
 
-function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false, model = null, effort = null, fast = false }) {
+function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false, model = null, effort = null, fast = false, engine = "codex" }) {
   return createJobRecord({
     id: generateJobId(prefix),
     kind,
-    kindLabel: getJobKindLabel(kind, jobClass),
+    kindLabel: getJobKindLabel(kind, jobClass, engine),
+    ...(jobClass === "task" ? { engine } : {}),
     title,
     workspaceRoot,
     jobClass,
@@ -671,13 +699,14 @@ function createTrackedProgress(job, options = {}) {
   };
 }
 
-function buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast) {
+function buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast, engine = "codex") {
   return createCompanionJob({
     prefix: "task",
     kind: "task",
     title: taskMetadata.title,
     workspaceRoot,
     jobClass: "task",
+    engine,
     summary: taskMetadata.summary,
     write,
     model,
@@ -686,9 +715,10 @@ function buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast) {
   });
 }
 
-function buildTaskRequest({ cwd, model, effort, prompt, write, resumeLast, resumeThreadId, jobId, fast }) {
+function buildTaskRequest({ cwd, model, effort, prompt, write, resumeLast, resumeThreadId, jobId, fast, engine = "codex" }) {
   return {
     cwd,
+    engine,
     model,
     effort,
     prompt,
@@ -807,7 +837,7 @@ async function followAndReport(cwd, job, logFile, options = {}) {
   // the per-job file - so read the job file for the payload.
   const stored = readStoredJob(job.workspaceRoot, job.id) ?? {};
   // One stable line, so the viewer can tell which transcript started this job.
-  const idLine = `Codex job: ${job.id}${stored.threadId ? ` · thread: ${stored.threadId}` : ""}\n`;
+  const idLine = `${job.engine === "opencode" ? "OpenCode" : "Codex"} job: ${job.id}${stored.threadId ? ` · thread: ${stored.threadId}` : ""}\n`;
   const withId = (text) => `${text}${text.endsWith("\n") || !text ? "" : "\n"}${idLine}`;
 
   // A worker that threw never records rendered/result and leaves exitCode null.
@@ -965,13 +995,14 @@ async function handleReview(argv) {
 
 async function handleTask(argv) {
   const taskArgConfig = {
-    valueOptions: ["model", "effort", "cwd", "prompt-file", "resume-thread"],
+    valueOptions: ["engine", "model", "effort", "cwd", "prompt-file", "resume-thread"],
     booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background", "fast"],
     aliasMap: {
       m: "model",
       C: "cwd"
     }
   };
+  if (argv.length === 1 && argv[0] === "--help") { printUsage(); return; }
   // One string = the caller passed "$ARGUMENTS": keep the prompt exact. Bypasses
   // parseCommandInput, whose normalizeArgv would split the prompt again.
   const { options, positionals } = argv.length === 1
@@ -993,28 +1024,36 @@ async function handleTask(argv) {
   }
   const workspaceRoot = resolveCommandWorkspace(options);
   const prompt = lifted.prompt;
-  const model = normalizeRequestedModel(options.model);
-  const effort = normalizeReasoningEffort(options.effort) ?? DEFAULT_REASONING_EFFORT;
+  const engine = normalizeEngine(options.engine);
+  let model = engine === "opencode" ? options.model || null : normalizeRequestedModel(options.model);
+  const effort = engine === "opencode" ? (model && !model.includes("#") ? options.effort || null : null) : normalizeReasoningEffort(options.effort) ?? DEFAULT_REASONING_EFFORT;
+  if (engine === "opencode" && model && effort && !model.includes("#")) model += `#${effort}`;
+  if (engine === "opencode" && prompt.includes(STOP_REVIEW_TASK_MARKER)) throw new Error("The stop review gate supports only the codex engine.");
 
   const resumeLast = Boolean(options["resume-last"] || options.resume);
   const resumeThreadId = options["resume-thread"] || null;
+  validateTaskThreadEngine(resumeThreadId, engine);
   const fresh = Boolean(options.fresh);
   if (resumeLast && fresh) {
     throw new Error("Choose either --resume/--resume-last or --fresh.");
   }
   const write = Boolean(options.write);
+  if (engine === "opencode") options.fast = false;
   const fast = Boolean(options.fast);
   const taskMetadata = buildTaskRunMetadata({
     prompt,
-    resumeLast
+    resumeLast,
+    engine
   });
 
-  ensureCodexAvailable(cwd);
+  if (engine === "opencode") ensureOpenCodeAvailable(cwd);
+  else ensureCodexAvailable(cwd);
   requireTaskRequest(prompt, resumeLast, resumeThreadId);
 
-  const job = buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast);
+  const job = buildTaskJob(workspaceRoot, taskMetadata, write, model, effort, fast, engine);
   const request = buildTaskRequest({
     cwd,
+    engine,
     model,
     effort,
     prompt,
@@ -1151,6 +1190,11 @@ async function handleTaskWorker(argv) {
     shouldCancel
   }) : () => executeTaskRun({
     ...request,
+    runTask: request.engine === "opencode" ? runOpenCode : runAppServerTurn,
+    onSpawn: pid => {
+      patchJobFile(workspaceRoot, storedJob.id, { opencodePid: pid });
+      upsertJob(workspaceRoot, { id: storedJob.id, opencodePid: pid });
+    },
     onProgress: progress,
     shouldCancel
   });
@@ -1234,7 +1278,7 @@ async function handleResult(argv) {
 
 function handleTaskResumeCandidate(argv) {
   const { options } = parseCommandInput(argv, {
-    valueOptions: ["cwd"],
+    valueOptions: ["cwd", "engine"],
     booleanOptions: ["json"]
   });
 
@@ -1242,7 +1286,8 @@ function handleTaskResumeCandidate(argv) {
   const workspaceRoot = resolveCommandWorkspace(options);
   const sessionId = getCurrentClaudeSessionId();
   const jobs = filterJobsForCurrentClaudeSession(sortJobsNewestFirst(listJobs(workspaceRoot)));
-  const candidate = findLatestResumableTaskJob(jobs);
+  const engine = normalizeEngine(options.engine);
+  const candidate = findLatestResumableTaskJob(jobs, engine);
 
   const payload = {
     available: Boolean(candidate),
@@ -1256,6 +1301,7 @@ function handleTaskResumeCandidate(argv) {
             title: candidate.title ?? null,
             summary: candidate.summary ?? null,
             threadId: candidate.threadId,
+            ...(engine === "opencode" ? { engine } : {}),
             completedAt: candidate.completedAt ?? null,
             updatedAt: candidate.updatedAt ?? null
           }
@@ -1283,7 +1329,7 @@ async function handleCancel(argv) {
   const cancelRequestedAt = nowIso();
   patchJobFile(workspaceRoot, job.id, { cancelRequested: true, cancelRequestedAt });
   upsertJob(workspaceRoot, { id: job.id, cancelRequested: true, cancelRequestedAt });
-  appendLogLine(job.logFile, "Cancel requested - waiting for the Codex turn to stop safely.");
+  appendLogLine(job.logFile, `Cancel requested - waiting for the ${job.engine === "opencode" ? "OpenCode" : "Codex"} turn to stop safely.`);
 
   const grace = await waitForJobSettled(workspaceRoot, job.id, { timeoutMs: 5000, pollMs: 250 });
   if (grace.settled) {
@@ -1298,6 +1344,9 @@ async function handleCancel(argv) {
   }
 
   // Force stop: the worker owns its app-server, so killing its tree ends the turn.
+  // On Unix OpenCode has its own process group for safe tree cancellation.
+  // Stop that group too if its worker did not acknowledge the request.
+  if (job.engine === "opencode") terminateProcessTree(readStoredJob(workspaceRoot, job.id)?.opencodePid ?? Number.NaN);
   terminateProcessTree(job.pid ?? Number.NaN);
   appendLogLine(job.logFile, "Cancelled by user (forced).");
 
@@ -1305,6 +1354,7 @@ async function handleCancel(argv) {
   const nextJob = {
     ...job,
     status: "cancelled",
+    ...(job.engine === "opencode" ? { opencodePid: null } : {}),
     phase: "cancelled",
     pid: null,
     completedAt,
@@ -1319,6 +1369,7 @@ async function handleCancel(argv) {
   upsertJob(workspaceRoot, {
     id: job.id,
     status: "cancelled",
+    ...(job.engine === "opencode" ? { opencodePid: null } : {}),
     phase: "cancelled",
     pid: null,
     errorMessage: "Cancelled by user.",
@@ -1340,6 +1391,11 @@ async function main() {
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     printUsage();
     return;
+  }
+
+  if (subcommand !== "task" && subcommand !== "task-resume-candidate") {
+    const { options } = parseArgs(normalizeArgv(argv), { valueOptions: ["engine"] });
+    if (options.engine != null) throw new Error(`--engine is not supported by ${subcommand}. Use it with task or task-resume-candidate.`);
   }
 
   switch (subcommand) {

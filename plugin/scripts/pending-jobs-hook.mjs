@@ -66,13 +66,13 @@ export function buildPendingJobsReport(jobs, now, readStored = () => null) {
         continue;
       }
       detailed += 1;
-      lines.push(`${job.id}  ${job.status} ${age} ago  — ${job.title ?? "Codex job"}`);
+      lines.push(`${job.id}  ${job.engine === "opencode" ? "OpenCode task  " : ""}${job.status} ${age} ago  — ${job.title ?? "Codex job"}`);
       lines.push(...body.map((line) => `  ${line}`));
       const question = job.needsDecision ?? stored?.needsDecision;
       if (question) {
         const thread = job.threadId ?? stored?.threadId;
-        lines.push("  Codex asks:", ...question.split(/\r?\n/).map((line) => `    ${line}`));
-        lines.push(`  Follow the codex-result-handling skill before you answer.${thread ? ` Resume with --resume-thread ${thread}.` : ""}`);
+        lines.push(`  ${job.engine === "opencode" ? "OpenCode" : "Codex"} asks:`, ...question.split(/\r?\n/).map((line) => `    ${line}`));
+        lines.push(`  Follow the codex-result-handling skill before you answer.${thread ? ` Resume with ${job.engine === "opencode" ? "--engine opencode " : ""}--resume-thread ${thread}.` : ""}`);
       }
       lines.push(`  Full text: /codex:result ${job.id}`);
       continue;

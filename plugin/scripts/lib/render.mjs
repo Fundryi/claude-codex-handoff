@@ -103,7 +103,7 @@ function formatCodexResumeCommand(job) {
   if (!job?.threadId) {
     return null;
   }
-  return `codex resume ${job.threadId}`;
+  return job.engine === "opencode" ? `opencode -s ${job.threadId}` : `codex resume ${job.threadId}`;
 }
 
 function appendActiveJobsTable(lines, jobs) {
@@ -136,11 +136,11 @@ function pushJobDetails(lines, job, options = {}) {
     lines.push(`  Duration: ${job.duration}`);
   }
   if (job.threadId) {
-    lines.push(`  Codex session ID: ${job.threadId}`);
+    lines.push(`  ${job.engine === "opencode" ? "OpenCode" : "Codex"} session ID: ${job.threadId}`);
   }
   const resumeCommand = formatCodexResumeCommand(job);
   if (resumeCommand) {
-    lines.push(`  Resume in Codex: ${resumeCommand}`);
+    lines.push(`  Resume in ${job.engine === "opencode" ? "OpenCode" : "Codex"}: ${resumeCommand}`);
   }
   if (job.logFile && options.showLog) {
     lines.push(`  Log: ${job.logFile}`);
@@ -367,14 +367,15 @@ export function formatRecordedEdits(touchedFiles) {
 }
 
 export function renderTaskResult(parsedResult, meta) {
+  const label = meta?.engine === "opencode" ? "OpenCode" : "Codex";
   const rawOutput = typeof parsedResult?.rawOutput === "string" ? parsedResult.rawOutput : "";
   if (rawOutput) {
     const parts = [rawOutput.trimEnd(), formatRecordedEdits(meta?.touchedFiles)];
-    if (meta?.threadId) parts.push(`Codex thread: ${meta.threadId}`);
+    if (meta?.threadId) parts.push(`${label} thread: ${meta.threadId}`);
     return `${parts.filter(Boolean).join("\n\n")}\n`;
   }
 
-  const message = String(parsedResult?.failureMessage ?? "").trim() || "Codex did not return a final message.";
+  const message = String(parsedResult?.failureMessage ?? "").trim() || `${label} did not return a final message.`;
   return `${message}\n`;
 }
 
@@ -431,7 +432,7 @@ export function renderStatusReport(report) {
 }
 
 export function renderJobStatusReport(job) {
-  const lines = ["# Codex Job Status", ""];
+  const lines = [`# ${job.engine === "opencode" ? "OpenCode" : "Codex"} Job Status`, ""];
   pushJobDetails(lines, job, {
     showElapsed: job.status === "queued" || job.status === "running",
     showDuration: job.status !== "queued" && job.status !== "running",
@@ -445,13 +446,14 @@ export function renderJobStatusReport(job) {
 
 export function renderStoredJobResult(job, storedJob) {
   const threadId = storedJob?.threadId ?? job.threadId ?? null;
-  const resumeCommand = threadId ? `codex resume ${threadId}` : null;
+  const label = (storedJob?.engine ?? job.engine) === "opencode" ? "OpenCode" : "Codex";
+  const resumeCommand = threadId ? formatCodexResumeCommand({ ...job, engine: storedJob?.engine ?? job.engine, threadId }) : null;
   if (isStructuredReviewStoredResult(storedJob) && storedJob?.rendered) {
     const output = storedJob.rendered.endsWith("\n") ? storedJob.rendered : `${storedJob.rendered}\n`;
     if (!threadId) {
       return output;
     }
-    return `${output}\nCodex session ID: ${threadId}\nResume in Codex: ${resumeCommand}\n`;
+    return `${output}\n${label} session ID: ${threadId}\nResume in ${label}: ${resumeCommand}\n`;
   }
 
   const rawOutput =
@@ -465,7 +467,7 @@ export function renderStoredJobResult(job, storedJob) {
     if (!threadId) {
       return output;
     }
-    return `${output}\nCodex session ID: ${threadId}\nResume in Codex: ${resumeCommand}\n`;
+    return `${output}\n${label} session ID: ${threadId}\nResume in ${label}: ${resumeCommand}\n`;
   }
 
   if (storedJob?.rendered) {
@@ -473,7 +475,7 @@ export function renderStoredJobResult(job, storedJob) {
     if (!threadId) {
       return output;
     }
-    return `${output}\nCodex session ID: ${threadId}\nResume in Codex: ${resumeCommand}\n`;
+    return `${output}\n${label} session ID: ${threadId}\nResume in ${label}: ${resumeCommand}\n`;
   }
 
   const lines = [
@@ -484,8 +486,8 @@ export function renderStoredJobResult(job, storedJob) {
   ];
 
   if (threadId) {
-    lines.push(`Codex session ID: ${threadId}`);
-    lines.push(`Resume in Codex: ${resumeCommand}`);
+    lines.push(`${label} session ID: ${threadId}`);
+    lines.push(`Resume in ${label}: ${resumeCommand}`);
   }
 
   if (job.summary) {

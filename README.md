@@ -1,12 +1,13 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="AI Live Viewer logo" width="110">
+  <img src="assets/logo.svg" alt="Claude Codex Handoff logo" width="110">
 </p>
 
-<h1 align="center">AI Live Viewer</h1>
+<h1 align="center">Claude Codex Handoff</h1>
 
 <p align="center">
-  Delegate coding tasks from <a href="https://claude.com/claude-code">Claude Code</a> to the <a href="https://github.com/openai/codex">OpenAI Codex CLI</a> and get the results back.<br>
-  Watch Codex, Claude and OpenCode sessions in one live dashboard. The bundled fork of the official <code>codex</code> plugin keeps Codex jobs alive through restarts and lets you resume or cancel them.<br>
+  Delegate coding tasks from <a href="https://claude.com/claude-code">Claude Code</a> to the <a href="https://github.com/openai/codex">OpenAI Codex CLI</a> or <a href="https://opencode.ai">OpenCode</a> and get the results back.<br>
+  Claude plans, Codex does the work.<br>
+  Watch Codex, Claude and OpenCode sessions in the live dashboard (AI Live Viewer). The bundled fork of the official <code>codex</code> plugin keeps companion jobs alive through restarts and lets you resume or cancel them.<br>
   Works in the terminal and in VS Code.
 </p>
 
@@ -118,7 +119,18 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 
 ## OpenCode sessions
 
-AI Live Viewer shows recent OpenCode TUI chats, `opencode run` sessions and child sessions in the project tree. Open a session to read its messages, reasoning, tool output, model, token counts and cost in the shared feed. Children sit under their parent. The viewer uses OpenCode idle records and update times for status. It has no OpenCode resume or cancel controls.
+AI Live Viewer shows recent OpenCode TUI chats, `opencode run` sessions and child sessions in the project tree. Open a session to read its messages, reasoning, tool output, model, token counts and cost in the shared feed. Children sit under their parent. The viewer uses OpenCode idle records and update times for status. Tracked OpenCode tasks have Resume and Cancel controls. Other OpenCode sessions are read only.
+
+## Hand off to OpenCode
+
+Install the OpenCode CLI and run `opencode` once to set it up. Then use:
+
+```text
+/codex:handoff --engine opencode Explain the retry logic. Do not edit files.
+/codex:handoff --engine opencode --model provider/model#variant Fix the retry logic.
+```
+
+The companion runs OpenCode as a detached job with its own process. Status, result, cancel and prompt-hook delivery work the same way as for Codex. Resume with `--resume` or `--resume-thread <ses_id>`. The [runtime skill](plugin/skills/codex-cli-runtime/SKILL.md) owns the engine, model, variant and write rules.
 
 The database is read only. The viewer reads only `session_v2` and `session_message`. It does not read account or credential tables. A read-only WAL connection can touch the `-shm` file. Transcripts use the same trusted-origin gate as Claude transcripts.
 

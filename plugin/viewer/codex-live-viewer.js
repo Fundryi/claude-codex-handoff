@@ -700,6 +700,7 @@ const DEFAULT_RESUME_PROMPT = "Continue the previous task where it left off and 
 
 function buildCompanionTaskArgs(body) {
   const args = ["task", "--background", "--json", "--cwd", body.cwd];
+  if (body.engine === "opencode") args.push("--engine", "opencode");
   if (body.effort) args.push("--effort", String(body.effort));
   if (body.model) args.push("-m", String(body.model));
   if (body.write) args.push("--write");
@@ -1249,7 +1250,7 @@ function opencodeSessionView(row, now) {
   const idle = row.newest_type === "idle" || (row.time_idle != null && row.time_idle >= row.time_updated);
   const outcome = row.idle_outcome || row.newest_outcome || "";
   const state = idle ? (outcome === "succeeded" ? "done" : outcome === "failed" ? "failed" : "stopped")
-    : now - row.time_updated < STUCK_AFTER_MS ? "running" : "quiet";
+    : now - row.time_updated < STUCK_AFTER_MS ? "running" : "ended";
   return { id: "opencode:" + row.id, sessionId: row.id, parentId: row.parent_id ? "opencode:" + row.parent_id : null,
     title: row.title || "OpenCode session", cwd: row.directory || "", project: path.basename((row.directory || "").replace(/\\/g, "/")),
     model: [model.providerID, model.id].filter(x => typeof x === "string" && x).join("/"), effort: typeof model.variant === "string" ? model.variant : "",
@@ -1381,14 +1382,22 @@ function opencodeTranscriptPage(id, offset) {
       FROM session_v2 s WHERE s.id = ?`).get(id);
     if (!row) return null;
     // Re-read the last seq: OpenCode updates streamed assistant rows in place.
-    const rows = db.prepare("SELECT type, seq, time_created, data FROM session_message WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT 101").all(id, offset);
-    const more = rows.length > 100;
+    const first = offset == null;
+    const rows = first
+      ? db.prepare("SELECT type, seq, time_created, data FROM session_message WHERE session_id = ? ORDER BY seq DESC LIMIT 200").all(id).reverse()
+      : db.prepare("SELECT type, seq, time_created, data FROM session_message WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT 101").all(id, offset);
+    const more = !first && rows.length > 100;
     if (more) rows.pop();
     const events = rows.flatMap(r => opencodeTranscriptEvents(r).map(e => ({ ...e, seq: r.seq })));
     const chat = opencodeSessionView(row, Date.now());
-    const last = rows.length ? rows[rows.length - 1].seq : offset;
+    const last = rows.length ? rows[rows.length - 1].seq : offset || 0;
+    const context = db.prepare(`SELECT COALESCE(json_extract(data, '$.tokens.input'), 0)
+      + COALESCE(json_extract(data, '$.tokens.cache.read'), 0)
+      + COALESCE(json_extract(data, '$.tokens.cache.write'), 0) AS contextTokens
+      FROM session_message WHERE session_id = ? AND type = 'assistant'
+      AND json_type(data, '$.tokens') = 'object' ORDER BY seq DESC LIMIT 1`).get(id);
     return { events, offset: last + (more ? 1 : 0), more, replaceFrom: rows.length ? rows[0].seq : null,
-      state: chat.state, model: chat.model, effort: chat.effort };
+      contextTokens: context?.contextTokens || 0, state: chat.state, model: chat.model, effort: chat.effort };
   } catch { opencodeClose(); return null; }
 }
 
@@ -1529,10 +1538,10 @@ function claudeLineFacts(line) {
 function claudeLauncherIds(text) {
   const t = String(text || "");
   // The companion ends its result with its own ids; any other id in the text may be one Codex only mentioned.
-  const own = [...t.matchAll(/Codex job: ((?:task|review)-[a-z0-9]{6,12}-[a-z0-9]{4,8})(?: · thread: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?/gi)].pop();
-  if (own) return { jobIds: [own[1]], threadIds: own[2] ? [own[2].toLowerCase()] : [] };
+  const own = [...t.matchAll(/(?:Codex|OpenCode) job: ((?:task|review)-[a-z0-9]{6,12}-[a-z0-9]{4,8})(?: · thread: (ses_[A-Za-z0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?/gi)].pop();
+  if (own) return { jobIds: [own[1]], threadIds: own[2] ? [own[2].startsWith("ses_") ? own[2] : own[2].toLowerCase()] : [] };
   const jobIds = [...new Set([...t.matchAll(/\b((?:task|review)-[a-z0-9]{6,12}-[a-z0-9]{4,8})\b/g)].map((m) => m[1]))];
-  const threadIds = [...new Set([...t.matchAll(/(?:Codex session ID:|thread:|codex resume)\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi)].map((m) => m[1].toLowerCase()))];
+  const threadIds = [...new Set([...t.matchAll(/(?:OpenCode session ID:|OpenCode thread:|--resume-thread|Codex session ID:|thread:|codex resume)\s*(ses_[A-Za-z0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi)].map((m) => m[1].startsWith("ses_") ? m[1] : m[1].toLowerCase()))];
   return { jobIds, threadIds };
 }
 
@@ -2359,10 +2368,14 @@ const server = http.createServer((req, res) => {
     if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     readJsonBody(req, body => {
       if (!body || !body.threadId || !isUsableDir(body.cwd)) return jsonReply(res, 400, { ok: false, error: "threadId and existing cwd required" });
-      const liveJob = listCompanionJobs(true).find(j => j.threadId === body.threadId && pidAlive(j.pid));
+      const threadJobs = listCompanionJobs(true).filter(j => j.threadId === body.threadId);
+      const engine = threadJobs[0]?.engine || body.engine || "codex";
+      if (body.engine && body.engine !== engine) return jsonReply(res, 400, { ok: false, error: "engine does not match this job's thread" });
+      const liveJob = threadJobs.find(j => (j.engine || "codex") === engine && pidAlive(j.pid));
       if (liveJob) return jsonReply(res, 409, { ok: false, error: "job " + liveJob.id + " is still running on this thread - stop it first" });
       handleLaunch(res, body, buildCompanionTaskArgs({
         ...body,
+        engine,
         resumeThreadId: body.threadId,
         prompt: body.prompt || DEFAULT_RESUME_PROMPT,
       }));
@@ -2394,8 +2407,8 @@ const server = http.createServer((req, res) => {
     if (req.method !== "GET") { res.writeHead(405); return res.end("GET only"); }
     if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
     const u = new URL(req.url, "http://local");
-    const offset = Math.max(0, Number(u.searchParams.get("offset")) || 0);
-    const page = Number.isSafeInteger(offset) && opencodeTranscriptPage(u.searchParams.get("session") || "", offset);
+    const offset = u.searchParams.has("offset") ? Number(u.searchParams.get("offset")) : null;
+    const page = (offset == null || (Number.isSafeInteger(offset) && offset >= 0)) && opencodeTranscriptPage(u.searchParams.get("session") || "", offset);
     res.setHeader("Cache-Control", "no-store");
     jsonReply(res, page ? 200 : 404, page ? { ok: true, ...page } : { ok: false, error: "transcript not found" });
   } else if (/^\/claude\/(?:agent|run|transcript)(?:\?|$)/.test(req.url)) {
