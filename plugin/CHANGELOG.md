@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.23.1
+
+- **The release files use the new name.** The tray downloads are now `AI-Live-Viewer-Windows-x64.zip` and `AI-Live-Viewer-Linux-x64.zip`. The Windows app is `AI Live Viewer.exe`, and Task Manager shows it as AI Live Viewer. The Linux app is `ai-live-viewer-tray`. Releases up to 2.23.0 keep their old file names.
+- **If you start the old tray app with a shortcut, update it.** The tray does not register itself to start with Windows, so the update changes nothing by itself. Unzip the new release and point your own shortcut at `AI Live Viewer.exe`. The server file is still `codex-live-viewer.js`, and all settings stay the same.
+- **Tests:** no test was added or removed. This release changes only file names and the Windows file details.
+
 ## 2.23.0
 
 - **The Live overview is a calm list, not cards.** Each job is one line: who works (the Claude, Codex or OpenCode icon), the title, the project, what it does now, its state and its age. Groups are Running, Needs you and Needs attention. Finished work sits behind one line, "N finished today · show". Model names, effort, token counts and the FAST flag left the rows; they show when you hover a row and on the opened page.

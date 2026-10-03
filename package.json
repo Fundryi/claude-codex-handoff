@@ -1,6 +1,6 @@
 {
   "name": "claude-codex-handoff",
-  "version": "2.23.0",
+  "version": "2.23.1",
   "private": true,
   "description": "Delegate coding tasks from Claude Code to the OpenAI Codex CLI and get the results back. Codex plugin fork with jobs that survive restarts, plus a live dashboard to watch, resume and cancel Codex runs.",
   "main": "codex-live-viewer.js",
