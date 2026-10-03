@@ -1,6 +1,6 @@
 # UI theme
 
-Codex Live Viewer is a compact task monitor. It should feel calm while work is progressing and make changes in task state obvious without moving controls around.
+AI Live Viewer is a compact task monitor. It should feel calm while work is progressing and make changes in task state obvious without moving controls around.
 
 The design base is the owner's reference image `.superpowers/workspace.png` (OctoShell, 1920x1032: three rounded cards on a near-black backdrop, one violet for structure, a few small status colors). **The image beats the mockup and this document wherever they differ.** Every meaning color (status, actor, structure, project) keeps one meaning each. The `:root` block in `viewer-ui.html` is the one owner of the values.
 
@@ -140,6 +140,7 @@ Actor color says who sent a feed message, never a status. The avatar shape (fill
 | You | Pink `--you` `#f28fbf` | `you` | A message you typed in a Codex session or a chat |
 | You, relayed | Pink, dashed ring avatar, tag "relayed answer" | `you` | Your answer delivered through Claude or the answer box |
 | Claude | Clay `--claude` `#e0825e` | `claude` | A handoff prompt (tag "handoff"), Claude's own answer, or a chat reply (Claude → You) |
+| OpenCode | Periwinkle `--opencode` `#aabcf8` (dark), `#36519e` (light) | `opencode` | OpenCode replies and work. The light token uses the `data-theme="light"` override. |
 | Claude work | Clay ring dot, indented work rows | `claude` | A chat's own tool calls and thinking (`.actor-claude-work`) |
 | Plugin | Lime `--plugin` `#c3e88d` | `plugin` | The return-format footer the plugin appends to a handoff prompt |
 | Codex | Teal `--codex` `#4fd1bd` | `codex` | Codex replies; tag "asks you" when the reply has a question |
@@ -172,6 +173,7 @@ One SVG set (`GL` in `viewer-ui.html`: `claude`, `codex`, `flow`, `ghost`, `you`
 |---|---|---|---|
 | Claude chat | filled clay, `claude` | Claude chat | `k-claude` |
 | Claude agent | clay ring, `claude` | Claude agent | `k-claude` |
+| OpenCode chat | filled periwinkle, `opencode`; a child uses a ring | OpenCode chat | `k-opencode` |
 | Workflow | filled clay, `flow` | workflow | `k-claude` |
 | Workflow agent | clay ring, `flow` | workflow agent | `k-claude` |
 | Handoff | filled teal, `codex` | Handoff, with the clay `claude` starter glyph | `k-codex` |

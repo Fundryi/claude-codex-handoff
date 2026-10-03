@@ -7,6 +7,43 @@ const vm = require("node:vm");
 const src = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
 const simplifySrc = src.match(/function simplify\(line\) \{[\s\S]*?\n\}/)[0];
 
+test("OpenCode rows preserve messages, tool output and finish while ignoring unknown data", () => {
+  const parser = src.match(/function opencodeTranscriptEvents\(row\) \{[\s\S]*?\n\}/);
+  assert.ok(parser, "OpenCode row parser exists");
+  const c = {};
+  vm.runInNewContext(parser[0], c);
+  const row = (type, data) => ({ type, seq: 3, time_created: 1700000000000, data: JSON.stringify(data) });
+  const events = c.opencodeTranscriptEvents;
+  assert.equal(events(row("user", { text: "Check it" }))[0].text, "Check it");
+  const assistant = events(row("assistant", {
+    model: { providerID: "local", id: "model", variant: "high" }, cost: 0.02,
+    tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 6, write: 1 } },
+    content: [null, { type: "text", text: "Done" }, { type: "reasoning", text: "Check first" },
+      { type: "tool", id: "call1", name: "shell", state: { status: "completed", input: { command: "echo OK" }, content: [{ type: "text", text: "OK" }], metadata: { exit: 0 } } },
+      { type: "tool", id: "call2", name: "subagent", state: { status: "completed", input: { prompt: "Check" }, output: "Child done", metadata: { sessionID: "ses_child" } } },
+      { type: "future", secret: "skip" }]
+  }));
+  assert.equal(Array.from(assistant, e => e.kind).join(","), "agent,think,cmd,tool,meta");
+  assert.equal(assistant[2].text, "echo OK");
+  assert.equal(assistant[2].detail, "OK");
+  assert.equal(assistant[2].callId, "call1");
+  assert.equal(assistant[2].done, true);
+  assert.equal(assistant[3].sessionId, "ses_child");
+  assert.equal(assistant[3].detail, "Child done");
+  assert.equal(assistant[4].model, "local/model");
+  assert.equal(assistant[4].effort, "high");
+  assert.equal(assistant[4].tokens, 17);
+  assert.equal(assistant[4].cost, 0.02);
+  assert.equal(events(row("idle", { outcome: "succeeded" }))[0].kind, "done");
+  assert.equal(events(row("idle", { outcome: "failed" }))[0].text, "failed");
+  assert.equal(events(row("assistant", { error: { name: "APIError", data: { message: "Bad request" } } }))[0].text, "Bad request");
+  assert.equal(events(row("system", { text: "Context" }))[0].internal, true);
+  for (const r of [row("unknown", { text: "skip" }), row("assistant", { content: {} }), { type: "user", data: "broken" }, null]) {
+    assert.doesNotThrow(() => events(r));
+  }
+  assert.equal(events(row("unknown", { text: "skip" })).length, 0);
+});
+
 function ctx() {
   const c = {};
   vm.runInNewContext(simplifySrc, c);

@@ -1,5 +1,5 @@
 ---
-description: Open the Codex Live Viewer dashboard (starts it if needed; restart, stop, kill or status)
+description: Open the AI Live Viewer dashboard (starts it if needed; restart, stop, kill or status)
 argument-hint: "[restart|stop|kill|status]"
 allowed-tools: Bash(node:*)
 ---

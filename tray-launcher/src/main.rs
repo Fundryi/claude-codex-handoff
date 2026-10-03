@@ -234,7 +234,7 @@ fn main() {
 
     let mut tray: Option<TrayIcon> = None;
     let mut viewer_running = true;
-    println!("[OK] Codex Live Viewer tray running. URL: {url}");
+    println!("[OK] AI Live Viewer tray running. URL: {url}");
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
@@ -243,7 +243,7 @@ fn main() {
             Event::NewEvents(StartCause::Init) => {
                 match TrayIconBuilder::new()
                     .with_menu(Box::new(menu.clone()))
-                    .with_tooltip(format!("Codex Live Viewer ({url})"))
+                    .with_tooltip(format!("AI Live Viewer ({url})"))
                     .with_icon(viewer_icon())
                     .build()
                 {
@@ -399,7 +399,7 @@ fn listen_for_notifications(port: u16, proxy: &EventLoopProxy<UserEvent>) -> std
 
 fn show_completion(title: &str) {
     if let Err(error) = Notification::new()
-        .appname("Codex Live Viewer")
+        .appname("AI Live Viewer")
         .summary("Codex task complete")
         .body(title)
         .show()
@@ -418,16 +418,16 @@ fn show_viewer_stopped(reason: Option<&str>) {
         },
     );
     let _ = Notification::new()
-        .appname("Codex Live Viewer")
-        .summary("Codex Live Viewer stopped")
+        .appname("AI Live Viewer")
+        .summary("AI Live Viewer stopped")
         .body(&body)
         .show();
 }
 
 fn show_viewer_restarted() {
     let _ = Notification::new()
-        .appname("Codex Live Viewer")
-        .summary("Codex Live Viewer restarted")
+        .appname("AI Live Viewer")
+        .summary("AI Live Viewer restarted")
         .body("The local dashboard is available again.")
         .show();
 }
@@ -496,9 +496,9 @@ fn update_tray_state(
 
     if let Some(tray) = tray {
         let tooltip = if running {
-            format!("Codex Live Viewer ({url})")
+            format!("AI Live Viewer ({url})")
         } else {
-            "Codex Live Viewer stopped — use Restart viewer".into()
+            "AI Live Viewer stopped. Use Restart viewer".into()
         };
         let _ = tray.set_tooltip(Some(tooltip));
         let _ = tray.set_icon(Some(if running {
@@ -517,7 +517,7 @@ fn fail(message: &str) -> ! {
 
 #[cfg(target_os = "windows")]
 fn show_error(message: &str) {
-    let title: Vec<u16> = "Codex Live Viewer\0".encode_utf16().collect();
+    let title: Vec<u16> = "AI Live Viewer\0".encode_utf16().collect();
     let text: Vec<u16> = format!("{message}\0").encode_utf16().collect();
     unsafe {
         MessageBoxW(
@@ -531,7 +531,7 @@ fn show_error(message: &str) {
 
 #[cfg(not(target_os = "windows"))]
 fn show_error(message: &str) {
-    eprintln!("Codex Live Viewer: {message}");
+    eprintln!("AI Live Viewer: {message}");
 }
 
 #[cfg(test)]

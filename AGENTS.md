@@ -1,6 +1,8 @@
-# Codex Control Panel — Agent Guide
+# AI Live Viewer - Agent Guide
 
 Browser dashboard + control panel for local OpenAI Codex CLI sessions (including headless handoffs), bundled with our own fork of the `codex` Claude Code plugin. Follows `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, streams activity to the browser over SSE, and can resume or cancel Codex jobs (and answer a question by resuming) through the bundled plugin's companion script. It does not start new runs; those come from Claude or a Codex CLI.
+
+The same tree shows Claude chats and OpenCode TUI, CLI and child sessions. Claude and OpenCode transcripts are read only and use the shared feed renderer.
 
 ## Layout
 
@@ -16,8 +18,9 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 
 ## Hard rules
 
-- **Zero npm dependencies.** Node stdlib only (`node >= 22`; requirements always track a current LTS, never an EOL line). Never add a package.
+- **Zero npm dependencies.** Node stdlib only (`node >= 22.13`; requirements always track a current LTS, never an EOL line). Never add a package.
 - Server stays one file, UI stays one file. No build step for the Node side.
+- OpenCode is read only. Use a lazy, guarded `node:sqlite` load and `DatabaseSync` with `readOnly: true`. Query only `session_v2` and `session_message`, with explicit columns. The same DB holds OAuth tokens and credentials in other tables. Do not query those tables or send their data to a browser or log. Reuse the handle until the file identity changes or a query fails. Poll on the Claude cadence, including its no-browser slow mode. Pull bounded transcript pages by `seq` behind `trustedControlOrigin`. Do not write, checkpoint, or run write PRAGMAs. A read-only WAL connection can touch the `-shm` file; this is accepted.
 - The viewer never *edits* Codex session files or anything under `~/.codex`. `~/.claude` is read-only the same way: the viewer polls the chat, subagent and workflow run files under `~/.claude/projects` (no `fs.watch`, never runs a workflow script, never reads a whole chat file on a timer) and serves their transcripts only behind `trustedControlOrigin`, the gate of `/jobs`. From Claude Code's state file (`~/.claude.json`, or `.claude.json` in `CLAUDE_CONFIG_DIR`) it reads only `cachedUsageUtilization`; the file also holds OAuth and MCP settings, so nothing else from it ever reaches the browser or a log. The newer source for the 5-hour and 7-day windows is `~/.codex-companion/claude-limits.json`, written by the plugin's status line script (`plugin/scripts/claude-statusline.mjs`, only the two documented `rate_limits` windows); the session hook keeps a copy of that script at `~/.codex-companion/claude-statusline.mjs`, and the user's own `statusLine` setting points there (a plugin cannot set it). It DOES spawn codex via `plugin/scripts/codex-companion.mjs` (resume/cancel, and the read-only `limits` read: every 5 min only while a browser is connected, and when a job ends) and shares plugin job state at `~/.codex-companion/state`. All state-changing endpoints are POST, origin-guarded (`trustedControlOrigin`), and confirmed in-app — never `window.confirm`/`alert`.
 - Recovery is flag-only: the classifier marks jobs working / possibly-stuck / dead; the user clicks Resume. No auto-resume, no auto-kill. The one permitted automatic state write is liveness bookkeeping — a `queued`/`running` record whose pid is gone is reconciled to `failed` on read (`reconcileDeadJobs`), because nothing else will ever correct it and a frozen record permanently jams `/codex:result`.
   This covers dead or stuck jobs. When Claude answers a Codex "Needs decision" question and resumes that thread (`codex-result-handling` skill), that is a new handoff Claude chooses, not recovery.
@@ -39,6 +42,7 @@ Browser dashboard + control panel for local OpenAI Codex CLI sessions (including
 | `CODEX_VIEWER_ALLOWED_HOSTS` | (none) | Comma list of reverse-proxy names trusted by `controlHosts`; when set, the default bind becomes `0.0.0.0` |
 | `CODEX_VIEWER_AUTOSTART` | `1` | Set to `0` to disable SessionStart viewer autostart |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Where the viewer reads Claude chats, subagents and workflow runs (`projects/`), live processes (`sessions/`) and, when set, `.claude.json` for plan usage |
+| `OPENCODE_DB` | `$XDG_DATA_HOME/opencode/opencode.db` or `~/.local/share/opencode/opencode.db` | OpenCode sessions and messages, read only; same default on Windows |
 
 ## Commands
 

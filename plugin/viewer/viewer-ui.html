@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Codex Live Viewer</title>
+  <title>AI Live Viewer</title>
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
   <style>
     /* Tokens (docs/UI-THEME.md, design spec 9.1). Base colors come from the owner's reference image;
@@ -43,6 +43,7 @@
       --claude: #e0825e;
       --plugin: #c3e88d;
       --codex: #4fd1bd;
+      --opencode: #aabcf8;
       --codex-lead: #9ae0d4;       /* a lead agent writing to its child: Codex family, lighter, ring avatar */
       --system: #8087a8;
       /* meters */
@@ -68,6 +69,7 @@
     /* wide screens (2K, 4K at scale 1): the sidebar grows, and the side panel takes the width beyond the content column */
     @media (min-width: 2200px) { :root { --sidebar-width: 400px; --panel-w: clamp(560px, calc(var(--main-w) - var(--content-max) - 32px), 1400px); } }
 
+    :root[data-theme="light"] { --opencode: #36519e; }
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; }
     /* Three rounded cards on the backdrop (reference): the sidebar, the main pane and the side panel, with a gutter between. */
@@ -366,6 +368,7 @@
     .mark.ring { border: 1.5px solid var(--k); background: transparent; }
     .mark.ghost { border: 1.5px dashed var(--k); background: transparent; }
     .k-claude { --k: var(--claude); }
+    .k-opencode { --k: var(--opencode); }
     .k-codex { --k: var(--codex); }
     .k-system { --k: var(--system); }
     /* kind word: the color is the actor who does the work. A starter glyph shows only when the starter is someone else. */
@@ -633,6 +636,7 @@
        actor color of whose task it is: Codex teal, Claude clay. Never a status color. */
     #task-facts { --fact-accent: var(--codex); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; min-width: 0; }
     #task-facts.claude { --fact-accent: var(--claude); }
+    #task-facts.opencode { --fact-accent: var(--opencode); }
     #task-facts + #task-meta { margin-top: 6px; }
     .fact { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--r-chip); background: transparent; color: var(--fg); font-size: 11px; white-space: nowrap; }
     .fact .fact-key, .fact .dim { color: var(--muted); font-weight: 400; white-space: nowrap; }
@@ -650,6 +654,7 @@
     .ucell b { color: var(--fg); font-weight: 600; }
     .ucell .lab { text-transform: uppercase; font-size: 9px; letter-spacing: .05em; color: var(--faint); font-weight: 700; }
     .ucell .sc { color: var(--claude); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+    .ucell .so { color: var(--opencode); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
     .ucell .sp { color: var(--codex); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
     .ucell .g { width: 12px; height: 12px; } .ucell .g svg { width: 10px; height: 10px; }
     .ucell.lower b::before { content: '\2265\00a0'; color: var(--muted); font-weight: 400; }
@@ -918,6 +923,10 @@
     .actor-you { --actor: var(--you); }
     .actor-relay { --actor: var(--you); }
     .actor-claude { --actor: var(--claude); }
+    .actor-opencode, .actor-opencode-work { --actor: var(--opencode); }
+    .actor-opencode-work .avatar { background: transparent; color: var(--opencode); box-shadow: inset 0 0 0 1.5px var(--opencode); }
+    .legend-item.actor-opencode-work::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--opencode); }
+    body:not(.opencode-page) .opencode-only, body.opencode-page .claude-chat-only { display: none !important; }
     .actor-plugin { --actor: var(--plugin); }
     .actor-codex, .actor-work { --actor: var(--codex); }
     .actor-system { --actor: var(--system); }
@@ -1179,7 +1188,7 @@
     <div id="brand">
       <img id="brand-mark" src="/logo.svg" alt="">
       <div id="brand-copy">
-        <div id="brand-title">Codex Live Viewer</div>
+        <div id="brand-title">AI Live Viewer</div>
         <div id="brand-subtitle"><span id="connection"><span id="connection-dot"></span><span id="connection-text">Connecting</span></span></div>
       </div>
       <button id="hide-side" class="icon-button" type="button" title="Collapse session list" aria-label="Collapse session list">&#x2039;</button>
@@ -1230,8 +1239,10 @@
         <span class="legend-item actor-work codex-only" title="Codex work: thinking, commands, output, patches and tools">Codex work</span>
         <span class="legend-item actor-system codex-only" title="System: injected context and hook text, collapsed">System</span>
         <span class="legend-item actor-you chat-only" title="You: what you typed in this chat">You</span>
-        <span class="legend-item actor-claude chat-only" title="Claude: its replies to you">Claude</span>
-        <span class="legend-item actor-chat-work chat-only" title="Claude work: tool calls, output and thinking">Claude work</span>
+        <span class="legend-item actor-claude chat-only claude-chat-only" title="Claude: its replies to you">Claude</span>
+        <span class="legend-item actor-chat-work chat-only claude-chat-only" title="Claude work: tool calls, output and thinking">Claude work</span>
+        <span class="legend-item actor-opencode opencode-only" title="OpenCode replies">OpenCode</span>
+        <span class="legend-item actor-opencode-work opencode-only" title="OpenCode tools, output and thinking">OpenCode work</span>
         <span class="legend-item actor-system chat-only" title="System: injected context and hook text, collapsed">System</span>
         <span class="legend-item actor-workflow-script claude-only" title="Workflow script: the prompt a Claude workflow script gave this agent">Workflow script</span>
         <span class="legend-item actor-claude-agent claude-only" title="Claude agent: the replies of an agent a Claude workflow started (not Codex)">Claude agent</span>
@@ -1350,6 +1361,7 @@
     // The unified tree: Claude chats (claudeChats frame) joined with runs, jobs and Codex sessions.
     // dataVersion moves on every data update, so currentModel() rebuilds only when something changed.
     var claudeChats = { chats: [], ghosts: [] };
+    var opencodeChats = { chats: [] };
     var claudeChatsLoaded = false;
     var claudeUsage = null; // Claude plan limits (claudeUsage frame), or null
     var dataVersion = 0;
@@ -1761,6 +1773,12 @@
     // originator is Claude Code; the two answer prefixes win over that. Nothing else is guessed.
     function messageActor(event, session) {
       if (!event) return 'system';
+      if (session && session.source === 'opencode') {
+        if (event.internal || event.kind === 'sysgroup') return 'system';
+        if (['cmd', 'out', 'patch', 'tool', 'think', 'thinkgroup'].indexOf(event.kind) !== -1) return 'opencode-work';
+        if (['done', 'err', 'sys', 'meta'].indexOf(event.kind) !== -1) return 'status';
+        return event.kind === 'agent' ? 'opencode' : event.kind === 'user' ? 'you' : 'system';
+      }
       if (session && session.source === 'claude') return claudeActor(event);
       if (session && (session.source === 'chat' || session.source === 'agent')) {
         var chatKind = event.kind;
@@ -1791,6 +1809,7 @@
     }
     // Who a message goes to: everything incoming goes to Codex; Codex answers whoever started the session.
     function messageRoute(actor, session) {
+      if (session && session.source === 'opencode') return actor === 'opencode' ? { from: actor, to: 'you' } : { from: actor, to: 'opencode' };
       // A Claude workflow transcript never names Codex: the script prompts the agent, the agent answers it.
       if (session && session.source === 'claude') {
         return actor === 'claude-agent' ? { from: 'claude-agent', to: 'workflow-script' } : { from: actor, to: 'claude-agent' };
@@ -2541,7 +2560,7 @@
     function rowHandoffKey(row) {
       return row.threadId || (row.job ? row.job.id : '') || (row.session ? row.session.id : '');
     }
-    function buildNodes(frame, runs, rows, jobs, now) {
+    function buildNodes(frame, runs, rows, jobs, now, openFrame) {
       frame = frame || { chats: [], ghosts: [] };
       var nodes = {};
       var roots = [];
@@ -2557,6 +2576,16 @@
         node.parentId = parent.id;
         parent.children.push(node.id);
       }
+      (openFrame && openFrame.chats || []).forEach(function (chat) {
+        add({ id: chat.id, kind: 'opencode', chat: chat, title: chat.title, state: claudeNodeState('agent', chat.state === 'quiet' ? 'failed' : chat.state),
+          project: chat.project, model: chat.model, effort: chat.effort, startedMs: chat.startedMs, updatedMs: chat.updatedMs, usage: chat.usage });
+      });
+      (openFrame && openFrame.chats || []).forEach(function (chat) {
+        var parent = chat.parentId, seen = {};
+        seen[chat.id] = true;
+        while (parent && nodes[parent] && !seen[parent]) { seen[parent] = true; parent = nodes[parent].chat.parentId; }
+        attach(nodes[chat.id], parent && seen[parent] ? null : chat.parentId);
+      });
       // Which chat a Codex thread belongs to by job.sessionId (any job on the thread, scope rule 5).
       var threadChat = {};
       (jobs || []).forEach(function (job) {
@@ -2720,9 +2749,10 @@
         n.rollup = n.state;
         n.states = {};
         n.states[n.state] = true;
-        var claude = 0, codex = 0, partial = !n.usage, total = n.usage ? n.usage.total || 0 : 0;
+        var claude = 0, codex = 0, opencode = 0, partial = !n.usage, total = n.usage ? n.usage.total || 0 : 0;
         if (n.usage && n.usage.partial) partial = true;
-        if (n.kind === 'handoff' || n.kind === 'codex' || n.kind === 'codexagent') codex += total; else claude += total;
+        if (n.kind === 'opencode') opencode += total;
+        else if (n.kind === 'handoff' || n.kind === 'codex' || n.kind === 'codexagent') codex += total; else claude += total;
         if (n.kind === 'workflow') claude -= total; // its agents carry the same tokens
         if (depth < 8) n.children.forEach(function (cid) {
           var c = walk(cid, depth + 1);
@@ -2730,12 +2760,14 @@
           Object.keys(c.states).forEach(function (s) { n.states[s] = true; });
           claude += c.tree.claude;
           codex += c.tree.codex;
+          opencode += c.tree.opencode || 0;
           if (c.tree.partial) partial = true;
         });
         if (n.kind === 'workflow' && !n.children.length) claude += total;
         // The server counts every subagent and workflow agent of a chat, also the ones it did not send.
         if (n.kind === 'chat' && n.chat.claudeTree) { claude = n.chat.claudeTree.total; if (n.chat.claudeTree.partial || n.hidden) partial = true; }
-        n.tree = { claude: claude, codex: codex, total: claude + codex, partial: partial };
+        n.tree = { claude: claude, codex: codex, total: claude + codex + opencode, partial: partial };
+        if (opencode || n.kind === 'opencode') n.tree.opencode = opencode;
         return n;
       }
       roots.concat(older).forEach(function (id) { walk(id, 0); });
@@ -2755,13 +2787,14 @@
       return !!node.row && (node.state === 'ARCHIVED' || (dismissedIds || []).indexOf(node.row.id) !== -1);
     }
     function nodeKind(node) {
+      if (node.kind === 'opencode') return 'opencode';
       return node.kind === 'handoff' || node.kind === 'codex' || node.kind === 'codexagent' ? 'codex' : node.kind === 'ghost' ? 'ghost' : 'claude';
     }
     // One node against a chip and the kind toggles (both off = every kind). FINISHED takes ENDED
     // (an agent with no end record); RUNNING takes BACKGROUND only through the child that runs.
     function nodeSelfMatch(node, chip, kinds) {
       var k = kinds || {};
-      if ((k.claude || k.codex) && !k[nodeKind(node)]) return false;
+      if ((k.claude || k.codex || k.opencode) && !k[nodeKind(node)]) return false;
       if (chip === 'ALL') return true;
       if (chip === 'FINISHED') return node.state === 'FINISHED' || node.state === 'ENDED';
       // Running (the default view) also keeps a question for you in sight.
@@ -2828,6 +2861,7 @@
     function nodeSavedView(prefs) {
       var saved = prefs && typeof prefs === 'object' ? prefs : {};
       var kinds = saved.kinds && typeof saved.kinds === 'object' ? { claude: !!saved.kinds.claude, codex: !!saved.kinds.codex } : { claude: false, codex: false };
+      if (saved.kinds && saved.kinds.opencode) kinds.opencode = true;
       var view;
       if (Object.prototype.hasOwnProperty.call(VIEW_TABS, saved.tab) && VIEW_TABS[saved.tab].indexOf(saved.chip) !== -1) view = { tab: saved.tab, chip: saved.chip, kinds: kinds };
       else {
@@ -2876,7 +2910,8 @@
       // The page decides the body layout: a workflow shows its run view, a chat its transcript, an agent the side panel.
       var page = pageKind();
       document.body.classList.toggle('claude-tab', page === 'workflow');
-      document.body.classList.toggle('chat-page', page === 'chat' || page === 'ghost');
+      document.body.classList.toggle('chat-page', page === 'chat' || page === 'opencode' || page === 'ghost');
+      document.body.classList.toggle('opencode-page', page === 'opencode');
       document.body.classList.toggle('overview-page', page === 'overview');
       document.body.classList.toggle('panel-open', !!prefs.panel || panelDocked());
       search.value = prefs.query || '';
@@ -2887,16 +2922,16 @@
 
     function currentRows() { return buildRows(sessions, jobs); }
     function currentModel() {
-      if (modelCache.version !== dataVersion) modelCache = { version: dataVersion, model: buildNodes(claudeChats, claudeRuns, currentRows(), jobs, Date.now()) };
+      if (modelCache.version !== dataVersion) modelCache = { version: dataVersion, model: buildNodes(claudeChats, claudeRuns, currentRows(), jobs, Date.now(), opencodeChats) };
       return modelCache.model;
     }
     // The Live overview shows whenever no node is open, or the user asked for it (prefs.home, set by
     // re-clicking the active Live tab; cleared by picking any node or view).
     function showOverview() { var page = pageKind(); return page === 'overview' || (page === 'codex' && !currentSession()); }
     // No transcript in the main feed: the overview, a workflow (its run view) or a ghost chat.
-    function feedOverview() { var page = pageKind(); return page === 'chat' ? false : page === 'workflow' || page === 'ghost' ? true : showOverview(); }
+    function feedOverview() { var page = pageKind(); return page === 'chat' || page === 'opencode' ? false : page === 'workflow' || page === 'ghost' ? true : showOverview(); }
     // Whose feed rows the open-state and paging choices belong to.
-    function feedScope() { return pageKind() === 'chat' ? 'chat:' + prefs.node : String(selected || ''); }
+    function feedScope() { return pageKind() === 'chat' || pageKind() === 'opencode' ? 'chat:' + prefs.node : String(selected || ''); }
 
     function viewButton(className, label, count, on) {
       var button = document.createElement('button');
@@ -3028,6 +3063,7 @@
 
     // -- The sidebar tree (design 5). Groups by project, roots, children with rails, folds and the cap row.
     var KIND_INFO = {
+      opencode: { label: 'OpenCode chat', word: 'OpenCode chat', k: 'opencode', shape: 'fill', glyph: 'opencode' },
       chat: { label: 'Claude chat', word: 'Claude chat', k: 'claude', shape: 'fill', glyph: 'claude' },
       agent: { label: 'Claude agent', word: 'Claude agent', k: 'claude', shape: 'ring', glyph: 'claude' },
       workflow: { label: 'Workflow', word: 'workflow', k: 'claude', shape: 'fill', glyph: 'flow', kindGlyph: 'flow' },
@@ -3047,6 +3083,8 @@
       return state === 'BACKGROUND' ? 'Background' : state === 'ENDED' ? 'Ended' : state === 'ANSWER' ? 'Needs answer' : STATUS[rowBadge(state)].label;
     }
     function nodeStateHelp(node) {
+      if (node.kind === 'opencode') return node.chat.state === 'quiet' ? 'No idle record and no update for 5 minutes. This session may be paused or stopped.'
+        : node.chat.state === 'running' ? 'OpenCode updated this session in the last 5 minutes.' : 'OpenCode reported ' + (node.chat.outcome || 'stopped') + '.';
       if (node.state === 'BACKGROUND') return 'The turn is done, and work it started still runs.';
       if (node.state === 'ENDED') return 'Finished: no end record was found for it.';
       if (node.kind === 'chat' && node.state === 'ANSWER') return 'Claude is waiting for you (a question or a dialog).';
@@ -3059,7 +3097,7 @@
     }
     function nodeMark(node) {
       var info = KIND_INFO[node.kind] || KIND_INFO.chat;
-      return markElement(info.shape, info.k, info.glyph, info.label);
+      return markElement(node.kind === 'opencode' && node.chat && node.chat.parentId ? 'ring' : info.shape, info.k, info.glyph, info.label);
     }
     function nodeKindLabel(node) {
       var info = KIND_INFO[node.kind] || KIND_INFO.chat;
@@ -3196,7 +3234,7 @@
             if (c) counts[k] = Math.max(counts[k] || 0, Object.keys(c).reduce(function (s, key) { return s + c[key]; }, 0));
           });
         }
-        ['agent', 'workflow', 'wfagent', 'handoff', 'codexagent'].forEach(function (k) {
+        ['agent', 'workflow', 'wfagent', 'handoff', 'codexagent', 'opencode'].forEach(function (k) {
           if (!counts[k]) return;
           var cnt = textSpan('cnt', '');
           cnt.title = counts[k] + ' × ' + KIND_INFO[k].label;
@@ -3210,7 +3248,7 @@
         }
         if (node.children.length) {
           var use = textSpan('use', 'Σ ' + boundText(node.tree.partial, node.tree.total));
-          use.title = 'Tokens of this tree: Claude ' + compactCount(node.tree.claude) + ', Codex ' + (controlsBlocked ? 'unknown (handoffs did not load)' : compactCount(node.tree.codex)) + (node.tree.partial ? '. A lower bound: some usage is unknown or over the read cap' : '');
+          use.title = 'Tokens of this tree: Claude ' + compactCount(node.tree.claude) + ', Codex ' + (controlsBlocked ? 'unknown (handoffs did not load)' : compactCount(node.tree.codex)) + (node.tree.opencode != null ? ', OpenCode ' + compactCount(node.tree.opencode) : '') + (node.tree.partial ? '. A lower bound: some usage is unknown or over the read cap' : '');
           sum.appendChild(use);
         }
         el.appendChild(sum);
@@ -3270,7 +3308,7 @@
     // Folded: finished work, or (with a chip or kind on) a child that does not match. Never urgent work.
     function nodeFolded(model, node, view) {
       if (URGENT_STATES[node.rollup] && node.rollup !== 'WAITING') return false;
-      if (view.chip !== 'ALL' || (view.kinds && (view.kinds.claude || view.kinds.codex))) {
+      if (view.chip !== 'ALL' || (view.kinds && (view.kinds.claude || view.kinds.codex || view.kinds.opencode))) {
         if (nodeMatch(model.nodes, node.id, view.chip, view.kinds)) return false;
         return true;
       }
@@ -3489,7 +3527,7 @@
       document.querySelectorAll('#task-title-row .kind-label, #task-title-row .you-tag').forEach(function (el) { el.remove(); });
       var page = pageKind();
       if (page === 'workflow') { renderClaudeHeader(); renderUsage(pageNode()); return; }
-      if (page === 'chat' || page === 'ghost') { renderNodeHeader(pageNode()); renderUsage(pageNode()); return; }
+      if (page === 'chat' || page === 'opencode' || page === 'ghost') { renderNodeHeader(pageNode()); renderUsage(pageNode()); return; }
       taskClaude.hidden = true;
       renderUsage(page === 'codex' ? pageNode() : null);
       taskClaude.hidden = true;
@@ -3571,6 +3609,8 @@
     // Plugin text is quiet and collapsed; turn markers are thin centered rules.
     // Every actor's avatar is a glyph from the GL set (docs/UI-THEME.md, "Kind marks"), never a font glyph.
     var ACTORS = {
+      opencode: { name: 'OpenCode', glyph: 'opencode' },
+      'opencode-work': { name: 'OpenCode work', glyph: 'opencode' },
       you: { name: 'You', glyph: 'you' },
       relay: { name: 'You', glyph: 'you' },
       claude: { name: 'Claude', glyph: 'claude' },
@@ -3604,6 +3644,7 @@
     // workflow script, ghost = a chat not on this PC, you = the human, plugin = the codex plugin, info = System.
     // Trusted constants: this is the one place innerHTML takes markup, and it never carries user text.
     var GL = {
+      opencode: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10v10H3zM6 6h4v4H6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
       claude: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.6v10.8M2.6 8h10.8M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
       codex: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5l4 3.5-4 3.5M8.8 12h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       flow: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.6" cy="8" r="1.9" fill="currentColor"/><circle cx="12.4" cy="3" r="1.9" fill="currentColor"/><circle cx="12.4" cy="8" r="1.9" fill="currentColor"/><circle cx="12.4" cy="13" r="1.9" fill="currentColor"/><path d="M5.2 8h5.4M5.2 8l5.4-4.6M5.2 8l5.4 4.6" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
@@ -3650,7 +3691,7 @@
     function kindChipsElement() {
       var unit = document.createElement('span');
       unit.className = 'chip-kinds';
-      [['claude', 'Claude', 'Only Claude’s own work'], ['codex', 'Codex', 'Only work that runs under Codex']].forEach(function (k) {
+      [['claude', 'Claude', 'Only Claude’s own work'], ['codex', 'Codex', 'Only work that runs under Codex'], ['opencode', 'OpenCode', 'Only OpenCode sessions']].forEach(function (k) {
         var button = document.createElement('button');
         button.type = 'button';
         button.className = 'chip-button kind';
@@ -3868,6 +3909,7 @@
       var sp = textSpan('sp', '');
       sp.append(glyphSpan('codex'), document.createTextNode(controlsBlocked ? '?' : compactCount(tree.codex)));
       cell.append(sc, sp);
+      if (tree.opencode != null) { var so = textSpan('so', ''); so.append(glyphSpan('opencode'), document.createTextNode(compactCount(tree.opencode))); cell.appendChild(so); }
     }
     function renderUsage(node) {
       var cells = [];
@@ -3882,7 +3924,7 @@
       else {
         ctx.appendChild(bold(compactCount(context)));
         if (windowSize) ctx.append(textSpan('', '/ ' + compactCount(windowSize)), meterElement(100 * context / windowSize, ''), textSpan('', Math.round(100 * context / windowSize) + '%'));
-        else { var unk = textSpan('unk', 'window unknown'); unk.title = 'The window size is not on disk for Claude'; ctx.appendChild(unk); }
+        else { var unk = textSpan('unk', 'window unknown'); unk.title = 'The window size is not on disk for this source'; ctx.appendChild(unk); }
       }
       cells.push(ctx);
       var total = usageCell('Total', 'Input (cached included) plus output, every call, this node only', usage && usage.partial && usage.total);
@@ -3941,7 +3983,7 @@
       taskTitle.title = node.title;
       var chat = node.chat || {};
       var source = SOURCE_NAMES[chat.source] || chat.source || '';
-      renderTaskFacts('claude', node.kind === 'ghost' ? projectName(node.project) : node.project, chat.cwd || node.project, node.model, node.effort);
+      renderTaskFacts(node.kind === 'opencode' ? 'opencode' : 'claude', node.kind === 'ghost' ? projectName(node.project) : node.project, chat.cwd || node.project, node.model, node.effort);
       if (source) {
         var from = document.createElement('span');
         from.className = 'fact fact-from';
@@ -3959,6 +4001,13 @@
       if (node.kind === 'ghost') {
         item('Started by: Claude, in a chat that is not on this PC', 'The handoffs carry this chat id, but its file is not under ~/.claude/projects');
         item('session ' + String(node.sessionId || '').slice(0, 8), 'Claude chat id ' + node.sessionId);
+      } else if (node.kind === 'opencode') {
+        var openId = item('session ' + chat.sessionId, 'OpenCode session id. Click to copy it', 'meta-button');
+        openId.addEventListener('click', function () { copyText(chat.sessionId, openId, 'Session id copied'); });
+        if (chat.parentId) item('Child session', 'Parent: ' + chat.parentId);
+        if (chat.outcome) item(chat.outcome, 'OpenCode idle outcome');
+        item('last update ' + relativeTime(node.updatedMs), new Date(node.updatedMs || 0).toLocaleString());
+        item('Read only', 'OpenCode sessions have no resume or cancel controls in this viewer');
       } else {
         var who = item('', 'Chat source: ' + (chat.source || 'unknown'), 'started-by actor-you');
         who.append(actorAvatar('you', true), document.createTextNode('Started by: '), bold('you'), document.createTextNode(source ? ' (' + source + ')' : ''));
@@ -3985,7 +4034,7 @@
       container.dataset.signature = '';
       container.textContent = '';
       var id = node.kind === 'ghost' ? node.sessionId : node.chat && node.chat.sessionId;
-      var items = [['copy-chat-id', 'Copy chat id', 'The Claude session id of this chat', id]];
+      var items = [['copy-chat-id', 'Copy chat id', 'The session id of this chat', id]];
       if (node.kind === 'chat') items.push(['copy-resume', 'Copy resume command', 'claude --resume: open this chat in a terminal', 'claude --resume ' + id]);
       container.appendChild(textDiv('menu-group', 'Copy'));
       items.forEach(function (entry) {
@@ -4003,7 +4052,7 @@
     function nodeContextMenu(event, node) {
       if (node.row) { openContextMenu(event, node.row); return; }
       if (node.kind === 'workflow' && node.run) { openClaudeContextMenu(event, node.run); return; }
-      if (node.kind === 'chat' || node.kind === 'ghost') {
+      if (node.kind === 'chat' || node.kind === 'opencode' || node.kind === 'ghost') {
         event.preventDefault();
         fillChatMenu(contextMenu, node, function () { closeContextMenu(); });
         showContextMenuAt(event);
@@ -4052,8 +4101,8 @@
       // A reply (Codex, or a Claude workflow agent) is never read as a prompt, and the plugin's
       // return-format footer is a Codex handoff thing, never parsed out of a Claude transcript.
       var source = session && session.source;
-      var claudeTranscript = source === 'claude' || source === 'chat' || source === 'agent';
-      var reply = actor === 'codex' || actor === 'claude-agent' || actor === 'subagent' || (source === 'chat' && actor === 'claude');
+      var claudeTranscript = source === 'claude' || source === 'chat' || source === 'agent' || source === 'opencode';
+      var reply = actor === 'codex' || actor === 'opencode' || actor === 'claude-agent' || actor === 'subagent' || (source === 'chat' && actor === 'claude');
       var parts = (reply || claudeTranscript) ? { body: text, footer: '' } : splitReturnFormat(text);
       var prefix = claudeTranscript ? { tag: '', text: parts.body } : answerPrefix(parts.body);
       var body = prefix.text;
@@ -4220,8 +4269,11 @@
     function createMarker(event) {
       var marker = document.createElement('div');
       marker.className = 'marker ' + event.kind;
+      marker.title = event.text || '';
       var label = ({ done: '✓ Turn complete', err: 'Turn aborted', sys: 'Turn started' })[event.kind] || firstLine(event.text, 60);
       if (event.kind === 'sys' && !/task started/i.test(event.text || '')) label = firstLine(event.text, 60);
+      if (event.kind === 'meta') label = event.text || '';
+      if (event.kind === 'done' && event.outcome && event.outcome !== 'succeeded') { label = 'Turn ' + event.outcome; marker.className = 'marker err'; }
       marker.textContent = label + (event.ts ? ' · ' + eventTime(event.ts) : '');
       return marker;
     }
@@ -4298,7 +4350,7 @@
           if (depth < 8) node.children.forEach(function (cid) { var c = model.nodes[cid]; if (c && !liveHidden(c, prefs.dismissed)) walk(c, depth + 1); });
         })(root, 0);
       });
-      var kindOrder = { handoff: 0, codex: 0, chat: 1, agent: 2, workflow: 3, codexagent: 4, ghost: 5 };
+      var kindOrder = { handoff: 0, codex: 0, chat: 1, opencode: 1, agent: 2, workflow: 3, codexagent: 4, ghost: 5 };
       function pick(states, max) {
         return cards.filter(function (c) { return states.indexOf(c.node.state) !== -1; })
           .sort(function (a, b) { return (kindOrder[a.node.kind] || 0) - (kindOrder[b.node.kind] || 0) || (b.node.updatedMs || 0) - (a.node.updatedMs || 0); })
@@ -4345,15 +4397,15 @@
       if (page === 'workflow') { lastHomeSignature = ''; renderClaudeBody(); return; }
       lastClaudeOverviewScope = null;
       if (page === 'ghost') { lastHomeSignature = ''; lastClaudeFeedSignature = ''; renderGhostPage(); return; }
-      if (page === 'chat') {
+      if (page === 'chat' || page === 'opencode') {
         lastHomeSignature = '';
         var t = transcripts.main;
-        var signature = JSON.stringify(['chat', prefs.node, t.key, t.events.length, t.offset, t.state, t.error, t.loaded, renderLimits[feedScope()]]);
+        var signature = JSON.stringify(['chat', prefs.node, t.key, t.events.length, t.offset, t.revision, t.state, t.error, t.loaded, renderLimits[feedScope()]]);
         if (signature === lastClaudeFeedSignature) return;
         lastClaudeFeedSignature = signature;
         drawTranscript({
-          inner: feedInner, scroller: feed, pill: jumpLatest, renderKey: feedScope(), session: CHAT_SESSION,
-          rawEvents: t.events, running: t.state === 'running', workingLabel: 'Claude is working', error: t.events.length ? t.error : '',
+          inner: feedInner, scroller: feed, pill: jumpLatest, renderKey: feedScope(), session: page === 'opencode' ? { source: 'opencode' } : CHAT_SESSION,
+          rawEvents: t.events, running: t.state === 'running', workingLabel: page === 'opencode' ? 'OpenCode is working' : 'Claude is working', error: t.events.length ? t.error : '',
           emptyTitle: t.error ? 'Transcript unavailable' : !t.loaded ? 'Loading transcript…' : 'No activity yet',
           emptyText: t.error || (t.loaded ? 'This chat has no messages yet.' : ''),
           rerender: function () { lastClaudeFeedSignature = ''; renderFeed(true); }
@@ -4404,7 +4456,7 @@
       if (prefs.home || !prefs.node) return 'overview';
       var kind = String(prefs.node).split(':')[0];
       if (kind === 'handoff' || kind === 'codex' || kind === 'codexagent') return selected ? 'codex' : 'overview';
-      return kind === 'chat' || kind === 'workflow' || kind === 'ghost' ? kind : 'overview';
+      return kind === 'chat' || kind === 'opencode' || kind === 'workflow' || kind === 'ghost' ? kind : 'overview';
     }
     function claudeRunId() { var n = pageNode(); return n && n.kind === 'workflow' ? n.runId : null; }
     function panelAgentId() {
@@ -4500,6 +4552,7 @@
         return '/claude/transcript?chat=' + encodeURIComponent(p.chatId) + '&agent=' + encodeURIComponent(panelAgentId());
       }
       var n = pageNode();
+      if (pageKind() === 'opencode' && n && n.chat) return '/opencode/transcript?session=' + encodeURIComponent(n.chat.sessionId);
       return pageKind() === 'chat' && n && n.chat ? '/claude/transcript?chat=' + encodeURIComponent(n.chat.sessionId) : '';
     }
     function syncTranscripts() {
@@ -4527,6 +4580,11 @@
           var data = await response.json();
           state.error = '';
           state.loaded = true;
+          if (state.key.indexOf('/opencode/') === 0) {
+            var pageSig = JSON.stringify(data.events || []);
+            if (pageSig !== state.pageSig) { state.pageSig = pageSig; state.revision = (state.revision || 0) + 1; }
+            if (data.replaceFrom != null) state.events = state.events.filter(function (event) { return event.seq < data.replaceFrom; });
+          }
           if (data.events && data.events.length) {
             state.events.push.apply(state.events, data.events);
             if (state.events.length > 500) state.events.splice(0, state.events.length - 500);
@@ -4544,7 +4602,7 @@
       state.loaded = state.loaded || !!state.error;
       // A finished agent or chat can go on later (a new message, SendMessage): keep a slow poll.
       if (!state.stopped && state.key === transcriptUrl(slot)) {
-        transcriptTimers[slot] = window.setTimeout(function () { pollTranscript(slot); }, state.state === 'running' ? 1500 : 4000);
+        transcriptTimers[slot] = window.setTimeout(function () { pollTranscript(slot); }, data && data.more ? 0 : state.state === 'running' ? 1500 : 4000);
       }
       if (slot === 'main') requestFeedRender(); else renderPanel();
       renderHeader();
@@ -4596,7 +4654,7 @@
         var blocks = [];
         events.forEach(function (event, idx) {
           var actor = messageActor(event, session);
-          var isWork = actor === 'work' || actor === 'claude-work' || actor === 'chat-work' || actor === 'subagent-work';
+          var isWork = actor === 'work' || actor === 'claude-work' || actor === 'chat-work' || actor === 'subagent-work' || actor === 'opencode-work';
           var last = blocks[blocks.length - 1];
           if (isWork && last && last.work) { last.items.push(event); last.keys.push(keys[idx]); return; }
           blocks.push(isWork ? { work: true, actor: actor, items: [event], keys: [keys[idx]] } : { event: event, key: keys[idx], actor: actor });
@@ -4722,7 +4780,7 @@
     // surface carries the mark (Claude's clay, flow icon, "Claude workflow"), so it never looks like Codex work.
     function claudeRunById(id) { return claudeRuns.find(function (run) { return run.id === id; }) || null; }
     function newClaudeFeed(key) {
-      return { key: key, events: [], offset: 0, tool: '', contextTokens: 0, state: '', error: '', loaded: false, busy: false, final: false, stopped: false };
+      return { key: key, events: [], offset: 0, tool: '', contextTokens: 0, state: '', error: '', loaded: false, busy: false, final: false, stopped: false, revision: 0 };
     }
     function textDiv(className, text) {
       var div = document.createElement('div');
@@ -5668,7 +5726,7 @@
 
     actionsButton.addEventListener('click', function () {
       if (!actionMenu.hidden) { closeActionMenu(); return; }
-      if (pageKind() === 'chat' || pageKind() === 'ghost') {
+      if (pageKind() === 'chat' || pageKind() === 'opencode' || pageKind() === 'ghost') {
         var node = pageNode();
         if (!node) return;
         fillChatMenu(actionMenu, node, actionMenuPick);
@@ -5945,6 +6003,16 @@
         // A workflow or ghost page can only draw once its node is in the tree.
         if (pageKind() === 'workflow') renderClaudeBody();
         else if (pageKind() === 'ghost' || showOverview()) renderFeed();
+      }
+      if (data.type === 'opencodeChats') {
+        opencodeChats = { chats: data.chats || [] };
+        dataVersion++;
+        migrateSelection();
+        syncTranscripts();
+        renderFilters();
+        renderList();
+        renderHeader();
+        if (pageKind() === 'opencode') requestFeedRender(); else if (showOverview()) renderFeed();
       }
       if (data.type === 'claudeUsage') {
         claudeUsage = data.usage || null;

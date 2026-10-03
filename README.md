@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Claude Codex Handoff logo" width="110">
+  <img src="assets/logo.svg" alt="AI Live Viewer logo" width="110">
 </p>
 
-<h1 align="center">Claude Codex Handoff</h1>
+<h1 align="center">AI Live Viewer</h1>
 
 <p align="center">
   Delegate coding tasks from <a href="https://claude.com/claude-code">Claude Code</a> to the <a href="https://github.com/openai/codex">OpenAI Codex CLI</a> and get the results back.<br>
-  Claude plans, Codex does the work. A fork of the official <code>codex</code> plugin where jobs survive restarts, plus a live dashboard to watch, resume, and cancel Codex runs.<br>
+  Watch Codex, Claude and OpenCode sessions in one live dashboard. The bundled fork of the official <code>codex</code> plugin keeps Codex jobs alive through restarts and lets you resume or cancel them.<br>
   Works in the terminal and in VS Code.
 </p>
 
@@ -14,7 +14,7 @@
   <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/Fundryi/claude-codex-handoff" alt="latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0_%2B_Commons_Clause-blue" alt="license: Apache 2.0 + Commons Clause"></a>
   <img src="https://img.shields.io/badge/npm_dependencies-0-brightgreen" alt="zero npm dependencies">
-  <img src="https://img.shields.io/badge/node-%3E%3D22-blue" alt="node >= 22">
+  <img src="https://img.shields.io/badge/node-%3E%3D22.13-blue" alt="node >= 22.13">
   <img src="https://img.shields.io/badge/platforms-win%20%7C%20linux%20%7C%20mac-8A2BE2" alt="platforms">
 </p>
 
@@ -30,7 +30,7 @@
 /plugin install codex@fundryi
 ```
 
-Needs [Node.js](https://nodejs.org) 22+ and the Codex CLI (`npm install -g @openai/codex`, then `codex login`). Had the OpenAI-marketplace `codex` plugin? Uninstall it first; every `/codex:*` command name stays the same.
+Needs [Node.js](https://nodejs.org) 22.13+ and the Codex CLI (`npm install -g @openai/codex`, then `codex login`). Had the OpenAI-marketplace `codex` plugin? Uninstall it first; every `/codex:*` command name stays the same.
 
 From your next Claude Code session on:
 
@@ -107,14 +107,22 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 
 **In the browser** (`localhost:8377`):
 
-- one tree of all work, grouped by project: each Claude chat with its subagents, workflow runs and Codex handoffs under the exact agent that started them, Codex agents at every level, and every Codex session on the machine however it was started. Two tabs (Live, History), status chips, and Claude and Codex kind chips
+- one tree of all work, grouped by project: Claude chats with their subagents, workflow runs and Codex handoffs, Codex sessions and agents, and recent OpenCode chats with their child sessions. Two tabs (Live, History), status chips, and Claude, Codex and OpenCode kind chips
 - a feed that shows who says what: your messages, Claude's handoff prompts and automatic answers, the plugin's return format, Codex's replies and questions, and Codex's work (thinking, commands, patches) in its own collapsed log, each actor in one color with a legend
 - a result card on every finished handoff (Summary, Changed files, Checks run, Needs decision) with an answer box that resumes the thread when Codex asked a question; "Show full result" opens the full result dialog and lists every run on the thread, newest first
 - a Claude chat opens with its live transcript (your prompts, Claude's replies and work); a Claude subagent or workflow agent opens in a side panel next to it; a workflow shows its phases and agents. Claude work uses the Claude orange, Codex work teal. The viewer only reads the files under `~/.claude/projects` and has no stop or resume buttons for Claude
-- token usage on every row and tree, split into Claude and Codex, and your plan limits at the bottom of the sidebar, as the part already used: the Codex limits read live every 5 minutes with the count of free limit resets you have, and the Claude 5-hour and weekly limits, updated after each Claude reply when you turn on the plugin's status line (see "Claude limits that stay current" below), else from the snapshot Claude Code saves when you open `/usage`
+- token usage on every row and tree, split by source, and your plan limits at the bottom of the sidebar, as the part already used: the Codex limits read live every 5 minutes with the count of free limit resets you have, and the Claude 5-hour and weekly limits, updated after each Claude reply when you turn on the plugin's status line (see "Claude limits that stay current" below), else from the snapshot Claude Code saves when you open `/usage`
 - one-click resume and cancel, with in-app confirmation
 - one job store shared with the CLI, so `/codex:status` and the dashboard always agree
 - search across all recorded sessions, effort/sandbox/token display, archived sessions, unread markers, saved layout
+
+## OpenCode sessions
+
+AI Live Viewer shows recent OpenCode TUI chats, `opencode run` sessions and child sessions in the project tree. Open a session to read its messages, reasoning, tool output, model, token counts and cost in the shared feed. Children sit under their parent. The viewer uses OpenCode idle records and update times for status. It has no OpenCode resume or cancel controls.
+
+The database is read only. The viewer reads only `session_v2` and `session_message`. It does not read account or credential tables. A read-only WAL connection can touch the `-shm` file. Transcripts use the same trusted-origin gate as Claude transcripts.
+
+Set `OPENCODE_DB` to use a different database. The default is `$XDG_DATA_HOME/opencode/opencode.db` when `XDG_DATA_HOME` is set, else `~/.local/share/opencode/opencode.db`, on Windows too. If the file or built-in SQLite support is missing, this source is off. The list uses the Claude 24-hour window: the 30 most recent roots plus every root with running work. A recent child keeps its parent in the window.
 
 ## Using it well
 
@@ -188,6 +196,7 @@ Claude transcripts (chats, subagents and workflow agents) can hold text from eve
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state (CLI + dashboard) |
 | `CODEX_HOME` | `~/.codex` | Where Codex session files are read from |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Where Claude workflow runs are read from (its `projects` folder) |
+| `OPENCODE_DB` | `$XDG_DATA_HOME/opencode/opencode.db` or `~/.local/share/opencode/opencode.db` | OpenCode database, read only |
 | `CODEX_VIEWER_TRAY_PORT` | port + 1 | Tray single-instance lock |
 | `CODEX_VIEWER_NOTIFICATIONS` | `1` | `0` disables tray toasts |
 

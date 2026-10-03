@@ -46,6 +46,7 @@ const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 // Claude Code's own root. CLAUDE_CONFIG_DIR moves it (Claude Code settings docs). Read only, like CODEX_HOME.
 const CLAUDE_HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
 const CLAUDE_PROJECTS = path.join(CLAUDE_HOME, "projects");
+const OPENCODE_DB = process.env.OPENCODE_DB || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "opencode", "opencode.db");
 // The viewer never writes under CODEX_HOME, so the token lives in the companion state root.
 // Older builds kept it in CODEX_HOME; that copy is only read, so old tunnel links keep working.
 const TOKEN_FILE = path.join(process.env.CODEX_COMPANION_STATE_ROOT
@@ -1208,6 +1209,189 @@ function claudeTranscriptPage(file, offset) {
   return { events, offset: from + end, size, contextTokens };
 }
 
+// ---------------- OpenCode chats (read only) ----------------
+// Only session_v2 and session_message are allowed. The same file contains credentials.
+let opencodeSqlite; // undefined until first use, null when this Node has no SQLite support
+let opencodeDb = null, opencodeIdentity = "", opencodeWatermark = "";
+let opencodeRows = [], opencodeNextChange = 0, opencodeSig = "";
+let opencodeChatsFrame = { type: "opencodeChats", chats: [] };
+
+function opencodeClose() {
+  try { if (opencodeDb) opencodeDb.close(); } catch {}
+  opencodeDb = null;
+  opencodeIdentity = "";
+  opencodeWatermark = "";
+  opencodeRows = [];
+  opencodeNextChange = 0;
+}
+
+function opencodeConnection() {
+  try {
+    const st = fs.statSync(OPENCODE_DB);
+    const identity = [st.dev, st.ino, st.birthtimeMs].join(":");
+    if (opencodeDb && identity === opencodeIdentity) return opencodeDb;
+    opencodeClose();
+    if (opencodeSqlite === undefined) {
+      try { opencodeSqlite = (process.getBuiltinModule ? process.getBuiltinModule("node:sqlite") : require("node:sqlite")) || null; }
+      catch { opencodeSqlite = null; }
+    }
+    if (!opencodeSqlite || !opencodeSqlite.DatabaseSync) return null;
+    // One handle, reused on every poll and pull. No PRAGMAs or checkpoints.
+    opencodeDb = new opencodeSqlite.DatabaseSync(OPENCODE_DB, { readOnly: true });
+    opencodeIdentity = identity;
+    return opencodeDb;
+  } catch { opencodeClose(); return null; } // missing file/schema never affects the other sources
+}
+
+function opencodeSessionView(row, now) {
+  let model = {};
+  try { model = JSON.parse(row.model || "{}") || {}; } catch {}
+  const idle = row.newest_type === "idle" || (row.time_idle != null && row.time_idle >= row.time_updated);
+  const outcome = row.idle_outcome || row.newest_outcome || "";
+  const state = idle ? (outcome === "succeeded" ? "done" : outcome === "failed" ? "failed" : "stopped")
+    : now - row.time_updated < STUCK_AFTER_MS ? "running" : "quiet";
+  return { id: "opencode:" + row.id, sessionId: row.id, parentId: row.parent_id ? "opencode:" + row.parent_id : null,
+    title: row.title || "OpenCode session", cwd: row.directory || "", project: path.basename((row.directory || "").replace(/\\/g, "/")),
+    model: [model.providerID, model.id].filter(x => typeof x === "string" && x).join("/"), effort: typeof model.variant === "string" ? model.variant : "",
+    state, outcome, startedMs: row.time_created, updatedMs: row.time_updated,
+    usage: { total: (row.tokens_input || 0) + (row.tokens_output || 0) + (row.tokens_cache_read || 0) + (row.tokens_cache_write || 0), output: row.tokens_output || 0 }, cost: row.cost || 0 };
+}
+
+function opencodeChatsTick() {
+  const now = Date.now();
+  try {
+    const db = opencodeConnection();
+    if (db) {
+      const marker = JSON.stringify(db.prepare("SELECT MAX(time_updated) AS updated, MAX(time_idle) AS idle, COUNT(id) AS count FROM session_v2").get());
+      if (marker !== opencodeWatermark || now >= opencodeNextChange) {
+        if (marker !== opencodeWatermark) {
+          // Pull an old parent into the window when a child writes. UNION also bounds cycles.
+          opencodeRows = db.prepare(`WITH RECURSIVE recent(id, parent_id, updated) AS (
+            SELECT id, parent_id, time_updated FROM session_v2 WHERE time_updated >= ?
+            UNION SELECT s.id, s.parent_id, r.updated FROM session_v2 s JOIN recent r ON s.id = r.parent_id
+          ), roots AS (
+            SELECT s.id FROM session_v2 s JOIN recent r ON r.id = s.id
+            WHERE s.parent_id IS NULL OR NOT EXISTS (SELECT p.id FROM session_v2 p WHERE p.id = s.parent_id)
+            GROUP BY s.id ORDER BY MAX(r.updated) DESC LIMIT ?
+          ), selected(id) AS (
+            SELECT id FROM roots
+            UNION SELECT s.id FROM session_v2 s WHERE s.time_updated >= ? AND (s.time_idle IS NULL OR s.time_idle < s.time_updated)
+              AND COALESCE((SELECT m.type FROM session_message m WHERE m.session_id = s.id ORDER BY m.seq DESC LIMIT 1), '') <> 'idle'
+            UNION SELECT s.id FROM session_v2 s JOIN selected p ON s.parent_id = p.id
+            UNION SELECT s.parent_id FROM session_v2 s JOIN selected c ON c.id = s.id WHERE s.parent_id IS NOT NULL
+          ) SELECT s.id, s.parent_id, s.directory, s.title, s.model, s.cost, s.tokens_input, s.tokens_output,
+            s.tokens_cache_read, s.tokens_cache_write, s.time_created, s.time_updated, s.time_idle, s.idle_outcome,
+            (SELECT m.type FROM session_message m WHERE m.session_id = s.id ORDER BY m.seq DESC LIMIT 1) AS newest_type,
+            (SELECT json_extract(m.data, '$.outcome') FROM session_message m WHERE m.session_id = s.id AND m.type = 'idle' ORDER BY m.seq DESC LIMIT 1) AS newest_outcome
+            FROM session_v2 s JOIN selected k ON k.id = s.id`).all(now - CLAUDE_ROOT_MS, CLAUDE_MAX_ROOTS, now - STUCK_AFTER_MS);
+          opencodeWatermark = marker;
+        }
+        const byId = new Map(opencodeRows.map(r => [r.id, r]));
+        const families = new Map();
+        for (const row of opencodeRows) {
+          let root = row;
+          const seen = new Set();
+          while (byId.has(root.parent_id) && !seen.has(root.id)) { seen.add(root.id); root = byId.get(root.parent_id); }
+          let family = families.get(root.id);
+          if (!family) families.set(root.id, family = { rows: [], updated: 0, running: false });
+          family.rows.push(row);
+          family.updated = Math.max(family.updated, row.time_updated);
+          if (opencodeSessionView(row, now).state === "running") family.running = true;
+        }
+        const recent = [...families.values()].filter(f => now - f.updated < CLAUDE_ROOT_MS)
+          .sort((a, b) => b.updated - a.updated).slice(0, CLAUDE_MAX_ROOTS);
+        // Same root count/age rules as Claude: the recent window plus every family with running work.
+        const keep = new Set([...recent, ...[...families.values()].filter(f => f.running)]);
+        const chats = [...keep].flatMap(f => f.rows.map(r => opencodeSessionView(r, now)));
+        opencodeNextChange = Infinity;
+        for (const r of opencodeRows) for (const t of [r.time_updated + STUCK_AFTER_MS, r.time_updated + CLAUDE_ROOT_MS])
+          if (t > now) opencodeNextChange = Math.min(opencodeNextChange, t);
+        opencodePublish(chats);
+      }
+    } else opencodePublish([]);
+  } catch { opencodeClose(); opencodePublish([]); } // do not log DB rows or errors from the credential file
+}
+
+function opencodePublish(chats) {
+  const frame = { type: "opencodeChats", chats };
+  const sig = JSON.stringify(frame);
+  if (sig === opencodeSig) return;
+  opencodeSig = sig;
+  opencodeChatsFrame = frame;
+  broadcast(frame);
+}
+
+function opencodeTranscriptEvents(row) {
+  // ponytail: OpenCode's internal schema changes often. Unknown message/content fields are skipped.
+  if (!row || typeof row !== "object") return [];
+  let data;
+  try { data = typeof row.data === "string" ? JSON.parse(row.data) : row.data; } catch { return []; }
+  if (!data || typeof data !== "object") return [];
+  const stamp = Number(row.time_created) || Number(data.time && data.time.created) || 0;
+  const ts = Number.isFinite(stamp) && Math.abs(stamp) <= 8640000000000000 ? new Date(stamp).toISOString() : "";
+  const out = [];
+  const text = v => typeof v === "string" ? v : "";
+  const num = v => typeof v === "number" && Number.isFinite(v) ? v : 0;
+  const error = data.error;
+  if (row.type === "user") { if (text(data.text)) out.push({ kind: "user", ts, text: data.text }); }
+  else if (row.type === "assistant") {
+    for (const part of Array.isArray(data.content) ? data.content : []) {
+      if (!part || typeof part !== "object") continue;
+      if ((part.type === "text" || part.type === "reasoning") && text(part.text)) {
+        out.push({ kind: part.type === "text" ? "agent" : "think", ts, text: part.text });
+      } else if (part.type === "tool") {
+        const name = text(part.name) || text(part.tool);
+        if (!name) continue;
+        const state = part.state && typeof part.state === "object" ? part.state : {};
+        const input = state.input && typeof state.input === "object" ? state.input : {};
+        const meta = state.metadata && typeof state.metadata === "object" ? state.metadata : {};
+        const output = text(state.output) || (Array.isArray(state.content) ? state.content.filter(c => c && c.type === "text" && typeof c.text === "string").map(c => c.text).join("\n") : "");
+        const cmd = name === "shell" || name === "bash";
+        out.push({ kind: cmd ? "cmd" : "tool", ts, text: cmd ? text(input.command) || name : name,
+          detail: output || text(state.error), args: input, callId: text(part.id) || text(part.callID),
+          done: ["completed", "error", "failed", "cancelled"].includes(state.status),
+          ...(typeof meta.exit === "number" ? { exitCode: meta.exit } : {}),
+          ...(name === "subagent" && text(meta.sessionID) ? { sessionId: meta.sessionID } : {}) });
+      }
+    }
+    if (error) out.push({ kind: "err", ts, text: text(error) || text(error.data && error.data.message) || text(error.message) || text(error.name) || "OpenCode error" });
+    const model = data.model && typeof data.model === "object" ? data.model : {};
+    const tokens = data.tokens && typeof data.tokens === "object" ? data.tokens : {};
+    const cache = tokens.cache && typeof tokens.cache === "object" ? tokens.cache : {};
+    const modelName = [text(model.providerID), text(model.id)].filter(Boolean).join("/");
+    const total = num(tokens.input) + num(cache.read) + num(cache.write);
+    out.push({ kind: "meta", ts, model: modelName, effort: text(model.variant), tokens: total, outputTokens: num(tokens.output), reasoningTokens: num(tokens.reasoning), cost: num(data.cost),
+      text: [modelName, text(model.variant), total + " input tokens", num(tokens.output) + " output tokens", num(tokens.reasoning) + " reasoning tokens", "$" + num(data.cost)].filter(Boolean).join(" · ") });
+  } else if (row.type === "idle") out.push({ kind: "done", ts, text: text(data.outcome) || "stopped", outcome: text(data.outcome) || "stopped", done: true });
+  else if (row.type === "system" || row.type === "synthetic") {
+    const body = text(data.text) || (Array.isArray(data.content) ? data.content.filter(p => p && p.type === "text").map(p => text(p.text)).join("\n") : "");
+    if (body) out.push({ kind: "sys", ts, text: body, internal: true });
+  }
+  return out;
+}
+
+function opencodeTranscriptPage(id, offset) {
+  const db = opencodeConnection();
+  if (!db) return null;
+  try {
+    const row = db.prepare(`SELECT id, parent_id, directory, title, model, cost, tokens_input, tokens_output,
+      tokens_cache_read, tokens_cache_write, time_created, time_updated, time_idle, idle_outcome,
+      (SELECT m.type FROM session_message m WHERE m.session_id = s.id ORDER BY m.seq DESC LIMIT 1) AS newest_type,
+      (SELECT json_extract(m.data, '$.outcome') FROM session_message m WHERE m.session_id = s.id ORDER BY m.seq DESC LIMIT 1) AS newest_outcome
+      FROM session_v2 s WHERE s.id = ?`).get(id);
+    if (!row) return null;
+    // Re-read the last seq: OpenCode updates streamed assistant rows in place.
+    const rows = db.prepare("SELECT type, seq, time_created, data FROM session_message WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT 101").all(id, offset);
+    const more = rows.length > 100;
+    if (more) rows.pop();
+    const events = rows.flatMap(r => opencodeTranscriptEvents(r).map(e => ({ ...e, seq: r.seq })));
+    const chat = opencodeSessionView(row, Date.now());
+    const last = rows.length ? rows[rows.length - 1].seq : offset;
+    return { events, offset: last + (more ? 1 : 0), more, replaceFrom: rows.length ? rows[0].seq : null,
+      state: chat.state, model: chat.model, effort: chat.effort };
+  } catch { opencodeClose(); return null; }
+}
+
 // ---------------- Claude chats (read only) ----------------
 // The tree under each Claude main chat: plain subagents (nested by parentAgentId), workflow runs
 // and Codex handoffs. Every chat file is listed each scan; only the root window is read. A chat is
@@ -1817,7 +2001,7 @@ function claudeChatsTick() {
 }
 
 // ---------------- HTTP ----------------
-const FALLBACK_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Codex Live</title><style>
+const FALLBACK_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>AI Live Viewer</title><style>
 :root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#c9d1d9;--dim:#8b949e;--green:#3fb950;--yellow:#d29922;--blue:#58a6ff;--red:#f85149;--purple:#bc8cff}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 "Cascadia Code",Consolas,monospace;display:flex;height:100vh}
 #side{width:340px;min-width:280px;border-right:1px solid var(--border);overflow-y:auto;background:var(--panel)}
@@ -1865,7 +2049,7 @@ const FALLBACK_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>C
 details{margin-top:2px}summary{color:var(--dim);cursor:pointer;font-size:11px}
 #empty{color:var(--dim);padding:40px;text-align:center}
 </style></head><body>
-<div id="side"><h1>Codex Live Sessions</h1><div id="tabs"></div><div id="list"></div></div>
+<div id="side"><h1>AI Live Viewer</h1><div id="tabs"></div><div id="list"></div></div>
 <div id="main"><div id="head"><div id="headrow"><span id="headtxt">select a session (LIVE sessions auto-select)</span><button id="stopbtn" hidden>Stop task&#8230;</button></div><div id="stoplist" hidden></div></div><div id="feed"><div id="empty">Waiting for sessions...<br><br>Fire a handoff from Claude Code and it appears here the moment it starts.</div></div></div>
 <script>
 let sessions=[],selected=null,store={},autoFollow=true,filter='LIVE',seeded=false,lastSig='';
@@ -2131,6 +2315,7 @@ const server = http.createServer((req, res) => {
       try { claudeDiscover(); } catch {}
       try { claudeTick(); } catch {}
       try { claudeChatsTick(); } catch {}
+      opencodeChatsTick();
       try { tick(); } catch {}
     }
     sseClients.add(res);
@@ -2140,6 +2325,7 @@ const server = http.createServer((req, res) => {
     res.write("data: " + JSON.stringify({ type: "sessions", sessions: [...sessions.values()].map(s => sessionSummary(s, threadJobStatus)) }) + "\n\n");
     res.write("data: " + JSON.stringify(claudeFrame) + "\n\n");
     res.write("data: " + JSON.stringify(claudeChatsFrame) + "\n\n");
+    res.write("data: " + JSON.stringify(opencodeChatsFrame) + "\n\n");
     res.write("data: " + JSON.stringify(claudeUsageFrame) + "\n\n");
     res.write("data: " + JSON.stringify(codexLimitsFrame) + "\n\n");
     for (const s of sessions.values())
@@ -2204,6 +2390,14 @@ const server = http.createServer((req, res) => {
       }
       jsonReply(res, 200, { ok: true });
     });
+  } else if (/^\/opencode\/transcript(?:\?|$)/.test(req.url)) {
+    if (req.method !== "GET") { res.writeHead(405); return res.end("GET only"); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
+    const u = new URL(req.url, "http://local");
+    const offset = Math.max(0, Number(u.searchParams.get("offset")) || 0);
+    const page = Number.isSafeInteger(offset) && opencodeTranscriptPage(u.searchParams.get("session") || "", offset);
+    res.setHeader("Cache-Control", "no-store");
+    jsonReply(res, page ? 200 : 404, page ? { ok: true, ...page } : { ok: false, error: "transcript not found" });
   } else if (/^\/claude\/(?:agent|run|transcript)(?:\?|$)/.test(req.url)) {
     // Read only. Owner decision (2026-10-01): a Claude transcript needs no stricter gate than a Codex
     // job, so the gate is the one /jobs uses. The tunnel token is checked before any route runs.
@@ -2316,7 +2510,7 @@ function serve() {
   }
   let retries = 0;
   server.on("listening", () => {
-    console.log("[OK] Codex Live Viewer -> http://localhost:" + PORT);
+    console.log("[OK] AI Live Viewer -> http://localhost:" + PORT);
     if (HOST !== "127.0.0.1") {
       for (const list of Object.values(os.networkInterfaces())) {
         for (const iface of list || []) {
@@ -2339,11 +2533,12 @@ function serve() {
     // With no browser connected they run every 5th time (5 s reads, 25 s discovery); /events catches up on connect.
     claudeDiscover();
     claudeTick();
+    opencodeChatsTick();
     let claudeIdleTurn = 0, claudeIdleScan = 0;
     setInterval(() => { if (sseClients.size || ++claudeIdleScan % 5 === 0) claudeDiscover(); }, CLAUDE_SCAN_MS);
     setInterval(() => {
       if (!sseClients.size && ++claudeIdleTurn % 5 !== 0) return;
-      try { claudeTick(); } finally { claudeChatsTick(); } // one failing never skips the other
+      try { claudeTick(); } finally { try { claudeChatsTick(); } finally { opencodeChatsTick(); } }
     }, POLL_MS);
     setInterval(refreshCodexLimits, 60 * 1000, false);
     setTimeout(buildSearchIndex, 50);
@@ -2500,7 +2695,7 @@ function launch() {
   let done = false; // pings overlap; only the first result may report
   const t = setInterval(() => ping(up2 => {
     if (done) return;
-    if (up2) { done = true; clearInterval(t); console.log("[OK] Codex Live Viewer running -> " + BASE); openBrowser(); }
+    if (up2) { done = true; clearInterval(t); console.log("[OK] AI Live Viewer running -> " + BASE); openBrowser(); }
     else if (++tries > 25) { done = true; clearInterval(t); console.error("[X] The viewer did not come up on port " + PORT + " within 5s. To see why, run: node \"" + __filename + "\" serve"); process.exit(1); }
   }), 200);
 }
