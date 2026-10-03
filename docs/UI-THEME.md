@@ -204,6 +204,7 @@ The project, the model and the effort are the facts you check first, so they are
 - The tree: `--indent` 18 px per level to level 4, `--indent-deep` 10 px per level after that (the cycle guard is at level 8); `--rail-x` 15 px for the level 1 rail. A child row is a grid (state box 10 px, mark box 16 px, title, time) with `--d` = depth and `--lx` the computed offset. Rails: `.rl.thru` for a continuing ancestor level (`--l`), `.rl.elbow` into this row, `.rl.stem` from a child's state mark down to its open children. Root rows draw no stem.
 - The sidebar starts at 340 px (400 px from 2200 px viewport width), can be resized from 240 px to 55 % of the viewport, and remembers the chosen width. At 240 px the root row hides the source word and the roll-up word, the kind word is cut at 90 px, and under 330 px a plan row writes its reset time on a second line (`#side` is the size container).
 - Content column: header, toolbar, result card and feed share one column of at most `--content-max` 1360 px, centered in the main card (`.inner`, `#feed-inner`, `.result-card-box`). The header's right-side controls sit on the column's right edge. The side panel (`#panel`) is a card of its own beside the main card (a sibling of `<main>`, shown by `body.panel-open`), so the column centers in the main card on its own. From 2200 px (`@media (min-width: 2200px)`) the side panel takes the width beyond the column (`--panel-w` up to 1400 px).
+- Overview column: the header and feed can use up to 2080 px. The header stays aligned with the card grid. The grid adds columns as space increases.
 - At 760 px and below, the sidebar is a drawer over a backdrop (`min(88vw, 340px)`); the header wraps into rows (menu button, counter and `...` first, then the title, facts, meta and usage); chips scroll sideways in one row with an edge fade (`#chips-wrap.more-left`, `.more-right`); the overview is one column; the side panel covers the pane with a back button; Jump to latest floats over the feed.
 - The page must never create horizontal document scrolling.
 
@@ -238,5 +239,6 @@ The project, the model and the effort are the facts you check first, so they are
 
 - Hover, selection, border, and color transitions use 140–180 ms. The drawer slides in 180 ms. Nothing else moves.
 - Buttons, tabs, chips, rows, and the resize separator must remain keyboard accessible.
-- Focus uses a visible 2 px `--accent` outline.
+- Focus uses a visible 2 px `--accent` outline on buttons, inputs, selects, text areas, disclosure summaries and the resize separator. Group captions use the same inset and corner radius as rows.
+- Reduced motion stops all status spinners and uses automatic feed scrolling.
 - Dangerous process controls stay inside the task-actions menu and require confirmation.

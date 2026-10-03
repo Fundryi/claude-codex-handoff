@@ -86,7 +86,7 @@
     .pane { border: 1px solid var(--border); border-radius: var(--r-panel); overflow: hidden; }
     button, input, select, textarea { font: inherit; }
     button { color: inherit; }
-    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [role="separator"]:focus-visible {
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [role="separator"]:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
@@ -190,7 +190,7 @@
     }
     .tab-button:hover { color: var(--fg); background: var(--hover); }
     .tab-button.on { color: var(--fg); border-bottom-color: var(--accent); }
-    .tab-button .count { margin-left: 0; color: var(--faint); opacity: 1; }
+    .tab-button .count { margin-left: 0; color: var(--muted); opacity: 1; }
     /* A narrow sidebar drops the tab counts so the tab names stay whole (the chips keep theirs). */
     @container (max-width: 300px) { .tab-button .count { display: none; } }
     /* The chip row is one compact line (reference "All 17 · Working 2 · Error 0 · Done 12 · Idle 3"): plain words with a
@@ -278,13 +278,13 @@
     /* ---- tree rows (unified view): one root row, child rows on rails, fold and cap rows, project groups ---- */
     .group { --pc: var(--tree); --rail: color-mix(in srgb, var(--pc) 55%, transparent); background: color-mix(in srgb, var(--pc) 5%, var(--panel-2)); border-bottom: 1px solid var(--border); }
     .group:last-child { border-bottom: 0; }
-    .group-caption { width: 100%; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px 0 14px; background: transparent; border: 0; cursor: pointer; color: var(--pc, var(--tree)); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: left; }
+    .group-caption { width: calc(100% - 8px); margin: 0 4px; border-radius: var(--r-chip); display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: transparent; border: 0; cursor: pointer; color: var(--pc, var(--tree)); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: left; }
     .group-caption .caret { color: var(--faint); width: 10px; font-size: 9px; flex: none; }
     .group-caption .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     .group-caption .n, .group-caption .use { flex: none; }
     .group-caption svg { width: 12px; height: 12px; }
-    .group-caption .n { color: var(--faint); font-weight: 400; letter-spacing: 0; text-transform: none; }
-    .group-caption .use { margin-left: auto; color: var(--faint); font-weight: 400; letter-spacing: 0; text-transform: none; }
+    .group-caption .n { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+    .group-caption .use { margin-left: auto; color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
     .group.ghost { --pc: var(--system); }
     .group.closed .rows { display: none; }
     /* narrow sidebar (under 300 px): drop the words that repeat a nearby fact */
@@ -308,7 +308,7 @@
     .row-meta .fl { color: var(--muted); }
     .row-meta .fl.ask { color: var(--amber); font-weight: 600; }
     .row-meta .fl.fast { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: .05em; }
-    .row-meta .kind-label { height: auto; font-size: 10.5px; font-weight: 600; }
+    .row-meta .kind-label { height: auto; font-size: 10.5px; font-weight: 600; vertical-align: top; }
     .row-sum .flag { margin-left: 2px; }
     .row-time { color: var(--muted); font-size: 10.5px; white-space: nowrap; text-align: right; flex: none; }
     /* on the selected band the dim text lifts so it keeps its contrast on the violet */
@@ -322,6 +322,7 @@
     .row-top .state-word + .row-time { margin-left: 0; }
     .row-top .row-time { margin-left: auto; }
     .row.root .row-meta { grid-column: 1; }
+    .row.root:has(.row-sum .use) .row-meta .tok { display: none; }
     .row-sum { grid-column: 2; display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--muted); white-space: nowrap; }
     /* a sidebar under 400 px keeps the roll-up word and the tree total; the kind counts come back at 400 px (2K and up) */
     @container (max-width: 399px) { .row.root .row-sum .cnt { display: none; } }
@@ -333,6 +334,7 @@
        Level offset --lx: one formula for rows, fold rows and rails. 18 px per level to level 4, 10 px per level after that. --d = depth. */
     .row.child, .fold { --lx: calc(var(--rail-x) + var(--indent) * (min(var(--d, 1), 4) - 1) + var(--indent-deep) * max(var(--d, 1) - 4, 0)); }
     .row.child { display: grid; grid-template-columns: 10px 16px minmax(0, 1fr) auto auto auto; grid-template-rows: 18px auto; column-gap: 5px; row-gap: 1px; align-items: center; padding: 3px 10px 4px calc(var(--lx) + 13px); }
+    .row.child:not(.fin) { grid-template-columns: 10px 16px minmax(0, 1fr) auto auto; }
     .row.child .row-meta { grid-column: 3 / -1; }
     .row.child .row-time { padding-left: 4px; }
     .row.child .state-word { padding-left: 6px; }
@@ -341,7 +343,7 @@
     .row.child.fin .row-title { color: var(--muted); font-weight: 400; font-size: 11.5px; }
     .row.child.fin .row-meta { display: none; }
     .row.child.fin .state-word { font-weight: 400; }
-    .row.child.fin .row-use { color: var(--faint); font-size: 10px; padding-left: 6px; white-space: nowrap; }
+    .row.child.fin .row-use { color: var(--muted); font-size: 10px; padding-left: 6px; white-space: nowrap; }
     .row.child.fin:hover .row-title, .row.child.fin.selected .row-title { color: var(--fg); }
     /* rails: full-height guides per continuing ancestor level (--l), an elbow into this row, a through line when not last */
     .rl { position: absolute; left: calc(var(--rail-x) + var(--indent) * (min(var(--l, 1), 4) - 1) + var(--indent-deep) * max(var(--l, 1) - 4, 0)); border-left: 1px solid var(--rail); pointer-events: none; }
@@ -355,8 +357,8 @@
     .fold > .txt { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .fold:hover { background: var(--accent-fill); color: var(--fg); }
     /* cap row: the server sent at most N children of this chat. The rest live in History; the row says so and is not a link. */
-    .fold.cap { color: var(--muted); font-weight: 400; cursor: default; height: 24px; padding-bottom: 2px; }
-    .fold.cap:hover { background: transparent; color: var(--muted); }
+    .fold.cap { background: transparent; color: var(--muted); font-weight: 400; cursor: default; height: 24px; padding-bottom: 2px; }
+    .fold.cap:hover { color: var(--muted); }
     .fold.cap b { color: var(--fg); font-weight: 600; }
     .rows { padding-bottom: 3px; }
 
@@ -375,7 +377,7 @@
     .kind-label .g { display: inline-grid; place-items: center; width: 12px; height: 12px; }
     .kind-label .g svg { width: 11px; height: 11px; }
     .kind-label .starter { color: var(--claude); }
-    .you-tag { font-size: 9px; font-weight: 700; color: var(--you); border: 1px solid var(--you); border-radius: 999px; padding: 0 5px; line-height: 14px; }
+    .you-tag { margin-left: 4px; font-size: 9px; font-weight: 700; color: var(--you); border: 1px solid var(--you); border-radius: 999px; padding: 0 5px; line-height: 14px; }
     .src { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
     .flag { font-size: 10px; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 4px; padding: 0 5px; line-height: 15px; white-space: nowrap; }
     .g { display: inline-grid; place-items: center; }
@@ -401,7 +403,6 @@
     .card .kids { margin-top: 4px; padding-left: 10px; border-left: 1px solid var(--rail, color-mix(in srgb, var(--tree) 55%, transparent)); font-size: 10.5px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
     .card .kids div { display: flex; align-items: center; gap: 5px; height: 18px; }
     .card .kids .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .home-more { margin-top: 4px; }
     /* secondary button (reference "New worktree"): panel fill, thin border, rounded, muted text */
     .empty-action, .toolbar-button.home-more { display: inline-flex; align-items: center; justify-content: center; height: 32px; margin-top: 10px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--r-btn); background: var(--panel-2); color: var(--muted); font-size: 12px; cursor: pointer; transition: color .14s ease, background-color .14s ease; }
     .empty-action:hover, .toolbar-button.home-more:hover { background: var(--hover); color: var(--fg); }
@@ -592,6 +593,7 @@
     /* One content column: header, toolbar, result card and feed share it, at most --content-max wide, centered in the pane.
        The side panel is a card of its own beside the pane, so the column centers in what is left on its own. */
     .inner, #feed-inner, .result-card-box { max-width: var(--content-max); margin: 0 auto; width: 100%; min-width: 0; }
+    body.overview-page .inner, body.overview-page #feed-inner { max-width: 2080px; }
     #task-header {
       padding: 10px 16px 8px;
       background: var(--panel);
@@ -651,7 +653,7 @@
     /* usage cells: quiet bordered items like the reference toolbar chips (no fill) */
     .ucell { display: inline-flex; align-items: center; gap: 6px; height: 24px; border: 1px solid var(--border); border-radius: var(--r-chip); padding: 0 8px; font-size: 11px; background: transparent; color: var(--muted); white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; }
     .ucell b { color: var(--fg); font-weight: 600; }
-    .ucell .lab { text-transform: uppercase; font-size: 9px; letter-spacing: .05em; color: var(--faint); font-weight: 700; }
+    .ucell .lab { text-transform: uppercase; font-size: 10px; letter-spacing: .05em; color: var(--faint); font-weight: 700; }
     .ucell .sc { color: var(--claude); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
     .ucell .so { color: var(--opencode); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
     .ucell .sp { color: var(--codex); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
@@ -915,6 +917,7 @@
       font-size: 11px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
     }
+    #jump-latest:hover { background: color-mix(in srgb, var(--accent) 20%, var(--accent-fill)); }
     #jump-latest b { color: var(--tree-text); }
     #jump-latest b:empty { display: none; }
     /* Feed grammar: messages are cards with a sender -> receiver header in the actor's color;
@@ -1005,7 +1008,7 @@
     details[open] > summary > .caret { transform: rotate(90deg); }
     .sum-label { flex: none; color: var(--actor, var(--muted)); font-size: 11px; font-weight: 650; }
     .sum-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 11px; }
-    .sum-time { flex: none; margin-left: auto; padding-left: 8px; color: var(--faint); font-size: 10px; }
+    .sum-time { flex: none; margin-left: auto; padding-left: 8px; color: var(--muted); font-size: 10.5px; }
     details.part > summary { color: var(--muted); font-size: 11px; }
     details.part pre, details.quiet pre {
       margin: 7px 0 0;
@@ -1021,7 +1024,7 @@
     }
     details.quiet {
       margin: 6px 0;
-      padding: 5px 10px;
+      padding: 5px 12px;
       border: 1px dashed var(--border-strong);
       border-radius: var(--r-btn);
       background: transparent;
@@ -1035,7 +1038,8 @@
       margin: 2px 0 2px 9px;
       padding: 2px 0 2px 14px;
     }
-    details.work > summary { padding: 4px 0; }
+    details.work > summary { padding: 4px 13px 4px 0; }
+    .work-list .event > summary { padding-right: 12px; }
     .work-list { display: grid; gap: 4px; padding: 3px 0 6px; }
     /* markers: thin centered rules (turn events, run markers); .warn for a run that needs attention */
     .marker { display: flex; align-items: center; gap: 10px; margin: 10px 0; color: var(--muted); font-size: 10.5px; }
@@ -1179,6 +1183,10 @@
     /* A narrow main pane (a small window with the sidebar open): the run view may shrink below its usual floor. */
     @container (max-width: 640px) {
       #claude-overview { min-width: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .chip-button.on::before, .chip-button[data-chip="RUNNING"].has-sessions::before, .status.LIVE::before, .sdot.LIVE::before, .sdot.running::before, .working::before, #task-status.LIVE::before { animation: none; }
+      #feed { scroll-behavior: auto; }
     }
   </style>
 </head>
@@ -2923,11 +2931,13 @@
     }
 
     function applyPrefs() {
-      var savedWidth = Math.max(240, Number(prefs.sideWidth) || 340);
-      prefs.sideWidth = window.innerWidth > 760
-        ? clamp(savedWidth, 240, Math.max(260, window.innerWidth * .55))
-        : savedWidth;
-      document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
+      if (prefs.sideWidthSet) {
+        var savedWidth = Math.max(240, Number(prefs.sideWidth) || 340);
+        prefs.sideWidth = window.innerWidth > 760
+          ? clamp(savedWidth, 240, Math.max(260, window.innerWidth * .55))
+          : savedWidth;
+        document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
+      } else document.documentElement.style.removeProperty('--sidebar-width');
       document.body.classList.toggle('side-collapsed', !!prefs.sideCollapsed);
       // The page decides the body layout: a workflow shows its run view, a chat its transcript, an agent the side panel.
       var page = pageKind();
@@ -3176,12 +3186,15 @@
       if (node.model) parts.push(modelShortName(node.model) || node.model);
       if (node.effort) parts.push(node.effort);
       var tokens = nodeTokens(node);
-      parts.push(tokens || 'tokens unknown');
+      if (tokens !== '0') parts.push(textSpan('tok', tokens || 'tokens unknown'));
       return parts;
     }
     function appendDotted(container, items) {
       items.forEach(function (item, index) {
-        if (index) container.appendChild(document.createTextNode(' · '));
+        if (index) {
+          if (typeof item !== 'string' && item.classList && item.classList.contains('tok')) item.prepend(document.createTextNode(' · '));
+          else container.appendChild(document.createTextNode(' · '));
+        }
         container.appendChild(typeof item === 'string' ? document.createTextNode(item) : item);
       });
     }
@@ -3423,6 +3436,16 @@
       openElsewhereTitle.textContent = openHidden ? model.nodes[prefs.node].title : '';
       openElsewhereTitle.title = openElsewhereTitle.textContent;
       var scrollTop = list.scrollTop;
+      var focusHost = list.contains(document.activeElement) ? document.activeElement.closest('[data-id]') : null;
+      var focusId = focusHost ? focusHost.dataset.id : null;
+      var previousGroups = [], previousRoots = Object.create(null);
+      if (list.matches(':hover')) {
+        Array.from(list.querySelectorAll('.group')).forEach(function (group) {
+          var key = group.querySelector('.group-caption').dataset.id;
+          previousGroups.push(key);
+          previousRoots[key] = Array.from(group.querySelectorAll('.row.root[data-id]')).map(function (row) { return row.dataset.id; });
+        });
+      }
       list.textContent = '';
       if (query) list.appendChild(textDiv('search-count', rootIds.length + (rootIds.length === 1 ? ' result' : ' results')));
       // Groups by project: the most recent activity first; inside, urgent roots first, then the newest.
@@ -3437,10 +3460,19 @@
       });
       groups.sort(function (a, b) { return b.updated - a.updated; });
       if (ghosts.length) groups.push({ key: 'Not on this PC', roots: ghosts, ghost: true });
+      if (previousGroups.length) groups.sort(function (a, b) {
+        var ai = previousGroups.indexOf(a.key), bi = previousGroups.indexOf(b.key);
+        return (ai < 0 ? previousGroups.length : ai) - (bi < 0 ? previousGroups.length : bi);
+      });
       groups.forEach(function (group, index) {
         group.roots.sort(function (a, b) {
           var ua = URGENT_STATES[a.rollup] ? STATE_ORDER.indexOf(a.rollup) : 99, ub = URGENT_STATES[b.rollup] ? STATE_ORDER.indexOf(b.rollup) : 99;
           return ua - ub || (b.updatedMs || 0) - (a.updatedMs || 0);
+        });
+        var previous = previousRoots[group.key];
+        if (previous) group.roots.sort(function (a, b) {
+          var ai = previous.indexOf(a.id), bi = previous.indexOf(b.id);
+          return (ai < 0 ? previous.length : ai) - (bi < 0 ? previous.length : bi);
         });
         var closed = !!(prefs.closedGroups || {})[group.key];
         var box = document.createElement('div');
@@ -3449,6 +3481,7 @@
         var caption = document.createElement('button');
         caption.type = 'button';
         caption.className = 'group-caption';
+        caption.dataset.id = group.key;
         caption.setAttribute('aria-expanded', String(!closed));
         var total = 0, low = false;
         group.roots.forEach(function (r) { total += r.tree.total; low = low || r.tree.partial; });
@@ -3498,6 +3531,7 @@
           var row = document.createElement('button');
           row.type = 'button';
           row.className = 'row root';
+          row.dataset.id = 'history:' + entry.id;
           var top = document.createElement('div');
           top.className = 'row-top';
           var title = document.createElement('div');
@@ -3516,6 +3550,10 @@
         });
       }
       list.scrollTop = scrollTop;
+      if (focusId) {
+        var focusNext = list.querySelector('[data-id="' + CSS.escape(focusId) + '"]');
+        if (focusNext) focusNext.focus({ preventScroll: true });
+      }
       var selectedEl = list.querySelector('.row.selected');
       if (selectedEl && treeScrollPending) { selectedEl.scrollIntoView({ block: 'nearest' }); treeScrollPending = false; }
       listEdges();
@@ -3583,6 +3621,7 @@
       taskStatus.title = reason || STATUS[badgeClass].help;
       var handoffNode = pageNode();
       taskHandoff.hidden = !row.job && !(handoffNode && handoffNode.kind === 'handoff');
+      if (taskHandoff.hidden && handoffNode) document.getElementById('task-title-row').insertBefore(nodeKindLabel(handoffNode), taskTitle);
       taskHandoff.title = 'Handoff from Claude to Codex' + (row.job ? row.olderJobs ? ' · ' + (row.olderJobs + 1) + ' runs on this thread' : '' : ' · its job record is gone, so there is no result card');
       taskFast.hidden = !row.fast;
       taskTitle.textContent = row.title;
@@ -3601,15 +3640,18 @@
         started.append(actorAvatar(origin.actor, true), document.createTextNode('Started by: '), who);
         taskMeta.appendChild(started);
       }
-      var metadata = document.createElement(session.threadId ? 'button' : 'span');
-      if (session.threadId) metadata.type = 'button';
-      metadata.className = 'meta-item' + (session.threadId ? ' meta-button' : '');
       // Path, model and effort are the chips above; the tooltip keeps the full line.
-      metadata.textContent = sessionMetaLine(session, true);
-      metadata.title = sessionMetaLine(session) + (session.threadId ? '\nClick to copy the thread ID' : '');
-      if (session.threadId) metadata.addEventListener('click', function () { copyText(session.threadId, metadata, 'Thread copied'); });
-      taskMeta.appendChild(metadata);
-      var values = [{ text: relativeTime(row.updatedMs), title: 'Last activity' }];
+      sessionMetaLine(session, true).split('   |   ').filter(function (part) { return !/^tokens:/.test(part); }).forEach(function (part) {
+        var thread = /^thread:/.test(part) && session.threadId;
+        var metadata = document.createElement(thread ? 'button' : 'span');
+        if (thread) metadata.type = 'button';
+        metadata.className = 'meta-item' + (thread ? ' meta-button' : '');
+        metadata.textContent = part;
+        metadata.title = sessionMetaLine(session) + (thread ? '\nClick to copy the thread ID' : '');
+        if (thread) metadata.addEventListener('click', function () { copyText(session.threadId, metadata, 'Thread copied'); });
+        taskMeta.appendChild(metadata);
+      });
+      var values = [{ text: 'last write ' + relativeTime(row.updatedMs), title: 'Last activity' }];
       if (isDismissed(row.id)) values.push({ text: 'Dismissed', title: 'Hidden from every view except History > Dismissed and Everything' });
       values.forEach(function (item) {
         var span = document.createElement('span');
@@ -3928,12 +3970,17 @@
       return meter;
     }
     function treeParts(cell, tree) {
-      var sc = textSpan('sc', '');
-      sc.append(glyphSpan('claude'), document.createTextNode(compactCount(tree.claude)));
-      var sp = textSpan('sp', '');
-      sp.append(glyphSpan('codex'), document.createTextNode(controlsBlocked ? '?' : compactCount(tree.codex)));
-      cell.append(sc, sp);
-      if (tree.opencode != null) { var so = textSpan('so', ''); so.append(glyphSpan('opencode'), document.createTextNode(compactCount(tree.opencode))); cell.appendChild(so); }
+      if (tree.claude !== 0) {
+        var sc = textSpan('sc', '');
+        sc.append(glyphSpan('claude'), document.createTextNode(compactCount(tree.claude)));
+        cell.appendChild(sc);
+      }
+      if (controlsBlocked || tree.codex !== 0) {
+        var sp = textSpan('sp', '');
+        sp.append(glyphSpan('codex'), document.createTextNode(controlsBlocked ? '?' : compactCount(tree.codex)));
+        cell.appendChild(sp);
+      }
+      if (tree.opencode != null && tree.opencode !== 0) { var so = textSpan('so', ''); so.append(glyphSpan('opencode'), document.createTextNode(compactCount(tree.opencode))); cell.appendChild(so); }
     }
     function renderUsage(node) {
       var cells = [];
@@ -4032,7 +4079,9 @@
         if (chat.outcome) item(chat.outcome, 'OpenCode idle outcome');
         item('last update ' + relativeTime(node.updatedMs), new Date(node.updatedMs || 0).toLocaleString());
         if (node.row && node.row.job) {
-          item('OpenCode task', 'Tracked companion job ' + node.row.job.id);
+          var origin = startedBy({ originator: 'Claude Code' });
+          var starter = item('', 'Started by Claude through a handoff', 'started-by actor-' + origin.actor);
+          starter.append(actorAvatar(origin.actor, true), document.createTextNode('Started by: '), bold(origin.label));
           var target = resumeTarget(node.row);
           resumeSessionButton.hidden = !target;
         } else item('Read only', 'This session has no companion job');
@@ -4300,7 +4349,14 @@
       marker.title = event.text || '';
       var label = ({ done: '✓ Turn complete', err: 'Turn aborted', sys: 'Turn started' })[event.kind] || firstLine(event.text, 60);
       if (event.kind === 'sys' && !/task started/i.test(event.text || '')) label = firstLine(event.text, 60);
-      if (event.kind === 'meta') label = event.text || '';
+      if (event.kind === 'meta') {
+        var parts = [event.model, event.effort].filter(Boolean);
+        if (event.tokens) parts.push(compactCount(event.tokens) + ' in');
+        if (event.outputTokens) parts.push(compactCount(event.outputTokens) + ' out');
+        if (event.reasoningTokens) parts.push(compactCount(event.reasoningTokens) + ' reasoning');
+        if (event.cost) parts.push('$' + event.cost);
+        label = parts.join(' · ');
+      }
       if (event.kind === 'done' && event.outcome && event.outcome !== 'succeeded') { label = 'Turn ' + event.outcome; marker.className = 'marker err'; }
       marker.textContent = label + (event.ts ? ' · ' + eventTime(event.ts) : '');
       return marker;
@@ -5737,12 +5793,15 @@
     });
 
     splitter.addEventListener('pointerdown', function (event) {
+      splitter.dataset.startWidth = document.getElementById('side').getBoundingClientRect().width;
+      splitter.dataset.startX = event.clientX;
       splitter.setPointerCapture(event.pointerId);
       splitter.classList.add('dragging');
     });
     splitter.addEventListener('pointermove', function (event) {
       if (!splitter.hasPointerCapture(event.pointerId)) return;
-      prefs.sideWidth = clamp(event.clientX, 240, window.innerWidth * .55);
+      prefs.sideWidth = clamp(Number(splitter.dataset.startWidth) + event.clientX - Number(splitter.dataset.startX), 240, window.innerWidth * .55);
+      prefs.sideWidthSet = true;
       document.documentElement.style.setProperty('--sidebar-width', prefs.sideWidth + 'px');
     });
     splitter.addEventListener('pointerup', function (event) {
@@ -5753,7 +5812,9 @@
     splitter.addEventListener('keydown', function (event) {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
-      prefs.sideWidth = clamp(prefs.sideWidth + (event.key === 'ArrowRight' ? 16 : -16), 240, window.innerWidth * .55);
+      var width = prefs.sideWidthSet && Number(prefs.sideWidth) > 0 ? Number(prefs.sideWidth) : document.getElementById('side').getBoundingClientRect().width;
+      prefs.sideWidth = clamp(width + (event.key === 'ArrowRight' ? 16 : -16), 240, window.innerWidth * .55);
+      prefs.sideWidthSet = true;
       savePrefs();
       applyPrefs();
     });
@@ -5891,6 +5952,7 @@
     }
 
     list.addEventListener('scroll', closeContextMenu, { passive: true });
+    list.addEventListener('mouseleave', function () { lastTreeSignature = ''; renderList(); });
     // Capture phase: must run before the row handler that opens the menu, or it would close it again.
     document.addEventListener('contextmenu', function (event) {
       if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeContextMenu();

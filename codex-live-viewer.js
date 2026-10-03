@@ -1246,7 +1246,7 @@ function opencodeConnection() {
 
 function opencodeSessionView(row, now) {
   let model = {};
-  try { model = JSON.parse(row.model || "{}") || {}; } catch {}
+  try { model = JSON.parse(row.model ?? row.assistant_model ?? "{}") || {}; } catch {}
   const idle = row.newest_type === "idle" || (row.time_idle != null && row.time_idle >= row.time_updated);
   const outcome = row.idle_outcome || row.newest_outcome || "";
   const state = idle ? (outcome === "succeeded" ? "done" : outcome === "failed" ? "failed" : "stopped")
@@ -1282,6 +1282,9 @@ function opencodeChatsTick() {
             UNION SELECT s.parent_id FROM session_v2 s JOIN selected c ON c.id = s.id WHERE s.parent_id IS NOT NULL
           ) SELECT s.id, s.parent_id, s.directory, s.title, s.model, s.cost, s.tokens_input, s.tokens_output,
             s.tokens_cache_read, s.tokens_cache_write, s.time_created, s.time_updated, s.time_idle, s.idle_outcome,
+            (SELECT json_object('providerID', json_extract(m.data, '$.model.providerID'),
+              'id', json_extract(m.data, '$.model.id'), 'variant', json_extract(m.data, '$.model.variant'))
+              FROM session_message m WHERE m.session_id = s.id AND m.type = 'assistant' AND s.model IS NULL ORDER BY m.seq DESC LIMIT 1) AS assistant_model,
             (SELECT m.type FROM session_message m WHERE m.session_id = s.id ORDER BY m.seq DESC LIMIT 1) AS newest_type,
             (SELECT json_extract(m.data, '$.outcome') FROM session_message m WHERE m.session_id = s.id AND m.type = 'idle' ORDER BY m.seq DESC LIMIT 1) AS newest_outcome
             FROM session_v2 s JOIN selected k ON k.id = s.id`).all(now - CLAUDE_ROOT_MS, CLAUDE_MAX_ROOTS, now - STUCK_AFTER_MS);
@@ -1377,6 +1380,9 @@ function opencodeTranscriptPage(id, offset) {
   try {
     const row = db.prepare(`SELECT id, parent_id, directory, title, model, cost, tokens_input, tokens_output,
       tokens_cache_read, tokens_cache_write, time_created, time_updated, time_idle, idle_outcome,
+      (SELECT json_object('providerID', json_extract(m.data, '$.model.providerID'),
+        'id', json_extract(m.data, '$.model.id'), 'variant', json_extract(m.data, '$.model.variant'))
+        FROM session_message m WHERE m.session_id = s.id AND m.type = 'assistant' AND s.model IS NULL ORDER BY m.seq DESC LIMIT 1) AS assistant_model,
       (SELECT m.type FROM session_message m WHERE m.session_id = s.id ORDER BY m.seq DESC LIMIT 1) AS newest_type,
       (SELECT json_extract(m.data, '$.outcome') FROM session_message m WHERE m.session_id = s.id ORDER BY m.seq DESC LIMIT 1) AS newest_outcome
       FROM session_v2 s WHERE s.id = ?`).get(id);
