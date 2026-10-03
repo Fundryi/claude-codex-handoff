@@ -80,12 +80,12 @@ On CloudCLI, where Claude always runs in one folder, `/codex:handoff --cwd <fold
 
 | Command | Does |
 |---|---|
-| `/codex:handoff` | Hand a task to Codex as a background job (`/codex:rescue` is the same command under its original name) |
+| `/codex:handoff` | Hand a task to Codex, or to OpenCode with `--engine opencode`, as a background job (`/codex:rescue` is the same command under its original name) |
 | `/codex:review` / `/codex:adversarial-review` | Codex reviews your working tree, or challenges your design |
-| `/codex:status` / `/codex:result` / `/codex:cancel` | Track, fetch, or stop jobs |
+| `/codex:status` / `/codex:result` / `/codex:cancel` | Track, fetch, or stop Codex and OpenCode jobs |
 | `/codex:transfer` | Move the current Claude session into a Codex thread |
 | `/codex:viewer [restart\|stop\|kill\|status]` | Open the dashboard (starts it, and replaces one left running by an older version); `restart`, `stop`, force-quit (`kill`) or `status` it |
-| `/codex:setup` | Check Codex CLI readiness |
+| `/codex:setup` | Check Codex CLI readiness (OpenCode needs no setup command) |
 
 **Effort and fast mode** are set per job (the Resume form in the dashboard, `--effort`/`--fast` on the CLI, or just say "high effort" / "use fast mode" in a handoff request):
 

@@ -1,6 +1,6 @@
 ---
 name: handoff-contracts
-description: Use when composing any Codex handoff prompt (rescue task, review, browser test) - checks the target repo for handoff contract files and names the right one as binding in the prompt
+description: Use when composing any Codex or OpenCode handoff prompt (rescue task, review, browser test) - checks the target repo for handoff contract files and names the right one as binding in the prompt
 ---
 
 # Handoff Contracts

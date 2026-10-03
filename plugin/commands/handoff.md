@@ -13,6 +13,7 @@ $ARGUMENTS
 Before you call the subagent:
 
 - Write the handoff as the `codex-prompting` skill describes (goal, rules, done_when, files). You can see this conversation and the subagent cannot, so the handoff must carry what Codex needs to know.
+- Choose the engine. Codex is the default. Use `--engine opencode` only when the user asks for OpenCode or names an OpenCode model (`provider/model`).
 - Put the routing flags from the raw request (`--engine`, `--background`, `--cwd <folder>`, `--resume`, `--fresh`, `--resume-thread <id>`, `--model`, `--effort`, `--fast`) on the first line, before the handoff. Drop `--wait`; it is a no-op.
 - `--cwd <folder>` runs Codex in another folder. Use it on hosts where Claude cannot change folder, such as CloudCLI, which runs every session in one fixed folder. The result still arrives here through the prompt hook, and `/codex:status <id>` and `/codex:result <id>` find the job from this folder, as does `/codex:cancel <id>`. Bare `/codex:status` and `/codex:result` (no id) show only this folder's own jobs.
 - If the request is already a complete instruction, forward it unchanged.

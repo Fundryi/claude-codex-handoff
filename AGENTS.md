@@ -1,6 +1,6 @@
 # AI Live Viewer - Agent Guide
 
-Browser dashboard + control panel for local OpenAI Codex CLI sessions (including headless handoffs), bundled with our own fork of the `codex` Claude Code plugin. Follows `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, streams activity to the browser over SSE, and can resume or cancel Codex jobs (and answer a question by resuming) through the bundled plugin's companion script. It does not start new runs; those come from Claude or a Codex CLI.
+Browser dashboard + control panel for local OpenAI Codex CLI sessions (including headless handoffs), bundled with our own fork of the `codex` Claude Code plugin. Follows `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, streams activity to the browser over SSE, and can resume or cancel Codex and OpenCode jobs (and answer a question by resuming) through the bundled plugin's companion script. It does not start new runs; those come from Claude, a Codex CLI or OpenCode.
 
 The same tree shows Claude chats and OpenCode TUI, CLI and child sessions. Claude and OpenCode transcripts are read only and use the shared feed renderer.
 
@@ -8,7 +8,7 @@ The same tree shows Claude chats and OpenCode TUI, CLI and child sessions. Claud
 
 - `codex-live-viewer.js` — the entire Node server + CLI. Single file, on purpose.
 - `viewer-ui.html` — the entire frontend (HTML/CSS/JS in one file). Theme rules: `docs/UI-THEME.md`.
-- `plugin/` — our fork of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc): the `codex` Claude Code plugin (commands, hooks, `scripts/codex-companion.mjs`). Multi-file ESM layout is upstream's, keep it. Upstream updates are pulled selectively via `scripts/upstream-diff.mjs`.
+- `plugin/` — our fork of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc): the `codex` Claude Code plugin (commands, hooks, `scripts/codex-companion.mjs`). Multi-file ESM layout is upstream's, keep it. Upstream updates are pulled selectively via `scripts/upstream-diff.mjs`. OpenCode handoffs (`task --engine opencode`) run through our own `plugin/scripts/lib/opencode.mjs`, which upstream does not have.
 - `plugin/viewer/` — bundled copies of the server and UI. Refresh with `npm run sync:viewer`; `tests/plugin-viewer-bundle.test.js` guards against drift.
 - `.claude-plugin/marketplace.json` — makes this repo an installable Claude Code marketplace (`fundryi`), serving the `codex` plugin from `./plugin`.
 - `scripts/upstream-diff.mjs` — clones upstream and diffs it against `plugin/` for manual cherry-picking.

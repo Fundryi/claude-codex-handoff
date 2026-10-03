@@ -1,5 +1,5 @@
 ---
-description: Show the stored final output for a finished Codex job in this folder, or one started from here with --cwd
+description: Show the stored final output for a finished Codex or OpenCode job in this folder, or one started from here with --cwd
 argument-hint: '[job-id] [--cwd <folder>]'
 disable-model-invocation: true
 allowed-tools: Bash(node:*)

@@ -1,5 +1,5 @@
 ---
-description: Show active and recent Codex jobs for this folder, including review-gate status; with a job id, also a job started from here with --cwd
+description: Show active and recent Codex and OpenCode jobs for this folder, including review-gate status; with a job id, also a job started from here with --cwd
 argument-hint: '[job-id] [--wait] [--timeout-ms <ms>] [--all] [--cwd <folder>]'
 disable-model-invocation: true
 allowed-tools: Bash(node:*)

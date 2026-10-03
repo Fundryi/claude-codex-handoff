@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Claude Code status line: prints the model and the plan limits, and saves the limits for the
-// Codex Live Viewer. Claude Code hands every status line its rate_limits (5-hour and 7-day
+// AI Live Viewer. Claude Code hands every status line its rate_limits (5-hour and 7-day
 // windows) after each reply, so the viewer stays current without /usage.
 // The session hook copies this file to ~/.codex-companion/claude-statusline.mjs (a path that
 // survives plugin updates); the statusLine setting points there.

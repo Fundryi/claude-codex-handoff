@@ -28,6 +28,7 @@ Execution rules:
 - For Codex, add `--write` when the task may edit files. It only marks the job as an edit task (it turns on the `/codex:review` hint in status) and does not change permissions. Every Codex run uses the configured sandbox (`CODEX_PLUGIN_SANDBOX`, default `danger-full-access`). For read-only intent, put "do not edit files" in the handoff rules.
 
 OpenCode tasks:
+- Use OpenCode only when the request has `--engine opencode`, or the user asks for OpenCode. Otherwise use Codex.
 - Forward `--engine opencode` to `task`. With no `--engine`, the helper uses Codex.
 - Pass `--model provider/model#variant` exactly as supplied. Do not apply Codex model shortcuts. With no model, OpenCode uses the user's configured default.
 - If the user supplies `--effort` and the model has no `#`, the helper adds `#<effort>` to the model. If a variant is already present, or no model is supplied, effort has no effect. There is no default effort for OpenCode.
@@ -40,7 +41,7 @@ Command selection:
 - Use exactly one `task` invocation per rescue handoff, followed by `result <job-id> --wait` calls only if the job is still running when `task` returns.
 - If the forwarded request includes `--resume-thread <id>`, pass it to `task` as-is and do not add `--resume-last`.
 - `--background` is forwarded to `task` as-is, and the `task` output (the job id) is returned at once: no `result --wait` follows. `--wait` is a no-op alias for the default and must be stripped. Neither is ever part of the natural-language task text.
-- `--cwd <folder>` is a routing flag: pass it to `task` and to every `result --wait` call, and strip it from the task text. Quote the folder in Bash (`--cwd "<folder>"`) so spaces and backslashes survive. It runs Codex in that folder. On hosts where Claude cannot change folder (CloudCLI runs every session in one fixed folder), it is how a handoff targets another project. The job's result still reaches this folder's prompt hook, and `status` and `result` find its id here without `--cwd`.
+- `--cwd <folder>` is a routing flag: pass it to `task` and to every `result --wait` call, and strip it from the task text. Quote the folder in Bash (`--cwd "<folder>"`) so spaces and backslashes survive. It runs the job in that folder. On hosts where Claude cannot change folder (CloudCLI runs every session in one fixed folder), it is how a handoff targets another project. The job's result still reaches this folder's prompt hook, and `status` and `result` find its id here without `--cwd`.
 - If the forwarded request includes `--fast` or the user asks for fast mode / priority processing, strip that phrasing from the task text and add `--fast` to the `task` call. Never add `--fast` unless explicitly requested.
 - If the forwarded request includes `--model`, normalize the shortcuts above only for Codex. Pass an OpenCode model unchanged to `task`.
 - If the forwarded request includes `--effort`, pass it through to `task`.

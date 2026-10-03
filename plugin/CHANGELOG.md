@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.22.1
+
+- **Every command and skill now knows about OpenCode.** The rescue agent, `/codex:status`, `/codex:result`, `/codex:cancel` and `/codex:setup` now name OpenCode jobs. The prompting, contract and result skills say that they apply to OpenCode handoffs too. In 2.22.0 only the handoff command and the runtime skill knew about OpenCode, so Claude could miss that the other commands also work for OpenCode jobs.
+- **The handoff command says when to use OpenCode.** Codex stays the default. Claude uses `--engine opencode` only when you ask for OpenCode or name an OpenCode model (`provider/model`).
+- **`/codex:setup` explains that OpenCode needs no setup.** It checks only the Codex CLI. For OpenCode, install the OpenCode CLI and run `opencode` once.
+- **The plugin description uses the new dashboard name.** It now says AI Live Viewer and names Codex, Claude and OpenCode sessions. The viewer command and CONTRIBUTING now say Node 22.13 or newer.
+- **Tests:** no test was added or removed. This release changes only text.
+
 ## 2.22.0
 
 - **The viewer shows OpenCode sessions.** OpenCode TUI chats, `opencode run` jobs and their child sessions now appear in the tree, next to Claude and Codex. A new OpenCode chip filters the tree. Click a session to read its messages, reasoning, tool output, model, tokens and cost in the same feed as Claude chats. A child session sits under its parent. The status comes from OpenCode's own idle record, so a finished session shows as finished, and a failed one as failed.

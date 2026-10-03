@@ -1,6 +1,6 @@
 ---
 name: codex-result-handling
-description: Internal guidance for presenting Codex helper output back to the user
+description: Internal guidance for presenting Codex or OpenCode helper output back to the user
 user-invocable: false
 ---
 
