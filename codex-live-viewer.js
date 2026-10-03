@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.24.1";
+const APP_VERSION = "2.25.0";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 const PID_FILE = path.join(os.tmpdir(), "codex-live-viewer-" + PORT + ".pid");
 function parseFlags(argv) {
@@ -1054,6 +1054,34 @@ function claudeAgentState(run, a) {
   return a.state === "running" && run.status !== "RUNNING" ? "ended" : a.state;
 }
 
+// The tree's middle level for a run. A topic is the second ":" part of a label ("verify:datev-firma:F1#1"
+// -> "datev-firma"); it becomes a group when 2 or more agents share it. Other agents group by phase.
+// A lone agent stays flat, and so does a run with no topic and one phase. Sets a.group (or "");
+// counts cover every agent, sent or not. A group's order is its first agent's.
+function claudeRunGroups(all, phaseOrder) {
+  const topicOf = (a) => String(a.label).split(":")[1] || "";
+  const shared = new Map();
+  for (const a of all) { const t = topicOf(a); if (t) shared.set(t, (shared.get(t) || 0) + 1); }
+  const groups = new Map();
+  for (const a of all) {
+    const t = topicOf(a);
+    a.group = t && shared.get(t) > 1 ? "t:" + t : "p:" + a.phase;
+    if (!groups.has(a.group)) groups.set(a.group, { key: a.group, title: a.group.slice(2), loose: a.group[0] === "p", agents: [] });
+    groups.get(a.group).agents.push(a);
+  }
+  for (const [key, g] of groups) if (g.agents.length < 2) { g.agents[0].group = ""; groups.delete(key); }
+  if (groups.size < 2 && ![...groups.values()].some((g) => !g.loose)) { for (const a of all) a.group = ""; return []; }
+  const tally = (xs) => ({ started: xs.length, running: xs.filter((a) => a.state === "running").length,
+    done: xs.filter((a) => a.state === "done").length, failed: xs.filter((a) => a.state === "failed").length });
+  return [...groups.values()].map(({ agents, ...g }) => ({
+    ...g, ...tally(agents), order: agents[0].order,
+    steps: phaseOrder.map((p) => ({ title: p, ...tally(agents.filter((a) => a.phase === p)) })).filter((s) => s.started),
+    tokens: agents.reduce((s, a) => s + (a.usage ? a.usage.total : 0), 0),
+    partial: agents.some((a) => !a.usage || a.usage.partial),
+    lastWriteMs: Math.max(0, ...agents.map((a) => a.lastWriteMs)),
+  }));
+}
+
 function claudeRunView(run) {
   const snap = run.snapshot;
   const all = [...run.agents.values()].map((a) => {
@@ -1090,6 +1118,7 @@ function claudeRunView(run) {
     if (a.state === "done") p.done++;
     if (a.state === "failed") p.failed++;
   }
+  const groups = claudeRunGroups(all, [...phaseMap.keys()]);
   // All running agents first, then the newest writes; sent in journal order.
   const sent = all.length <= CLAUDE_MAX_AGENTS_SENT ? all
     : all.slice().sort((x, y) => (y.state === "running") - (x.state === "running") || y.lastWriteMs - x.lastWriteMs)
@@ -1100,8 +1129,8 @@ function claudeRunView(run) {
     status: run.status, error: run.error, legacy: !run.launchedSeen,
     startedMs: (snap && snap.startTime) || run.journal.birthtimeMs || run.journal.mtimeMs,
     updatedMs: run.lastActivityMs, endedMs: snap ? snap.endMs : 0, durationMs: snap ? snap.durationMs : 0,
-    counts, phases: [...phaseMap.values()],
-    agents: sent.map(({ order, ...a }) => a), agentsHidden: all.length - sent.length,
+    counts, phases: [...phaseMap.values()], groups,
+    agents: sent, agentsHidden: all.length - sent.length,
     totals: snap ? { tokens: snap.tokens, toolCalls: snap.toolCalls } : null,
   };
 }
