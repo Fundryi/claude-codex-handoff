@@ -17,7 +17,6 @@
       --panel-3: #313747;          /* nested fills: the active chip, inline code (reference "All 17" chip) */
       --hover: #242a3a;
       --selected: #41386f;         /* selected row band (reference) */
-      --selected-bar: #b693f4;     /* selected overview card border */
       --border: #2c3142;           /* panels, cards, inputs */
       --border-strong: #3a4054;    /* chips, buttons */
       --border-soft: #1f2431;      /* dividers between rows */
@@ -383,29 +382,50 @@
     .g { display: inline-grid; place-items: center; }
     .g svg { width: 11px; height: 11px; }
 
-    #home-view { padding: 4px 0 30px; }
+    #home-view { padding: 4px 4px 30px; }
     .home-heading, .ov-heading { color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; margin: 6px 0 8px; display: flex; align-items: center; gap: 8px; }
-    .home-heading + .ov-grid { margin-top: 0; }
-    .ov-grid + .home-heading { margin-top: 18px; }
     .home-heading .n, .ov-heading .n { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
-    .ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; margin-bottom: 16px; }
-    /* cards: only in the Live overview. A node page has no cards; the tree lists its children. One even neutral border, no colored bar. */
-    .card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 3px; text-align: left; border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--panel-2); padding: 8px 12px 9px; cursor: pointer; color: var(--fg); min-width: 0; position: relative; transition: background-color .14s ease, border-color .14s ease; }
-    .card:hover { background: var(--hover); border-color: var(--border-strong); }
-    .card.selected { background: var(--selected); border-color: var(--selected-bar); }
-    /* card head: state mark, title, state word, time; the kind word leads the meta line */
-    .card-head { display: flex; align-items: center; gap: 6px; height: 20px; min-width: 0; }
-    .card-head .row-title { flex: 1; font-size: 12.5px; }
-    .card-head .state-word { margin-left: auto; flex: none; }
-    .card-head .row-time { flex: none; }
-    .card-head .kind-label { overflow: hidden; text-overflow: ellipsis; }
-    .card.selected .row-meta, .card.selected .row-time, .card.selected .kids { color: #c9cbe0; }
-    .card .kids { margin-top: 4px; padding-left: 10px; border-left: 1px solid var(--rail, color-mix(in srgb, var(--tree) 55%, transparent)); font-size: 10.5px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
-    .card .kids div { display: flex; align-items: center; gap: 5px; height: 18px; }
-    .card .kids .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ov-column { min-width: 0; container-type: inline-size; }
+    .ov-section { margin: 18px 0 0; }
+    .ov-section > .home-heading { margin: 0 0 4px; padding: 0 10px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .08em; }
+    .ov-row { display: grid; grid-template-columns: 10px 16px minmax(220px, 1.2fr) 150px minmax(160px, 1fr) 96px 54px; gap: 0 10px; align-items: center; width: 100%; height: 36px; padding: 0 10px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; cursor: pointer; min-width: 0; transition: background-color .14s ease; }
+    .ov-row:hover { background: var(--hover); border-bottom-color: transparent; }
+    .ov-row:last-child { border-bottom-color: transparent; }
+    .ov-title, .ov-project, .ov-now { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+    .ov-title { font-size: 13px; font-weight: 550; }
+    .ov-project, .ov-now { color: var(--muted); font-size: 12px; }
+    .ov-now.ov-answer { color: var(--amber); }
+    .ov-row .state-word { text-align: right; white-space: nowrap; }
+    .ov-age { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
+    .ov-row.child { height: 28px; border: 0; }
+    .ov-row.child > .sdot, .ov-row.child > .mark, .ov-row.child > .ov-project { visibility: hidden; }
+    .ov-row.child .ov-title { padding-left: min(var(--ov-indent, 26px), max(0px, calc(100% - 24px))); position: relative; color: var(--muted); font-weight: 450; }
+    .ov-row.child .ov-title::before { content: ''; position: absolute; left: calc(min(var(--ov-indent, 26px), max(0px, calc(100% - 24px))) - 16px); top: -5px; width: 8px; height: 16px; border-left: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); border-radius: 0 0 0 4px; }
+    .ov-row.child .ov-title .mark { display: inline-grid; vertical-align: -3px; margin-right: 6px; width: 14px; height: 14px; }
+    .ov-row.child .ov-title .mark svg { width: 9px; height: 9px; }
+    .ov-row.fin .ov-title { color: var(--muted); font-weight: 450; }
+    .ov-finished { margin-top: 22px; border-top: 1px solid var(--border-soft); padding: 8px 10px; color: var(--muted); font-size: 12px; }
+    .ov-show, .activity-live { padding: 0; border: 0; border-radius: var(--r-chip); background: transparent; color: var(--tree-text); font: inherit; cursor: pointer; }
+    .ov-show:hover, .activity-live:hover { color: var(--fg); }
+    @media (min-width: 2200px) { #home-view { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; } }
+    @container (max-width: 885px) { .ov-row { grid-template-columns: 10px 16px minmax(0, 1.2fr) 120px minmax(0, 1fr) 96px 54px; } }
+    @container (max-width: 640px) { .ov-row { grid-template-columns: 10px 16px minmax(0, 1.2fr) minmax(0, 1fr) 96px 44px; gap: 0 6px; } .ov-row > .ov-project { display: none; } }
+    @container (max-width: 440px) { .ov-row { grid-template-columns: 10px 16px minmax(0, 1fr) 80px 36px; } .ov-row > .ov-now { display: none; } .ov-row .state-word { font-size: 10px; } }
+    body.activity-open #panel { width: 320px; }
+    body.activity-open #panel-head { padding: 12px 14px; border-bottom: 0; }
+    body.activity-open #panel-body { padding: 4px 8px 12px; }
+    .activity-count { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .activity-list .ov-section { margin-top: 12px; }
+    .activity-list .home-heading { padding: 0 8px; }
+    .activity-list .ov-row { grid-template-columns: 10px 16px minmax(0, 1fr) 46px; height: 32px; padding: 0 8px; }
+    .activity-list .ov-row.child { height: 26px; }
+    .activity-list .ov-title { font-size: 12.5px; font-weight: 500; }
+    .activity-list .ov-row.selected { background: var(--selected); }
+    .activity-list .ov-row.selected .ov-age, .activity-list .ov-row.selected .ov-title { color: var(--fg); }
+    .activity-foot { margin-top: 14px; padding: 6px 8px; color: var(--muted); font-size: 11.5px; line-height: 1.7; }
     /* secondary button (reference "New worktree"): panel fill, thin border, rounded, muted text */
-    .empty-action, .toolbar-button.home-more { display: inline-flex; align-items: center; justify-content: center; height: 32px; margin-top: 10px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--r-btn); background: var(--panel-2); color: var(--muted); font-size: 12px; cursor: pointer; transition: color .14s ease, background-color .14s ease; }
-    .empty-action:hover, .toolbar-button.home-more:hover { background: var(--hover); color: var(--fg); }
+    .empty-action { display: inline-flex; align-items: center; justify-content: center; height: 32px; margin-top: 10px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--r-btn); background: var(--panel-2); color: var(--muted); font-size: 12px; cursor: pointer; transition: color .14s ease, background-color .14s ease; }
+    .empty-action:hover { background: var(--hover); color: var(--fg); }
     .empty-list .empty-action { display: inline-flex; margin-top: 12px; }
     .history-caption {
       padding: 10px 12px 4px;
@@ -558,7 +578,7 @@
     .claude-note { margin: 18px 0 0; color: var(--faint); font-size: 11px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
-    /* the unified side panel (an open Claude agent, or the docked Live overview on wide screens); shown by body.panel-open */
+    /* The side panel holds an open Claude agent or the wide-screen Activity rail. */
     /* the third card: beside the main pane, after a gutter */
     #panel { width: var(--panel-w); flex: none; margin-left: var(--gutter); display: none; flex-direction: column; background: var(--panel); }
     body.panel-open #panel { display: flex; }
@@ -568,7 +588,6 @@
     #panel-head .t { font-weight: 650; font-size: 13px; flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #panel-head .m { color: var(--muted); font-size: 11px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
     #panel-head .m > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #panel-head .ov-note { color: var(--muted); font-size: 11px; }
     #panel-close { margin-left: auto; }
     #panel-body { flex: 1; overflow: auto; padding: 12px; }
     #back { display: none; }
@@ -1173,7 +1192,6 @@
       #legend { gap: 12px; }
       .result-section.question { padding: 0; border: 0; background: none; }
       .result-card-body .answer-box { position: sticky; bottom: -12px; margin: 10px -14px -12px; padding: 10px 14px 12px; background: var(--panel-2); border-top: 1px solid var(--border); }
-      .ov-grid { grid-template-columns: 1fr; }
       .agent-row .tail .w, .agent-row .tool { display: none; }
       #claude-overview { padding-left: 12px; padding-right: 12px; }
       /* the unified side panel covers the main pane, full width, with a back button */
@@ -1995,32 +2013,6 @@
       chip.textContent = 'FAST';
       chip.title = 'Priority processing (fast tier)';
       return chip;
-    }
-    // One row -> one overview card. Rows already carry everything a card needs (Task 3/4's
-    // unified row model), so the overview agrees with the list instead of recomputing.
-    function homeCard(row) {
-      var session = row.session || {};
-      return {
-        id: row.id, sessionId: session.id || null, title: row.title, project: row.project,
-        fast: row.fast, agents: row.children.length, status: row.status, lastMs: row.updatedMs,
-        needsAnswer: row.needsAnswer, handoff: !!row.job
-      };
-    }
-    // Now overview sections: Needs answer, Needs attention, Running, Recently finished (5, newest
-    // first - rows already arrive newest first from buildRows). Dismissed and archived rows are
-    // never shown, same as the list.
-    function homeCards(rows, dismissedIds) {
-      var dismissed = dismissedIds || [];
-      var answer = [], attention = [], running = [], finished = [];
-      (rows || []).forEach(function (row) {
-        if (dismissed.indexOf(row.id) !== -1 || row.status === 'ARCHIVED') return;
-        var card = homeCard(row);
-        if (row.status === 'ANSWER') answer.push(card);
-        else if (row.status === 'ATTENTION') attention.push(card);
-        else if (row.status === 'RUNNING') running.push(card);
-        else if (row.status === 'FINISHED') finished.push(card);
-      });
-      return { answer: answer, attention: attention, running: running, finished: finished.slice(0, 5) };
     }
     function resumeBody(session, opts) {
       const b = { threadId: session.threadId, cwd: session.cwd };
@@ -4362,117 +4354,197 @@
       return marker;
     }
 
-    // One overview card: head (pill, kind word, time), title, meta. The left bar is the worker's color (Codex teal here).
-    // One overview card (design 8.3): head, title, meta, flags, phases, and the children on a rail.
-    function nodeCardElement(model, node, railColor) {
+    // The list and the Activity rail share groups. Running children stay under their
+    // parent; questions and failed handoffs remain directly accessible.
+    function overviewGroups(model, now, dismissedIds) {
+      var groups = { running: [], answer: [], attention: [], finished: [], children: {} };
+      var midnight = new Date(now);
+      midnight.setHours(0, 0, 0, 0);
+      var seen = {};
+      function visit(id, parent, depth) {
+        var node = model.nodes[id];
+        if (!node || seen[id] || depth > 8 || liveHidden(node, dismissedIds)) return;
+        seen[id] = true;
+        var group = node.state === 'RUNNING' || node.state === 'BACKGROUND' ? 'running'
+          : node.state === 'ANSWER' ? 'answer' : node.state === 'ATTENTION' ? 'attention'
+          : node.state === 'FINISHED' && node.updatedMs >= midnight.getTime() ? 'finished' : '';
+        var host = parent;
+        if (node.kind !== 'ghost' && group) {
+          if (node.state === 'RUNNING' && parent) {
+            (groups.children[parent] = groups.children[parent] || []).push(node);
+            host = node.id;
+          } else if (!parent || group === 'answer' || group === 'attention' || node.kind === 'handoff' || (node.kind === 'opencode' && node.row && node.row.job)) {
+            groups[group].push(node);
+            host = group === 'finished' ? null : node.id;
+          }
+        }
+        (node.children || []).forEach(function (cid) { visit(cid, host, depth + 1); });
+      }
+      viewRoots(model, { tab: 'LIVE', chip: 'ALL', kinds: {} }, now, dismissedIds, '').forEach(function (id) { visit(id, null, 0); });
+      Object.keys(groups).forEach(function (key) {
+        if (key !== 'children') groups[key].sort(function (a, b) { return (b.updatedMs || 0) - (a.updatedMs || 0); });
+      });
+      Object.keys(groups.children).forEach(function (key) { groups.children[key].sort(childOrder); });
+      return groups;
+    }
+    function overviewStep(model, node) {
+      var job = node.row && node.row.job;
+      var session = node.row && node.row.session;
+      if (node.state === 'FINISHED') return { text: '' };
+      if (node.state === 'ANSWER') return { text: firstLine(String(job && job.needsDecision || '').split(/\r?\n/, 1)[0], 160) || 'waiting for your answer', ask: true };
+      if (node.state === 'BACKGROUND') {
+        var count = 0, seen = {};
+        function countRunning(id) {
+          if (seen[id]) return;
+          seen[id] = true;
+          var kid = model.nodes[id];
+          if (!kid) return;
+          if (kid.state === 'RUNNING') count++;
+          (kid.children || []).forEach(countRunning);
+        }
+        (node.children || []).forEach(countRunning);
+        return { text: count ? count + (count === 1 ? ' agent running' : ' agents running') : '' };
+      }
+      if (node.state !== 'RUNNING') {
+        var reason = job && job.errorMessage || node.chat && node.chat.outcome
+          || (session && session.lastKind === 'err' ? session.lastText : '') || (node.state === 'STOPPED' ? 'stopped' : '');
+        return { text: firstLine(String(reason).split(/\r?\n/, 1)[0], 160) };
+      }
+      if (node.kind === 'workflow' && node.run && node.run.phases) {
+        var phases = node.run.phases;
+        var phase = phases.find(function (p) { return p.started > p.done + (p.failed || 0); }) || phases[phases.length - 1];
+        if (phase) return { text: phase.title + ' ' + phase.done + '/' + phase.started };
+      }
+      if (node.tool) return { text: firstLine(node.tool, 160), command: /^Bash:/i.test(node.tool) };
+      if (node.kind === 'opencode' && node.chat && node.chat.step) return { text: node.chat.step, command: /^(bash|shell):/i.test(node.chat.step) };
+      if (session && session.lastText) {
+        var text = firstLine(String(session.lastText).split(/\r?\n/, 1)[0], 160);
+        if (session.lastKind === 'cmd') return { text: 'ran ' + text, command: true };
+        if (session.lastKind === 'patch') return { text: 'patched ' + String(session.lastText).split(/,\s*|\r?\n/).filter(Boolean).map(projectName).join(', ') };
+        if (session.lastKind === 'tool') return { text: text };
+        if (session.lastKind === 'think') return { text: 'thinking' };
+        if (session.lastKind === 'agent') return { text: text };
+      }
+      return { text: 'working' };
+    }
+    function overviewTooltip(node, step) {
       var info = KIND_INFO[node.kind] || KIND_INFO.chat;
+      var path = node.chat && node.chat.cwd || node.row && node.row.project || node.project || '';
+      var meta = [info.label, node.model, node.effort, nodeTokens(node) ? nodeTokens(node) + (node.usage.total === 1 ? ' token' : ' tokens') : 'tokens unknown',
+        node.fast ? 'FAST' : '', SOURCE_NAMES[node.source] || node.source].filter(Boolean);
+      return [node.title, path, step.text, nodeStateLabel(node.state), meta.join(' · '), (node.flags || []).join(' · ')].filter(Boolean).join('\n');
+    }
+    function overviewRowElement(model, node, child, rail, depth) {
+      var step = overviewStep(model, node);
       var el = document.createElement('button');
       el.type = 'button';
-      el.className = 'card k-' + info.k + (prefs.node === node.id ? ' selected' : '');
-      el.dataset.key = 'card:' + node.id;
-      if (railColor) el.style.setProperty('--rail', 'color-mix(in srgb, ' + railColor + ' 55%, transparent)');
-      // head: state mark, title, state word, time. Meta: kind word, fast, model, effort, tokens, tool.
-      var head = document.createElement('div');
-      head.className = 'card-head';
-      var title = document.createElement('div');
-      title.className = 'row-title';
-      title.textContent = node.title;
-      title.title = node.title;
-      var word = textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase());
-      word.title = nodeStateHelp(node);
-      head.append(stateDot(nodeBadge(node.state), nodeStateLabel(node.state)), title, word, textSpan('row-time', relativeTime(node.updatedMs)));
-      var meta = document.createElement('div');
-      meta.className = 'row-meta';
-      var lead = [nodeKindLabel(node)];
-      if (node.fast) { var fast = textSpan('fl fast', 'fast'); fast.title = 'Fast mode: the priority service tier'; lead.push(fast); }
-      // The state word and the FAST tag already say the state on a card: only the plain flags join the meta line.
-      var flags = nodeFlagWords(node).filter(function (w) { return !w[2]; }).map(function (w) { var f = textSpan('fl', w[0]); f.title = w[1]; return f; });
-      appendDotted(meta, lead.concat(nodeMetaParts(node), flags, node.state === 'RUNNING' && node.tool ? [textSpan('mono', node.tool)] : []));
-      el.append(head, meta);
-      if (node.kind === 'workflow' && node.run && node.run.phases) {
-        el.appendChild(textDiv('row-meta', node.run.phases.map(function (p) { return p.title + ' ' + p.done + '/' + p.started; }).join(' · ')));
+      el.className = 'ov-row' + (child ? ' child' : '') + (node.state === 'FINISHED' ? ' fin' : '') + (rail && prefs.node === node.id ? ' selected' : '');
+      el.dataset.key = 'overview:' + node.id;
+      el.dataset.node = node.id;
+      el.title = overviewTooltip(node, step);
+      var title = textSpan('ov-title', '');
+      if (child) {
+        el.style.setProperty('--ov-indent', (rail ? 20 : 26) * (depth || 1) + 'px');
+        title.appendChild(nodeMark(node));
       }
-      // A card lists only the children still at work; finished ones are one quiet count.
-      var all = node.children.map(function (id) { return model.nodes[id]; }).filter(Boolean);
-      var kids = all.filter(function (k) { return URGENT_STATES[k.rollup]; }).sort(childOrder);
-      var done = all.length - kids.length;
-      if (all.length) {
-        var list = document.createElement('div');
-        list.className = 'kids';
-        kids.slice(0, 8).forEach(function (kid) {
-          var line = document.createElement('div');
-          var word = textSpan('state-word ' + nodeBadge(kid.state), nodeStateLabel(kid.state).toLowerCase());
-          line.append(stateDot(nodeBadge(kid.state)), nodeMark(kid), textSpan('t', kid.title), word, textSpan('', nodeTokens(kid) || '?'));
-          list.appendChild(line);
-        });
-        if (kids.length > 8) list.appendChild(textDiv('', '+ ' + (kids.length - 8) + ' more at work'));
-        if (done) list.appendChild(textDiv('', done + ' finished'));
-        el.appendChild(list);
+      title.appendChild(document.createTextNode(node.title));
+      el.append(stateDot(nodeBadge(node.state), nodeStateLabel(node.state)), nodeMark(node), title);
+      if (!rail) {
+        var path = node.chat && node.chat.cwd || node.row && node.row.project || node.project || '';
+        var project = textSpan('ov-project', projectName(path));
+        project.title = path;
+        el.append(project, textSpan('ov-now' + (step.command ? ' cmd mono' : '') + (step.ask ? ' ov-answer' : ''), step.text),
+          textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase()));
       }
+      el.appendChild(textSpan('ov-age', relativeTime(node.updatedMs)));
       el.addEventListener('click', function () { lastHomeSignature = ''; selectNode(node.id, true); });
       el.addEventListener('contextmenu', function (event) { nodeContextMenu(event, node); });
       return el;
     }
-
-    // The Live overview: Running, Needs you, Needs attention, then a Show finished button. Cards are roots
-    // and handoffs (a handoff is the unit you act on); every other child shows on its parent's card.
-    var dockedHomeSignature = '';
-    function renderHome(inner) {
-      var docked = !!inner;
-      inner = inner || feedInner;
+    function overviewSection(model, groups, label, nodes, rail) {
+      var section = document.createElement('section');
+      section.className = 'ov-section';
+      var heading = document.createElement('div');
+      heading.className = 'home-heading';
+      heading.append(document.createTextNode(label), textSpan('n', String(nodes.length)));
+      section.appendChild(heading);
+      function append(node, depth) {
+        section.appendChild(overviewRowElement(model, node, depth > 0, rail, depth));
+        if (depth < 8) (groups.children[node.id] || []).forEach(function (kid) { append(kid, depth + 1); });
+      }
+      nodes.forEach(function (node) { append(node, 0); });
+      return section;
+    }
+    var homeFinishedOpen = false;
+    function renderHome() {
       var model = currentModel();
       var now = Date.now();
-      var rootIds = viewRoots(model, { tab: 'LIVE', chip: 'ALL', kinds: {} }, now, prefs.dismissed, '');
-      var colors = Object.create(null);
-      var cards = [];
-      rootIds.forEach(function (id) {
-        var root = model.nodes[id];
-        var key = projectName(root.project);
-        if (!(key in colors)) colors[key] = PROJECT_COLORS[Object.keys(colors).length % PROJECT_COLORS.length];
-        (function walk(node, depth) {
-          if (depth === 0 || node.kind === 'handoff') cards.push({ node: node, color: colors[key] });
-          if (depth < 8) node.children.forEach(function (cid) { var c = model.nodes[cid]; if (c && !liveHidden(c, prefs.dismissed)) walk(c, depth + 1); });
-        })(root, 0);
-      });
-      var kindOrder = { handoff: 0, codex: 0, chat: 1, opencode: 1, agent: 2, workflow: 3, codexagent: 4, ghost: 5 };
-      function pick(states, max) {
-        return cards.filter(function (c) { return states.indexOf(c.node.state) !== -1; })
-          .sort(function (a, b) { return (kindOrder[a.node.kind] || 0) - (kindOrder[b.node.kind] || 0) || (b.node.updatedMs || 0) - (a.node.updatedMs || 0); })
-          .slice(0, max || 99);
-      }
-      var sections = [['Running', pick(['RUNNING', 'BACKGROUND'])], ['Needs you', pick(['ANSWER'])], ['Needs attention', pick(['ATTENTION'])]];
-      var finished = cards.filter(function (c) { return c.node.state === 'FINISHED'; }).length;
-      var signature = JSON.stringify([dataVersion, Math.floor(now / 10000), prefs.node, finished, sections.map(function (s) { return s[1].map(function (c) { return c.node.id; }); })]);
-      if (signature === (docked ? dockedHomeSignature : lastHomeSignature)) return;
-      if (docked) dockedHomeSignature = signature; else lastHomeSignature = signature;
-      var focusHost = inner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
+      var groups = overviewGroups(model, now, prefs.dismissed);
+      var signature = JSON.stringify([dataVersion, Math.floor(now / 10000), homeFinishedOpen, isWide(), new Date(now).toDateString()]);
+      if (signature === lastHomeSignature) return;
+      lastHomeSignature = signature;
+      var focusHost = feedInner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
       var focusKey = focusHost ? focusHost.dataset.key : null;
-      inner.textContent = '';
+      feedInner.textContent = '';
       var wrap = document.createElement('div');
-      if (!docked) wrap.id = 'home-view';
-      sections.forEach(function (section) {
-        if (!section[1].length) return;
-        var heading = document.createElement('div');
-        heading.className = 'home-heading';
-        heading.append(document.createTextNode(section[0]), textSpan('n', String(section[1].length)));
-        wrap.appendChild(heading);
-        var grid = document.createElement('div');
-        grid.className = 'ov-grid';
-        section[1].forEach(function (c) { grid.appendChild(nodeCardElement(model, c.node, c.color)); });
-        wrap.appendChild(grid);
-      });
-      if (!sections[0][1].length && !sections[1][1].length && !sections[2][1].length) wrap.insertBefore(textDiv('home-heading', 'Nothing running right now'), wrap.firstChild);
-      if (finished) {
-        var more = document.createElement('button');
-        more.type = 'button';
-        more.className = 'toolbar-button home-more';
-        more.textContent = 'Show finished (' + finished + ')';
-        more.addEventListener('click', function () { chooseView('LIVE', 'FINISHED'); });
-        wrap.appendChild(more);
-      }
-      inner.appendChild(wrap);
+      wrap.id = 'home-view';
+      var left = textDiv('ov-column', '');
+      var right = textDiv('ov-column', '');
+      left.appendChild(overviewSection(model, groups, 'Running', groups.running, false));
+      if (!groups.running.length) left.appendChild(textDiv('activity-count', 'Nothing running right now'));
+      if (groups.answer.length) right.appendChild(overviewSection(model, groups, 'Needs you', groups.answer, false));
+      if (groups.attention.length) right.appendChild(overviewSection(model, groups, 'Needs attention', groups.attention, false));
+      var finished = textDiv('ov-finished', groups.finished.length + ' finished today · ');
+      var more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'ov-show';
+      more.dataset.key = 'overview:finished';
+      more.textContent = homeFinishedOpen ? 'hide' : 'show';
+      more.setAttribute('aria-expanded', String(homeFinishedOpen));
+      more.addEventListener('click', function () { homeFinishedOpen = !homeFinishedOpen; lastHomeSignature = ''; renderHome(); });
+      finished.appendChild(more);
+      var done = textDiv('ov-finished-rows', '');
+      if (homeFinishedOpen) groups.finished.forEach(function (node) { done.appendChild(overviewRowElement(model, node, false, false)); });
+      // In one column, finished follows all active groups. In two, it stays on the left.
+      var finishHost = isWide() ? left : right;
+      finishHost.append(finished, done);
+      wrap.append(left, right);
+      feedInner.appendChild(wrap);
       if (focusKey) wrap.querySelectorAll('[data-key]').forEach(function (el) { if (el.dataset.key === focusKey) el.focus({ preventScroll: true }); });
-      if (!docked) jumpLatest.hidden = true;
+      jumpLatest.hidden = true;
+    }
+    function renderActivity() {
+      var model = currentModel();
+      var groups = overviewGroups(model, Date.now(), prefs.dismissed);
+      var shown = groups.answer.slice(0, 4);
+      // Parents outside the rail must not hide work that is still running.
+      var running = groups.running.concat(groups.attention.concat(groups.answer.slice(shown.length)).flatMap(function (node) { return groups.children[node.id] || []; }));
+      var signature = JSON.stringify(['activity', dataVersion, prefs.node, Math.floor(Date.now() / 10000), new Date().toDateString()]);
+      if (signature === lastPanelSignature) return;
+      lastPanelSignature = signature;
+      var focusHost = panelInner.contains(document.activeElement) ? document.activeElement.closest('[data-key]') : null;
+      var focusKey = focusHost ? focusHost.dataset.key : null;
+      panelHead.textContent = '';
+      var copy = textDiv('', '');
+      copy.append(textDiv('t', 'Activity'), textDiv('activity-count', running.length + ' running · ' + groups.answer.length + (groups.answer.length === 1 ? ' needs you' : ' need you')));
+      panelHead.appendChild(copy);
+      panelInner.textContent = '';
+      var wrap = textDiv('activity-list', '');
+      if (running.length) wrap.appendChild(overviewSection(model, groups, 'Running', running, true));
+      if (shown.length) wrap.appendChild(overviewSection(model, groups, 'Needs you', shown, true));
+      var more = groups.answer.length - shown.length;
+      var footer = textDiv('activity-foot', more + (more === 1 ? ' more needs you · ' : ' more need you · ')
+        + groups.attention.length + (groups.attention.length === 1 ? ' needs attention · ' : ' need attention · ') + groups.finished.length + ' finished · ');
+      var live = document.createElement('button');
+      live.type = 'button';
+      live.className = 'activity-live';
+      live.dataset.key = 'activity:live';
+      live.textContent = 'open Live';
+      live.addEventListener('click', function () { prefs.home = true; lastHomeSignature = ''; closePanel(); applyPrefs(); renderHeader(); renderFeed(); renderPanel(); });
+      footer.appendChild(live);
+      wrap.appendChild(footer);
+      panelInner.appendChild(wrap);
+      if (focusKey) wrap.querySelectorAll('[data-key]').forEach(function (el) { if (el.dataset.key === focusKey) el.focus({ preventScroll: true }); });
     }
 
     function renderFeed(preservePosition) {
@@ -4776,25 +4848,18 @@
     panelInner.id = 'panel-inner';
     panelBody.appendChild(panelInner);
     var lastPanelSignature = '';
-    // Wide screens (design 10.1): the extra width docks the Live overview in the side panel. ?wide=0 turns it off.
+    // A wide-screen page has a slim Activity rail. An open agent takes this slot.
     var WIDE_OFF = /[?&]wide=0(?:&|$)/.test(location.search);
     function isWide() { return !WIDE_OFF && window.innerWidth >= 2200; }
-    function panelDocked() { return !prefs.panel && isWide() && pageKind() !== 'overview'; }
+    function panelDocked() { return !prefs.panel && isWide() && !showOverview(); }
     function renderPanel() {
       var docked = panelDocked();
       var open = !!prefs.panel || docked;
       document.body.classList.toggle('panel-open', open);
+      document.body.classList.toggle('activity-open', docked);
       if (!open) { lastPanelSignature = ''; return; }
       if (docked) {
-        if (lastPanelSignature !== 'docked') {
-          lastPanelSignature = 'docked';
-          dockedHomeSignature = '';
-          panelHead.textContent = '';
-          var copy = document.createElement('div');
-          copy.append(textDiv('t', 'Live overview'), textDiv('ov-note', 'Running first, then Needs you and Needs attention. Finished work is behind the button at the end.'));
-          panelHead.appendChild(copy);
-        }
-        renderHome(panelInner);
+        renderActivity();
         return;
       }
       var p = panelNode();
@@ -5890,7 +5955,7 @@
       if (id === 'cancel-job') { openCancelModal(row.job); return; }
       if (id === 'show-result') { openJob(row.job); return; }
       if (id === 'show-processes' || id === 'stop') {
-        // From an overview card the task is not open yet: open it so the panel has a header.
+        // From an overview row the task is not open yet: open it so the panel has a header.
         if (row.session.id !== selected || showOverview()) selectSession(row.session.id, true);
         showProcesses(id === 'stop');
       }
@@ -6003,6 +6068,7 @@
       applyPrefs();
       if (window.innerWidth > 760) document.body.classList.remove('mobile-side-open');
       renderHeader(); // the meta line shows the project name at 760 px and below, the full path above
+      if (showOverview()) renderHome();
     });
 
     // Grouping (thinking steps) means new events can't just be appended one at a time; a full

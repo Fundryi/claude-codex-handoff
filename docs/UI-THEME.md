@@ -2,7 +2,7 @@
 
 AI Live Viewer is a compact task monitor. It should feel calm while work is progressing and make changes in task state obvious without moving controls around.
 
-The design base is the owner's reference image `.superpowers/workspace.png` (OctoShell, 1920x1032: three rounded cards on a near-black backdrop, one violet for structure, a few small status colors). **The image beats the mockup and this document wherever they differ.** Every meaning color (status, actor, structure, project) keeps one meaning each. The `:root` block in `viewer-ui.html` is the one owner of the values.
+The design base is the owner's reference image `.superpowers/workspace.png` (OctoShell, 1920x1032: three rounded panels on a near-black backdrop, one violet for structure, a few small status colors). The owner-approved October 3 list mockup defines the Live overview and Activity rail. Its sidebar and chat page are examples only. Keep the real sidebar and page. Every meaning color (status, actor, structure, project) keeps one meaning each. The `:root` block in `viewer-ui.html` is the one owner of the values.
 
 ## Reference samples (the token source)
 
@@ -45,11 +45,10 @@ Corner radii measured on the 2x crops: cards (the three panels) about 10 px; but
 |---|---|---|
 | `--bg` | `#0d0f14` | the backdrop behind the cards, code blocks |
 | `--panel` | `#15181f` | main card, side panel card, feed, header, toolbar |
-| `--panel-2` | `#1c202b` | sidebar card, message cards, overview cards, menus, dialogs, secondary buttons |
+| `--panel-2` | `#1c202b` | sidebar panel, message cards, menus, dialogs, secondary buttons |
 | `--panel-3` | `#313747` | the active filter chip, inline code |
 | `--hover` | `#242a3a` | hover band |
 | `--selected` | `#41386f` | selected row band (reference) |
-| `--selected-bar` | `#b693f4` | the selected overview card's even border |
 | `--border` | `#2c3142` | the cards, message cards, inputs, usage cells, fact chips, buttons |
 | `--border-strong` | `#3a4054` | dialog buttons, flags, the stale-row dash |
 | `--border-soft` | `#1f2431` | dividers inside blocks |
@@ -85,11 +84,11 @@ Text on the backgrounds it sits on. Computed with `design-audit/contrast.js`.
 | `--p5` #ff6fe1 (captions) | 7.86 | 7.28 | 6.67 | 4.87 | 4.26 | 5.87 |
 | `--accent` #7c5cff (lines and fills only, never text) | 4.41 | 4.09 | 3.74 | 2.73 | 2.39 | 3.29 |
 | `--meter-fill` #8087a8 (meter only, never text) | 5.43 | 5.03 | 4.61 | 3.36 | 2.95 | 4.05 |
-| lifted dim text #c9cbe0 (selected rows and cards only) | | | | | 6.49 | |
+| lifted dim text #c9cbe0 (selected sidebar rows only) | | | | | 6.49 | |
 
 Pill text on its fill: Running 6.29, Finished 8.73, Needs attention 7.75, Stopped and Waiting 5.53, green row 9.98, `--fg` on `--accent-fill` 11.08.
 
-Rules: `--faint` is under 4.5 everywhere, so it is used only for decoration and for words that repeat a nearby fact ("window unknown", captions' counts, the "USAGE" caption, the tokens of a finished child row that the tooltip repeats). Every 10 px word that carries information uses `--muted` or a color from the table. The selected band (`#41386f`) is bright, so on a selected row or card the dim text (meta, time, roll-up) lifts to `#c9cbe0` (6.49:1); the kind word keeps its actor color because the kind mark beside it says the same thing. `--accent` is never text; violet text uses `--tree-text`. Inline code is `--tree-text` on `--panel-3` (4.79:1).
+Rules: `--faint` is under 4.5 everywhere, so it is used only for decoration and for words that repeat a nearby fact ("window unknown", captions' counts, the "USAGE" caption, the tokens of a finished child row that the tooltip repeats). Every 10 px word that carries information uses `--muted` or a color from the table. The selected band (`#41386f`) is bright, so on a selected sidebar row the dim text (meta, time, roll-up) lifts to `#c9cbe0` (6.49:1); the kind word keeps its actor color because the kind mark beside it says the same thing. `--accent` is never text; violet text uses `--tree-text`. Inline code is `--tree-text` on `--panel-3` (4.79:1).
 
 ## Typography
 
@@ -100,19 +99,21 @@ Use Segoe UI Variable, Segoe UI, or the platform system font for the interface. 
 | Selected node title, product title | 14 px | 650 |
 | Feed content, search | 13 px | 400 |
 | Side panel title | 13 px | 650 |
-| Root row title, overview card title, run view agent label | 12 px | 600 |
+| Sidebar root row title, run view agent label | 12 px | 600 |
+| Overview row title | 13 px | 550 |
+| Activity row title | 12.5 px | 500 |
 | Child row title | 12 px | 500 (600 when selected) |
 | Sidebar row titles | | `--muted` at rest (the reference list); `--fg` on the selected, hovered or focused row |
 | Work step kind (`.step-kind`) | 10 px | 600, plain case, in the actor color |
 | Phase caption (`.claude-phase`) | 10 px | 700 `--faint` uppercase, like `.ov-heading`, no stripe |
 | Navigation, metadata, chips, meta line, crumbs | 11 px | 400 |
-| Root row line 3, child row line 2, overview card meta, fold row, row time, plans block, state words | 10.5 px | 400 (600 for state words and the row words "needs answer", "needs attention", "fast") |
+| Root row line 3, child row line 2, fold row, row time, plans block, state words | 10.5 px | 400 (600 for state words and the row words "needs answer", "needs attention", "fast") |
 | Status pills, kind words, captions, section labels, usage cell labels, flags | 10 px | 700 (captions and labels uppercase, letter-spacing .05 em; flags 400) |
 | `you` tag | 9 px | 700 |
 
 ## Status colors
 
-Status color has one meaning everywhere: list rows, filter chips, cards, state marks and the selected-task header.
+Status color has one meaning everywhere: list rows, filter chips, state marks and the selected-task header.
 
 | Status | Token | Behavior |
 |---|---|---|
@@ -127,7 +128,7 @@ Status color has one meaning everywhere: list rows, filter chips, cards, state m
 
 State mark (`.sdot`): a 10 px box, one shape per state: Running a 10 px spinner ring, Finished a green dot, Background a blue dot, Waiting a gray dot, Needs attention an amber dot, Needs answer a hollow amber ring, Stopped a gray dot, Ended a darker gray dot. State words (`.state-word`, 10.5 px 600) use the same colors: "running", "background", "finished", "waiting", "needs attention", "needs answer", "stopped", "ended". The status set is the reference's: blue, green, amber, red, grey. `--yellow` survives only in the stop dialog's warning box; FAST is a small muted uppercase word (`.fl.fast`), not a color.
 
-A row or a card shows its state exactly as the reference list does: the mark on the left, the state word right-aligned before the time. A filter chip with a count of 0 (`.chip-button.zero`) dims to 45 %, like the reference's "Error 0".
+A row shows its state exactly as the reference list does: the mark on the left, the state word right-aligned before the time. A filter chip with a count of 0 (`.chip-button.zero`) dims to 45 %, like the reference's "Error 0".
 
 Do not animate an entire row or badge. Only the small Running spinner moves (and the "Codex is working" spinner at the end of a running feed, which is the same Running blue).
 
@@ -159,7 +160,7 @@ Who sent a message comes from `messageActor(event, session)`: Codex work kinds a
 
 ## Structure color
 
-The violet family is structure and never an actor or a status: `--accent` `#7c5cff` for the active tab underline, the focus ring, the unread dot, the primary button border and the Jump pill; `--accent-fill` `#342f60` for the primary button fill; `--selected` for the selected row band and `--selected-bar` for the selected overview card's border; `--tree` for rails and captions when project colors are off; `--tree-text` `#b693f4` for structure text (the fold row, the brand mark, links in the sidebar). The Codex agent pill is no longer violet: it is the Codex teal ring mark.
+The violet family is structure and never an actor or a status: `--accent` `#7c5cff` for the active tab underline, the focus ring, the unread dot, the primary button border and the Jump pill; `--accent-fill` `#342f60` for the primary button fill; `--selected` for the selected row band; `--tree` for rails and captions when project colors are off; `--tree-text` `#b693f4` for structure text (the fold row, the brand mark, links in the sidebar). The Codex agent pill uses the Codex teal ring mark.
 
 ## Project colors
 
@@ -194,26 +195,83 @@ The project, the model and the effort are the facts you check first, so they are
 ## Geometry and spacing
 
 - Layout: three rounded cards (`.pane`: `#side`, `#main`, `#panel`) on the `--bg` backdrop with a `--gutter` (8 px) around and between them, like the reference. The splitter is the gutter between the sidebar and the main card and only shows itself (accent fill) under the pointer. On a phone the gutter is 0 and the cards lose their corners.
-- Grid: 4 px. Row padding 6 px 10 px (root), 3 px 10 px 4 px plus the level offset (child), 1 px top and bottom for a finished child. Card padding 8 px 12 px 9 px. Header padding 10 px 16 px 8 px. Feed padding 12 px 16 px 56 px.
+- Grid: 4 px. Row padding 6 px 10 px (root), 3 px 10 px 4 px plus the level offset (child), 1 px top and bottom for a finished child. Header padding 10 px 16 px 8 px. Feed padding 12 px 16 px 56 px.
 - Rows: a root row is two lines. Line 1: state mark, kind mark, title, state word, time (20 px). Line 2: the kind word, source, "fast", model, effort, tokens and flags on the left; the roll-up (the children's worst state, kind counts, Σ tree total) on the right, 10 px `--muted`. Under 400 px (the default 340 px sidebar) the kind counts hide and the roll-up keeps the word and the Σ total; under 300 px the Σ moves to the group caption. A child row is one line (state mark, kind mark, title, state word, time) plus a meta line while it is active; a finished, ended or stopped child (`.row.child.fin`) is one quiet line: muted 11.5 px title, state word, tokens in `--faint`, time. The fold row ("+ 18 finished") is a 22 px violet button that fills with `--accent-fill` under the pointer.
 - Chips: one compact row, no borders, 22 px, 11 px words with a dot and the count inline; the active chip sits on a `--panel-3` block with 6 px corners (the reference "All 17"). The row wraps to a second line when the sidebar is narrow and scrolls sideways on a phone.
 - Heights: header buttons 32 px, tabs 28 px, chips 22 px, fact chips and usage cells 24 px, pills 18 px, row lines 18 px, fold row 22 px, group caption 30 px, feed toolbar 36 px, run view agent rows 30 px, plan source lines 22 px, plan rows 20 px (32 px under 330 px, when the reset text takes a second line), the side panel back button 28 px.
-- Radii (`--r-panel` 10 px, `--r-btn` 8 px, `--r-chip` 6 px): the cards, menus and dialogs 10 px; buttons, inputs, overview cards, message cards, code blocks, the result card, the plans block, the Jump pill 8 px; chips, status pills, tabs, rows and the selected row band, usage cells, fact chips, toolbar buttons, message tags, menu entries 6 px; flags, tags and inline code 4 px; meters 3 px; the rail elbow 5 px. Nothing is square and nothing is a 999 px capsule except the `you` tag.
-- Borders: 1 px `--border` for the cards, message cards, inputs, usage cells, fact chips and header buttons; 1 px `--border-strong` for dialog buttons and the auto-open switch when it is On; 1 px `--selected-bar` on a selected overview card. No colored edge stripes anywhere: cards, message cards and the result card have one even neutral border, a selected row is marked by its band fill alone, and no element says who works through a colored left edge (the kind word, marks and avatars do that); 1 px tree rails in the group's rail color; 1 px dashed `--border-strong` for flags and the ghost mark; 1.5 px rings for marks and state marks.
-- Fills: the header, toolbar and feed share the main card's `--panel`; message cards, overview cards, menus and dialogs are `--panel-2` with no actor tint; usage cells and fact chips have no fill.
+- Radii (`--r-panel` 10 px, `--r-btn` 8 px, `--r-chip` 6 px): the cards, menus and dialogs 10 px; buttons, inputs, message cards, code blocks, the result card, the plans block, the Jump pill 8 px; chips, status pills, tabs, rows and the selected row band, usage cells, fact chips, toolbar buttons, message tags, menu entries 6 px; flags, tags and inline code 4 px; meters 3 px; the rail elbow 5 px. Nothing is square and nothing is a 999 px capsule except the `you` tag.
+- Borders: 1 px `--border` for the cards, message cards, inputs, usage cells, fact chips and header buttons; 1 px `--border-strong` for dialog buttons and the auto-open switch when it is On. No colored edge stripes anywhere: cards, message cards and the result card have one even neutral border, a selected row is marked by its band fill alone, and no element says who works through a colored left edge (the kind word, marks and avatars do that); 1 px tree rails in the group's rail color; 1 px dashed `--border-strong` for flags and the ghost mark; 1.5 px rings for marks and state marks.
+- Fills: the header, toolbar and feed share the main card's `--panel`; message cards, menus and dialogs are `--panel-2` with no actor tint; usage cells and fact chips have no fill.
 - The tree: `--indent` 18 px per level to level 4, `--indent-deep` 10 px per level after that (the cycle guard is at level 8); `--rail-x` 15 px for the level 1 rail. A child row is a grid (state box 10 px, mark box 16 px, title, time) with `--d` = depth and `--lx` the computed offset. Rails: `.rl.thru` for a continuing ancestor level (`--l`), `.rl.elbow` into this row, `.rl.stem` from a child's state mark down to its open children. Root rows draw no stem.
 - The sidebar starts at 340 px (400 px from 2200 px viewport width), can be resized from 240 px to 55 % of the viewport, and remembers the chosen width. At 240 px the root row hides the source word and the roll-up word, the kind word is cut at 90 px, and under 330 px a plan row writes its reset time on a second line (`#side` is the size container).
-- Content column: header, toolbar, result card and feed share one column of at most `--content-max` 1360 px, centered in the main card (`.inner`, `#feed-inner`, `.result-card-box`). The header's right-side controls sit on the column's right edge. The side panel (`#panel`) is a card of its own beside the main card (a sibling of `<main>`, shown by `body.panel-open`), so the column centers in the main card on its own. From 2200 px (`@media (min-width: 2200px)`) the side panel takes the width beyond the column (`--panel-w` up to 1400 px).
-- Overview column: the header and feed can use up to 2080 px. The header stays aligned with the card grid. The grid adds columns as space increases.
+- Content column: header, toolbar, result card and feed share one column of at most `--content-max` 1360 px, centered in the main card (`.inner`, `#feed-inner`, `.result-card-box`). The header's right-side controls sit on the column's right edge. The side panel (`#panel`) is a card of its own beside the main card (a sibling of `<main>`, shown by `body.panel-open`), so the column centers in the main card on its own. From 2200 px, an open agent keeps the wider transcript panel (`--panel-w` up to 1400 px). A page with no agent panel has the 320 px Activity rail.
+- Overview column: the header and feed can use up to 2080 px. See Live overview and Wide screens below.
 - At 760 px and below, the sidebar is a drawer over a backdrop (`min(88vw, 340px)`); the header wraps into rows (menu button, counter and `...` first, then the title, facts, meta and usage); chips scroll sideways in one row with an edge fade (`#chips-wrap.more-left`, `.more-right`); the overview is one column; the side panel covers the pane with a back button; Jump to latest floats over the feed.
 - The page must never create horizontal document scrolling.
+
+## Live overview
+
+Use a calm list with no boxes or colored edge stripes. Groups are Running,
+Needs you and Needs attention. Each group has a small uppercase caption and
+a count. Each root row is 36 px high, with `--r-chip` corners and a `--hover`
+fill under the pointer. A thin `--border-soft` rule separates root rows.
+
+Columns, from left to right: a 10 px state mark; a 16 px kind mark; title
+`minmax(220px, 1.2fr)`, 13 px and weight 550; project, 150 px; doing now
+`minmax(160px, 1fr)`, 12 px; state word, 96 px; age, 54 px and right aligned.
+The title, project and doing-now text use an ellipsis when they do not fit.
+The project is a basename, with the full path in its title. Project, doing-now
+and age text use `--muted`. Commands use the existing code font. A question
+uses `--amber`. A running row with no known step says "working" in
+`--muted`. Finished rows have an empty doing-now cell. Other inactive rows
+show an available outcome or error reason, or an empty cell.
+
+Only running children appear under a parent. They are 28 px high, with a
+26 px title indent and a small rounded elbow. They have no border or box.
+Children that need an answer or attention have their own group rows. A row
+click opens the node with the existing page or agent-panel behavior.
+
+Model id, effort, token total, FAST, source and flags such as "chat not in
+Live" are in the row title. They remain on the open page. Doing-now text
+uses the current Claude tool, the Codex last event, the running OpenCode
+step, the background child count, the workflow phase count or the first
+line of the job question. Patch summaries show file basenames only.
+
+One quiet line says "N finished today · show". The count uses the local
+calendar day. The control expands finished rows in place, with the same
+36 px row style. It then says "hide". There is no five-row cap.
+
+## Wide screens
+
+At 2200 px and above, an overview with no page open has no right panel.
+The overview has two equal columns with a 32 px gap. Running and the
+finished control are on the left. Needs you and Needs attention are on
+the right. Below 2200 px, the groups and finished control form one column.
+Narrow columns reduce the text tracks. On small screens, the project and
+doing-now columns hide in turn. Their facts remain in the row title.
+Rows must not cause horizontal page scrolling.
+
+At 2200 px and above, an open page has a 320 px Activity rail in the
+existing right-panel slot. The main page uses the remaining space. Its
+1360 px content-column limit stays the same. The rail header says
+"Activity", with a quiet running and needs-you count line.
+
+The rail shows Running and up to four Needs you rows. Rows are 32 px high:
+state mark, kind mark, title and age. Running children are 26 px high
+under their parent. Project and doing-now text are in the row title.
+The footer says "N more need you · N need attention · N finished · open
+Live". Use "needs" when either needs count is 1. A background count of 1
+says "1 agent running". The last words open the overview. Each rail row opens its node.
+An open Claude agent uses the existing, wider transcript panel and takes
+precedence over the rail. Below 2200 px there is no Activity rail. Use no
+em dash or en dash in interface copy.
 
 ## Navigation behavior
 
 - The viewer does not start new Codex runs. Runs start from Claude (`/codex:handoff`) or a Codex CLI; the viewer resumes, answers and cancels them.
 - Two tabs, Live and History (the unified view). Live holds seven status chips (All, Running, Needs you, Needs attention, Waiting, Finished, Stopped) and, after a divider, the two kind chips Claude and Codex (`.chip-kinds`, one wrapping unit). Order and position never change when counts update.
 - One tree: projects as groups (caption with count and tree total), root rows (two lines, see Geometry), child rows on rails: active work first, newest started on top, then finished work, newest first, behind the "+ N finished" fold. A root's roll-up carries the states of its children, so a chat with a child that needs you shows "needs answer" on the root. The fold row hides the finished middle of a long child list ("12 finished agents"); the cap row says how many older children live in History.
-- The overview (Live, nothing selected) leads with Running, then Needs you, then Needs attention, and a "Show finished (N)" secondary button (`.home-more`). An empty Running list offers "Show everything from today" (`.empty-action`), the same secondary button: `--panel-2` fill, 1 px `--border-strong`, 8 px corners, muted text. A node page has no cards; the tree lists its children.
+- The overview opens when Live has no selected node. It shows Running, Needs you and Needs attention. The finished control expands rows in place. See Live overview below.
 - The header counter shows running, need you and needs attention for every kind, from every tab; clicking it opens Live.
 - Keys: `/` focuses search; arrows move in the tree (up, down, left closes, right opens); Escape closes the top layer first: a dialog, then the `...`/context menu, then the side panel, then the drawer.
 - Choosing a tab or chip pauses auto-open. Auto-open resumes only through its toggle on the overview. If the selected node changes status, the view moves to a chip that still shows it.
@@ -237,7 +295,7 @@ The project, the model and the effort are the facts you check first, so they are
 
 ## Motion and accessibility
 
-- Hover, selection, border, and color transitions use 140–180 ms. The drawer slides in 180 ms. Nothing else moves.
+- Hover, selection, border, and color transitions use 140 to 180 ms. The drawer slides in 180 ms. Nothing else moves.
 - Buttons, tabs, chips, rows, and the resize separator must remain keyboard accessible.
 - Focus uses a visible 2 px `--accent` outline on buttons, inputs, selects, text areas, disclosure summaries and the resize separator. Group captions use the same inset and corner radius as rows.
 - Reduced motion stops all status spinners and uses automatic feed scrolling.

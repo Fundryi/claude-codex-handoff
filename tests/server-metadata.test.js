@@ -7,6 +7,30 @@ const vm = require("node:vm");
 const src = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
 const simplifySrc = src.match(/function simplify\(line\) \{[\s\S]*?\n\}/)[0];
 
+test("Codex patch previews keep file basenames before the preview length limit", () => {
+  const c = { path, Date, LIVE_WINDOW_MS: 20000, ARCHIVED_DIR: "Z:\\archived" };
+  vm.runInNewContext(src.match(/function sessionSummary[\s\S]*?\n\}/)[0], c);
+  const session = { id: "s", file: "C:\\sessions\\rollout.jsonl", lastGrow: Date.now(), meta: {},
+    events: [{ kind: "patch", text: "C:\\" + "long-directory\\".repeat(20) + "app.js, /repo/docs/UI-THEME.md" }] };
+  assert.equal(c.sessionSummary(session).lastText, "app.js, UI-THEME.md");
+});
+
+test("OpenCode running step uses only the newest tool and a short safe input summary", () => {
+  const c = { path, STUCK_AFTER_MS: 300000 };
+  for (const name of ["opencodeStep", "opencodeSessionView"]) vm.runInNewContext(src.match(new RegExp("function " + name + "\\([\\s\\S]*?\\n\\}"))[0], c);
+  const content = JSON.stringify([null, { type: "tool", name: "shell", state: { input: { command: "old" } } },
+    { type: "tool", name: "read", state: { input: { filePath: "D:\\repo\\app.js" }, output: "private output" } }, { type: "text", text: "ignore" }]);
+  assert.equal(c.opencodeStep(content), "read: app.js");
+  assert.equal(c.opencodeStep(JSON.stringify([{ type: "tool", tool: "bash", state: { input: { command: "npm test\noutput" } } }])), "bash: npm test");
+  for (const malformed of ["broken", "{}", "null", "[]", '[{"type":"tool","name":9}]']) assert.equal(c.opencodeStep(malformed), "working");
+  assert.ok(c.opencodeStep(JSON.stringify([{ type: "tool", name: "shell", state: { input: { command: "x".repeat(1000) } } }])).length <= 160);
+  const now = Date.now();
+  const row = { id: "s", time_updated: now, assistant_content: content };
+  assert.equal(c.opencodeSessionView(row, now).step, "read: app.js");
+  assert.equal(c.opencodeSessionView({ ...row, newest_type: "idle" }, now).step, undefined);
+  assert.equal(c.opencodeSessionView(row, now + 300001).step, undefined);
+});
+
 test("OpenCode rows preserve messages, tool output and finish while ignoring unknown data", () => {
   const parser = src.match(/function opencodeTranscriptEvents\(row\) \{[\s\S]*?\n\}/);
   assert.ok(parser, "OpenCode row parser exists");

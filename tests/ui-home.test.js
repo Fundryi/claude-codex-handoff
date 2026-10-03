@@ -6,95 +6,102 @@ const vm = require("node:vm");
 
 const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-// Slice from firstLine through homeCard/homeCards.
-const slice = script.match(/function firstLine[\s\S]*?function homeCards[\s\S]*?\n    \}/)[0];
-
-function ctx() { const c = {}; vm.runInNewContext(slice, c); return c; }
-// Arrays produced inside the vm sandbox are a different Array realm; JSON round-trip
-// before deepEqual so comparisons don't fail on constructor identity (see ui-actions.test.js).
+function ctx() {
+  const c = { viewRoots: model => model.roots };
+  for (const name of ["firstLine", "projectName", "liveHidden", "childOrder", "overviewGroups", "overviewStep"]) {
+    vm.runInNewContext(script.match(new RegExp("function " + name + "\\([\\s\\S]*?\\n    \\}"))[0], c);
+  }
+  return c;
+}
 function plain(value) { return JSON.parse(JSON.stringify(value)); }
-
-const NOW = 1_700_000_000_000;
-
-// homeCards takes buildRows-shaped rows (Task 3/4's unified row model), so the overview
-// agrees with the list. Row shape mirrors buildRows' output; only the fields homeCards
-// actually reads are filled in per case.
-function row(overrides) {
-  return Object.assign({
-    id: "r1", session: null, job: null, olderJobs: 0, status: "RUNNING",
-    title: "Untitled", project: "D:\\repo", threadId: "t1", fast: false,
-    needsAnswer: false, updatedMs: NOW, children: []
-  }, overrides);
+const NOW = new Date(2026, 9, 3, 15).getTime();
+function node(id, state, children = [], extra = {}) {
+  return { id, kind: "chat", state, rollup: state, updatedMs: NOW, children, ...extra };
+}
+function model(...nodes) {
+  const children = new Set(nodes.flatMap(n => n.children));
+  return { nodes: Object.fromEntries(nodes.map(n => [n.id, n])), roots: nodes.filter(n => !children.has(n.id)).map(n => n.id) };
 }
 
-test("rows sort into answer, attention, running and finished sections by row status", () => {
-  const { homeCards } = ctx();
-  const rows = [
-    row({ id: "a", status: "ANSWER", updatedMs: NOW }),
-    row({ id: "r", status: "RUNNING", updatedMs: NOW - 1000 }),
-    row({ id: "s", status: "ATTENTION", updatedMs: NOW - 2000 }),
-    row({ id: "f", status: "FINISHED", updatedMs: NOW - 3000 }),
-    row({ id: "w", status: "WAITING", updatedMs: NOW - 4000 }),
-    row({ id: "x", status: "STOPPED", updatedMs: NOW - 5000 })
-  ];
-  const cards = homeCards(rows, [], NOW);
-  assert.deepEqual(plain(cards.answer.map(c => c.id)), ["a"]);
-  assert.deepEqual(plain(cards.running.map(c => c.id)), ["r"]);
-  assert.deepEqual(plain(cards.attention.map(c => c.id)), ["s"]);
-  assert.deepEqual(plain(cards.finished.map(c => c.id)), ["f"]);
-  // Waiting and Stopped rows have no overview section.
+test("overview lists running children once and promotes questions and attention", () => {
+  const { overviewGroups } = ctx();
+  const groups = overviewGroups(model(
+    node("parent", "BACKGROUND", ["agent", "handoff", "ask", "failed", "done"]),
+    node("agent", "RUNNING", [], { kind: "agent" }),
+    node("handoff", "RUNNING", [], { kind: "handoff" }),
+    node("ask", "ANSWER", [], { kind: "handoff" }),
+    node("failed", "ATTENTION", [], { kind: "handoff" }),
+    node("done", "FINISHED", [], { kind: "agent" })
+  ), NOW, []);
+  assert.deepEqual(plain(groups.running.map(n => n.id)), ["parent"]);
+  assert.deepEqual(plain(groups.children.parent.map(n => n.id)).sort(), ["agent", "handoff"]);
+  assert.deepEqual(plain(groups.answer.map(n => n.id)), ["ask"]);
+  assert.deepEqual(plain(groups.attention.map(n => n.id)), ["failed"]);
+  assert.equal(groups.finished.length, 0, "finished agents do not remain under a parent");
 });
 
-test("dismissed and archived rows never become cards", () => {
-  const { homeCards } = ctx();
-  const rows = [
-    row({ id: "dismissed", status: "RUNNING" }),
-    row({ id: "archived", status: "ARCHIVED" }),
-    row({ id: "kept", status: "RUNNING" })
-  ];
-  const cards = homeCards(rows, ["dismissed"], NOW);
-  assert.deepEqual(plain(cards.running.map(c => c.id)), ["kept"]);
+test("finished rows include all of today and handoffs under finished parents", () => {
+  const { overviewGroups } = ctx();
+  const nodes = Array.from({ length: 8 }, (_, i) => node("f" + i, "FINISHED"));
+  nodes.push(node("old", "FINISHED", [], { updatedMs: new Date(2026, 9, 2, 23, 59).getTime() }),
+    node("parent", "FINISHED", ["h", "oc"]), node("h", "FINISHED", [], { kind: "handoff" }),
+    node("oc", "FINISHED", [], { kind: "opencode", row: { job: { engine: "opencode" } } }));
+  const groups = overviewGroups(model(...nodes), NOW, []);
+  assert.equal(groups.finished.length, 11, "no old five-card cap");
+  assert.ok(groups.finished.some(n => n.id === "h"));
+  assert.ok(groups.finished.some(n => n.id === "oc"));
+  assert.ok(!groups.finished.some(n => n.id === "old"));
 });
 
-test("recently finished stays capped at 5, order preserved (newest first, as buildRows sorts)", () => {
-  const { homeCards } = ctx();
-  const rows = [];
-  for (let i = 0; i < 8; i++) rows.push(row({ id: "f" + i, status: "FINISHED", updatedMs: NOW - i * 1000 }));
-  const cards = homeCards(rows, [], NOW);
-  assert.equal(cards.finished.length, 5);
-  assert.deepEqual(plain(cards.finished.map(c => c.id)), ["f0", "f1", "f2", "f3", "f4"]);
+test("hidden subtrees and ghosts do not become rows; running work stays accessible", () => {
+  const { overviewGroups } = ctx();
+  const groups = overviewGroups(model(
+    node("hidden", "RUNNING", ["hidden-child"], { row: { id: "dismissed" } }),
+    node("hidden-child", "RUNNING"),
+    node("archived", "ARCHIVED", [], { row: { id: "archived" } }),
+    node("ghost", "FINISHED", ["h"], { kind: "ghost" }),
+    node("h", "ANSWER", [], { kind: "handoff" }),
+    node("done", "FINISHED", ["active"]),
+    node("active", "RUNNING", [], { kind: "agent" })
+  ), NOW, ["dismissed"]);
+  assert.deepEqual(plain(groups.running.map(n => n.id)), ["active"]);
+  assert.deepEqual(plain(groups.answer.map(n => n.id)), ["h"]);
+  assert.ok(!groups.finished.some(n => n.id === "ghost"));
 });
 
-test("a card keeps the row's data fields", () => {
-  const { homeCards } = ctx();
-  const job = {
-    id: "j1", title: "Job one", model: "sol", effort: "high", fast: true,
-    needsDecision: "Should I deploy?  \n  More detail here."
-  };
-  const session = { id: "s1", model: "sol", tokensUsed: 123 };
-  const rows = [
-    row({
-      id: "s1", session, job, status: "ANSWER", needsAnswer: true, fast: true,
-      title: "Job one", project: "D:\\repo", updatedMs: NOW,
-      children: [row({ id: "kid" })]
-    })
-  ];
-  const cards = homeCards(rows, [], NOW);
-  const card = cards.answer[0];
-  assert.equal(card.sessionId, "s1");
-  assert.equal(card.title, "Job one");
-  assert.equal(card.project, "D:\\repo");
-  assert.equal(card.fast, true);
-  assert.equal(card.agents, 1);
-  assert.equal(card.lastMs, NOW);
-  assert.equal(card.needsAnswer, true);
+test("doing-now uses evidence, basename patches and honest answer and working fallbacks", () => {
+  const { overviewStep } = ctx();
+  const step = n => overviewStep({ nodes: {} }, n);
+  assert.equal(step(node("c", "RUNNING", [], { tool: "Bash: npm test" })).text, "Bash: npm test");
+  assert.equal(step(node("c", "RUNNING", [], { tool: "Bash: npm test" })).command, true);
+  assert.equal(step(node("c", "RUNNING", [], { row: { session: { lastKind: "cmd", lastText: "npm test\noutput" } } })).text, "ran npm test");
+  assert.equal(step(node("c", "RUNNING", [], { row: { session: { lastKind: "patch", lastText: "D:\\repo\\app.js, /repo/docs/UI-THEME.md" } } })).text, "patched app.js, UI-THEME.md");
+  assert.equal(step(node("c", "ANSWER", [], { row: { job: { needsDecision: "Which option?\nDetails" } } })).text, "Which option?");
+  assert.equal(step(node("c", "ANSWER")).text, "waiting for your answer");
+  assert.equal(step(node("c", "RUNNING")).text, "working");
+  assert.equal(step(node("c", "RUNNING", [], { kind: "opencode", chat: { step: "shell: npm test" } })).text, "shell: npm test");
+  assert.equal(step(node("c", "FINISHED")).text, "");
+  assert.equal(step(node("c", "FINISHED", [], { tool: "Bash: stale command", row: { job: { errorMessage: "old error" } } })).text, "");
+  assert.equal(step(node("c", "ATTENTION", [], { kind: "opencode", chat: { outcome: "failed" } })).text, "failed");
+  assert.equal(step(node("c", "ATTENTION", [], { row: { job: { errorMessage: "Worker failed\nDetails" } } })).text, "Worker failed");
+  assert.equal(step(node("c", "ATTENTION", [], { tool: "Bash: stale command" })).text, "");
+  assert.equal(step(node("c", "ENDED")).text, "");
+  assert.equal(step(node("c", "ENDED", [], { kind: "opencode", chat: { outcome: "stopped" } })).text, "stopped");
+  assert.equal(step(node("c", "STOPPED")).text, "stopped");
+  assert.equal(step(node("c", "WAITING")).text, "");
 });
 
-test("a job-only row (no session) still becomes a card with no sessionId", () => {
-  const { homeCards } = ctx();
-  const job = { id: "j1", title: "Queued job", workspaceRoot: "D:\\repo" };
-  const rows = [row({ id: "job:j1", session: null, job, status: "RUNNING", title: "Queued job" })];
-  const cards = homeCards(rows, [], NOW);
-  assert.equal(cards.running[0].sessionId, null);
-  assert.equal(cards.running[0].id, "job:j1");
+test("doing-now carries background counts and workflow phase counts", () => {
+  const { overviewStep } = ctx();
+  const parent = node("parent", "BACKGROUND", ["a", "b"]);
+  const m = model(parent, node("a", "RUNNING", [], { kind: "agent" }), node("b", "FINISHED"));
+  assert.equal(overviewStep(m, parent).text, "1 agent running");
+  m.nodes.b.state = "RUNNING";
+  assert.equal(overviewStep(m, parent).text, "2 agents running");
+  m.nodes.a.state = m.nodes.b.state = "FINISHED";
+  assert.equal(overviewStep(m, parent).text, "");
+  const workflow = node("wf", "RUNNING", [], { kind: "workflow", run: { phases: [
+    { title: "Research", done: 2, started: 2 }, { title: "Build", done: 1, started: 3 }
+  ] } });
+  assert.equal(overviewStep(m, workflow).text, "Build 1/3");
 });

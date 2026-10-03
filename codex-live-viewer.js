@@ -520,7 +520,8 @@ function sessionSummary(s, threadJobStatus) {
     quietMs: Math.floor(quiet / 5000) * 5000, // 5 s steps, so a quiet session does not change the list every tick
     lastKind: last ? last.kind : "",
     lastDone: !!(last && last.done), // a command that already finished
-    lastText: last ? String(last.text).slice(0, 120) : "",
+    lastText: last ? (last.kind === "patch" ? String(last.text).split(/,\s*|\r?\n/).filter(Boolean)
+      .map(file => path.basename(file.replace(/\\/g, "/"))).join(", ") : String(last.text)).slice(0, 120) : "",
     lastEvent: last ? (last.kind + ": " + String(last.text).slice(0, 90)) : "",
     eventCount: s.events.length,
   };
@@ -1244,6 +1245,22 @@ function opencodeConnection() {
   } catch { opencodeClose(); return null; } // missing file/schema never affects the other sources
 }
 
+function opencodeStep(content) {
+  let parts;
+  try { parts = JSON.parse(content || "[]"); } catch { return "working"; }
+  if (!Array.isArray(parts)) return "working";
+  const part = parts.findLast(p => p && p.type === "tool");
+  if (!part) return "working";
+  const name = typeof part.name === "string" ? part.name : typeof part.tool === "string" ? part.tool : "";
+  if (!name) return "working";
+  const input = part.state && part.state.input || {};
+  const file = input.filePath || input.file_path || input.path;
+  const summary = typeof input.command === "string" ? input.command
+    : typeof file === "string" ? path.basename(file.replace(/\\/g, "/"))
+    : typeof input.description === "string" ? input.description : "";
+  return (name + (summary ? ": " + summary : "")).split(/\r?\n/, 1)[0].slice(0, 160);
+}
+
 function opencodeSessionView(row, now) {
   let model = {};
   try { model = JSON.parse(row.model ?? row.assistant_model ?? "{}") || {}; } catch {}
@@ -1255,6 +1272,7 @@ function opencodeSessionView(row, now) {
     title: row.title || "OpenCode session", cwd: row.directory || "", project: path.basename((row.directory || "").replace(/\\/g, "/")),
     model: [model.providerID, model.id].filter(x => typeof x === "string" && x).join("/"), effort: typeof model.variant === "string" ? model.variant : "",
     state, outcome, startedMs: row.time_created, updatedMs: row.time_updated,
+    ...(state === "running" ? { step: opencodeStep(row.assistant_content) } : {}),
     usage: { total: (row.tokens_input || 0) + (row.tokens_output || 0) + (row.tokens_cache_read || 0) + (row.tokens_cache_write || 0), output: row.tokens_output || 0 }, cost: row.cost || 0 };
 }
 
@@ -1286,8 +1304,12 @@ function opencodeChatsTick() {
               'id', json_extract(m.data, '$.model.id'), 'variant', json_extract(m.data, '$.model.variant'))
               FROM session_message m WHERE m.session_id = s.id AND m.type = 'assistant' AND s.model IS NULL ORDER BY m.seq DESC LIMIT 1) AS assistant_model,
             (SELECT m.type FROM session_message m WHERE m.session_id = s.id ORDER BY m.seq DESC LIMIT 1) AS newest_type,
-            (SELECT json_extract(m.data, '$.outcome') FROM session_message m WHERE m.session_id = s.id AND m.type = 'idle' ORDER BY m.seq DESC LIMIT 1) AS newest_outcome
-            FROM session_v2 s JOIN selected k ON k.id = s.id`).all(now - CLAUDE_ROOT_MS, CLAUDE_MAX_ROOTS, now - STUCK_AFTER_MS);
+            (SELECT json_extract(m.data, '$.outcome') FROM session_message m WHERE m.session_id = s.id AND m.type = 'idle' ORDER BY m.seq DESC LIMIT 1) AS newest_outcome,
+            CASE WHEN s.time_updated > ? AND (s.time_idle IS NULL OR s.time_idle < s.time_updated)
+              AND COALESCE((SELECT m.type FROM session_message m WHERE m.session_id = s.id ORDER BY m.seq DESC LIMIT 1), '') <> 'idle'
+              THEN (SELECT json_extract(m.data, '$.content') FROM session_message m WHERE m.session_id = s.id AND m.type = 'assistant' ORDER BY m.seq DESC LIMIT 1)
+              END AS assistant_content
+            FROM session_v2 s JOIN selected k ON k.id = s.id`).all(now - CLAUDE_ROOT_MS, CLAUDE_MAX_ROOTS, now - STUCK_AFTER_MS, now - STUCK_AFTER_MS);
           opencodeWatermark = marker;
         }
         const byId = new Map(opencodeRows.map(r => [r.id, r]));
