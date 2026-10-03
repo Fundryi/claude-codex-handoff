@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.24.1
+
+- **The working arc no longer jumps back.** Each live update redraws the rows, and a redrawn icon started its arc from the beginning. Measured on 2.24.0, the arc restarted about once per second. Now every arc and every breathing dot follows one page clock, so a redraw continues the circle where it was.
+- **OpenCode sessions can be dismissed.** Right-click an OpenCode session and choose "Dismiss task". It leaves Live and shows under History > Dismissed, where "Restore task" brings it back. Before, only Codex rows had this option.
+- **Tests:** the dismissed-id test now also checks that a listed OpenCode session stays dismissed and that OpenCode ids are kept until the first OpenCode update arrives (`tests/ui-rows.test.js`). No test was removed.
+
 ## 2.24.0
 
 - **The kind icon shows that a job works; the spinner is gone.** Before, a running row had a small spinner next to its Claude, Codex, OpenCode or workflow icon. The spinner wobbled by 1 to 2 pixels and looked broken at some zoom levels. Now a thin arc in the actor color travels around the icon itself. The icon never moves, so nothing wobbles at any size or zoom. A job that needs your answer has a solid amber ring, one that needs attention has a dotted amber ring, and finished work is dimmed.
