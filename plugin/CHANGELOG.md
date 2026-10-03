@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.24.0
+
+- **The kind icon shows that a job works; the spinner is gone.** Before, a running row had a small spinner next to its Claude, Codex, OpenCode or workflow icon. The spinner wobbled by 1 to 2 pixels and looked broken at some zoom levels. Now a thin arc in the actor color travels around the icon itself. The icon never moves, so nothing wobbles at any size or zoom. A job that needs your answer has a solid amber ring, one that needs attention has a dotted amber ring, and finished work is dimmed.
+- **Nothing rotates anymore.** The header Running label, the Running filter chip and the "is working" line use a small blue dot that slowly fades in and out. With the system setting "reduce motion", the arc stands still.
+- **Every finished Codex or OpenCode turn shows a toast.** This is the default for runs you start yourself and for plugin jobs, with exactly one toast per event. Set `CODEX_VIEWER_NOTIFY_QUIET=1` to get toasts only when something needs you, when a turn fails, or when a turn took at least 1 minute. Codex turn toasts need no setup.
+- **OpenCode can tell the viewer at once.** `/codex:setup` offers to install one small OpenCode 2 plugin file in `~/.config/opencode/plugins/`. It reports finished, failed and stopped sessions, and sessions that wait for a permission or an answer. Setup installs it only after you say yes, and removes only its own file.
+- **Codex approval requests show a toast.** The Codex plugin now ships one hook for approval requests. Codex runs plugin hooks only after you trust them once: open `codex`, run `/hooks`, and trust the codex@fundryi hooks. Approvals happen only when your Codex approval policy is not `never`.
+- **`/codex:setup` shows the integrations.** It reports whether the Codex hook is trusted and whether the OpenCode plugin is installed, and gives the next step. After a plugin update, the session start shows one hint, once per version, when something is missing. No setup step changes your Codex config.
+- **The Windows-only notify hook installer is gone.** `install-codex-notify-hook.bat` is no longer in the repo or the Windows zip. If you installed it before, it stays as it is, and `/codex:setup` reports it.
+- **Tray toasts say what happened**, for example "Codex needs approval" or "OpenCode turn failed", not only "task complete".
+- **New tests:** incomplete integrations show one hint per plugin version (`tests/plugin-autostart.test.js`); Codex approval trust needs the current hash and enabled state, and OpenCode plugin removal refuses a foreign file or a symlink (`tests/plugin-notify.test.js`). No test was removed.
+
 ## 2.23.2
 
 - **OpenCode handoffs need OpenCode 2, and now say so.** The handoff uses `opencode run --standalone`, which exists only in OpenCode 2.0 and newer. With OpenCode 1.x, the handoff now stops at once with a clear message: "OpenCode 2.0 or newer is needed" and the install command `npm install -g @opencode/cli`. Before, it failed with an unclear error from OpenCode.
