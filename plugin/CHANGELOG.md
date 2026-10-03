@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.23.0
+
+- **The Live overview is a calm list, not cards.** Each job is one line: who works (the Claude, Codex or OpenCode icon), the title, the project, what it does now, its state and its age. Groups are Running, Needs you and Needs attention. Finished work sits behind one line, "N finished today · show". Model names, effort, token counts and the FAST flag left the rows; they show when you hover a row and on the opened page.
+- **Each row says what the job does now.** A running Claude chat or agent shows its current tool, for example "Bash: npm test". A Codex session shows its last command or the files it patched. A chat with subagents shows "2 agents running". A job that waits for you shows its real question. A running OpenCode session shows its current tool. If nothing is known, a running row says "working". A finished row leaves the cell empty.
+- **Subagents show only while they run.** They appear as short lines under their parent, not as boxes.
+- **Wide screens use their width.** From 2200 px, with nothing open, the list uses two columns: running and finished work on the left, work that needs you on the right. With a page open, a slim Activity rail on the right lists only running work and work that needs you. It replaces the old card panel. An open Claude agent still opens in that place.
+- **The sidebar grows to 400 px on wide screens.** It stayed at 340 px before, because the saved width always won over the wide-screen rule. A width you set by dragging still wins.
+- **Keyboard focus stays where it is.** The sidebar redraws at least every 10 seconds, and each redraw dropped the focus. Now the focused row keeps its focus.
+- **Rows do not move under your mouse.** While the pointer is over the sidebar, rows keep their order. They sort again when the pointer leaves.
+- **The system "reduce motion" setting now stops the spinners.** Smooth scrolling in the feed also stops.
+- **Small alignment fixes.** All times in a transcript end on the same right edge and use the same color. A child row ends at the same edge as its parent. The "you" pill no longer touches "Codex CLI". Rows with a kind label have the same height as other rows. Quiet numbers, such as tab counts and project totals, are easier to read.
+- **Pages show more of what they are.** A Codex session page now shows its kind word, like the other pages. The OpenCode page shows the model, the effort and who started it. Usage cells and meta lines no longer print zero values such as "✸ 0" or "· 0". The OpenCode token line is short, for example "24k in · 26 out".
+- **New tests:** Codex patch previews keep file basenames, the OpenCode step uses only the newest tool (`tests/server-metadata.test.js`); the overview lists running children once, finished rows include all of today, hidden subtrees do not become rows, doing-now uses only known facts, background and workflow counts (`tests/ui-home.test.js`).
+- **Removed tests:** the card renderer is gone, so its six tests went with it. "homeCards folds child agents into the parent card's agent count", "rows sort into answer, attention, running and finished sections by row status", "dismissed and archived rows never become cards", "recently finished stays capped at 5", "a card keeps the row's data fields" and "a job-only row (no session) still becomes a card with no sessionId". The new list tests cover grouping, hidden rows, finished rows and row data.
+
 ## 2.22.1
 
 - **Every command and skill now knows about OpenCode.** The rescue agent, `/codex:status`, `/codex:result`, `/codex:cancel` and `/codex:setup` now name OpenCode jobs. The prompting, contract and result skills say that they apply to OpenCode handoffs too. In 2.22.0 only the handoff command and the runtime skill knew about OpenCode, so Claude could miss that the other commands also work for OpenCode jobs.

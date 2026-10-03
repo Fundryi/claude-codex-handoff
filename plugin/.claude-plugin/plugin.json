@@ -1,6 +1,6 @@
 {
   "name": "codex",
-  "version": "2.22.1",
+  "version": "2.23.0",
   "description": "Delegate coding tasks and reviews to the OpenAI Codex CLI, or tasks to OpenCode, and get the results back. Jobs survive restarts, and the AI Live Viewer dashboard shows Codex, Claude and OpenCode sessions and resumes and cancels jobs. Fork of openai/codex-plugin-cc.",
   "author": {
     "name": "Fundryi"
