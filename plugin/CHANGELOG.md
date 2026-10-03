@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.25.0
+
+- **Big workflow runs group their agents by topic.** Before, a workflow with 135 agents showed 135 rows, sorted by last write, so the topics were mixed. Now the tree and the workflow page show one row per topic, for example `datev-firma`, with the steps it ran (`Review 1/1 › Verify 24/24`), its tokens and its last write. The topic is the second part of an agent label (`verify:datev-firma:F1#1`). Agents without a shared topic group by phase, and a single agent stays a plain row. In a topic, the agents keep the order in which they started.
+- **Finished topics fold and running topics open.** Click a topic to open or close it. The counts and tokens of a topic include every agent. This is also true for runs with more than 150 agents, where the page lists only 150.
+- **Icons are pixel perfect at every Windows scale.** Before, rows had uneven heights, so icons landed between screen pixels. At 150 % and 200 %, a ring was 1 pixel taller than wide, and its glyph was up to 1 pixel off. The working arc was also closer to ring icons than to filled icons. Now every row height and indent is a multiple of 4 px, the ring line is a whole screen pixel, and the arc has the same gap around every icon. Measured at 100, 125, 150, 175 and 200 %: every visible icon is square and its glyph is in the center.
+- **Scrolling stops on the pixel grid.** When a scroll ends, the list, the workflow page and the side panel move by 2 px or less, so the icons stay on whole pixels.
+- **The small icons in the breadcrumb and the overview are 12 px** (before: 14 px), so their glyph is in the center at every scale.
+- **Tests:** no test was added or removed. Screenshots and a pixel measurement at five scales checked the change.
+
 ## 2.24.1
 
 - **The working arc no longer jumps back.** Each live update redraws the rows, and a redrawn icon started its arc from the beginning. Measured on 2.24.0, the arc restarted about once per second. Now every arc and every breathing dot follows one page clock, so a redraw continues the circle where it was.
