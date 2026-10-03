@@ -36,4 +36,4 @@ Output rules:
 - If installation was skipped, present the original setup output.
 - If Codex is installed but not authenticated, preserve the guidance to run `!codex login`.
 
-Setup checks only the Codex CLI. OpenCode handoffs (`/codex:handoff --engine opencode`) need no setup here: the user installs the OpenCode CLI and runs `opencode` once. If the OpenCode CLI is missing, the handoff fails with its own clear error.
+Setup checks only the Codex CLI. OpenCode handoffs (`/codex:handoff --engine opencode`) need no setup here: the user installs OpenCode 2.0 or newer (`npm install -g @opencode/cli`) and runs `opencode` once. If the OpenCode CLI is missing, the handoff fails with its own clear error.

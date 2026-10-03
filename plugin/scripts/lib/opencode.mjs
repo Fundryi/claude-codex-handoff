@@ -3,11 +3,15 @@ import { createInterface } from "node:readline";
 import { binaryAvailable, resolveCliCommand, terminateProcessTree } from "./process.mjs";
 
 export function ensureOpenCodeAvailable(cwd) {
+  let check = null;
   try {
     const cli = resolveCliCommand("opencode");
-    if (binaryAvailable(cli.command, [...cli.args, "--version"], { cwd, shell: false }).available) return;
+    check = binaryAvailable(cli.command, [...cli.args, "--version"], { cwd, shell: false });
   } catch {}
-  throw new Error("OpenCode CLI not found; install it and run `opencode` once");
+  if (!check?.available) throw new Error("OpenCode CLI not found; install it and run `opencode` once");
+  // --standalone exists only in OpenCode 2. An unreadable version is let through.
+  const major = Number(/(\d+)\.\d+\.\d+/.exec(check.detail)?.[1]);
+  if (major < 2) throw new Error(`OpenCode 2.0 or newer is needed (found ${check.detail}). Install it with: npm install -g @opencode/cli`);
 }
 
 // JSON lines are the public CLI boundary. Keep only the last text message;

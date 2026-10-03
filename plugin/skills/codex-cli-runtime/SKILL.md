@@ -29,6 +29,7 @@ Execution rules:
 
 OpenCode tasks:
 - Use OpenCode only when the request has `--engine opencode`, or the user asks for OpenCode. Otherwise use Codex.
+- OpenCode 2.0 or newer is needed. With OpenCode 1.x or no OpenCode, the helper fails with a clear message; return it unchanged.
 - Forward `--engine opencode` to `task`. With no `--engine`, the helper uses Codex.
 - Pass `--model provider/model#variant` exactly as supplied. Do not apply Codex model shortcuts. With no model, OpenCode uses the user's configured default.
 - If the user supplies `--effort` and the model has no `#`, the helper adds `#<effort>` to the model. If a variant is already present, or no model is supplied, effort has no effect. There is no default effort for OpenCode.

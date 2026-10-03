@@ -123,7 +123,7 @@ AI Live Viewer shows recent OpenCode TUI chats, `opencode run` sessions and chil
 
 ## Hand off to OpenCode
 
-Install the OpenCode CLI and run `opencode` once to set it up. Then use:
+Install OpenCode 2.0 or newer (`npm install -g @opencode/cli`) and run `opencode` once to set it up. OpenCode 1.x does not work: the handoff needs the `--standalone` option of OpenCode 2. Then use:
 
 ```text
 /codex:handoff --engine opencode Explain the retry logic. Do not edit files.
@@ -136,7 +136,7 @@ Every OpenCode run uses the `build` agent with `--standalone --auto` for full pe
 
 The database is read only. The viewer reads only `session_v2` and `session_message`. It does not read account or credential tables. A read-only WAL connection can touch the `-shm` file. Transcripts use the same trusted-origin gate as Claude transcripts.
 
-Set `OPENCODE_DB` to use a different database. The default is `$XDG_DATA_HOME/opencode/opencode.db` when `XDG_DATA_HOME` is set, else `~/.local/share/opencode/opencode.db`, on Windows too. If the file or built-in SQLite support is missing, this source is off. The list uses the Claude 24-hour window: the 30 most recent roots plus every root with running work. A recent child keeps its parent in the window.
+Set `OPENCODE_DB` to use a different database. The default is `$XDG_DATA_HOME/opencode/opencode.db` when `XDG_DATA_HOME` is set, else `~/.local/share/opencode/opencode.db`, on Windows too. The viewer reads OpenCode 2 sessions only. If the file, its OpenCode 2 tables or built-in SQLite support is missing, this source is off. The list uses the Claude 24-hour window: the 30 most recent roots plus every root with running work. A recent child keeps its parent in the window.
 
 ## Using it well
 
