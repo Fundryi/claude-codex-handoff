@@ -8,7 +8,7 @@ The same tree shows Claude chats and OpenCode TUI, CLI and child sessions. Claud
 
 - `ai-live-viewer.js`: CLI and server startup.
 - `server/`: CommonJS server modules. See the server file map below.
-- `ui/`: `index.html` markup, six CSS files and 19 classic scripts in `ui/js/`, loaded in a fixed order. Theme rules: `docs/UI-THEME.md`.
+- `ui/`: `index.html` markup, six CSS files and 21 classic scripts in `ui/js/`, loaded in a fixed order. Theme rules: `docs/UI-THEME.md`.
 - `plugin/` — our fork of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc): the `codex` Claude Code plugin (commands, hooks, `scripts/codex-companion.mjs`). Multi-file ESM layout is upstream's, keep it. Upstream updates are pulled selectively via `scripts/upstream-diff.mjs`. OpenCode handoffs (`task --engine opencode`) run through our own `plugin/scripts/lib/opencode.mjs`, which upstream does not have.
 - `plugin/viewer/`: bundled copies of `ai-live-viewer.js`, the complete `server/` and `ui/` trees, and `assets/logo.svg`. Refresh with `npm run sync:viewer`; `tests/plugin-viewer-bundle.test.js` guards against drift.
 - `.claude-plugin/marketplace.json` — makes this repo an installable Claude Code marketplace (`fundryi`), serving the `codex` plugin from `./plugin`.
@@ -29,6 +29,7 @@ The same tree shows Claude chats and OpenCode TUI, CLI and child sessions. Claud
 - `server/claude-chats.js`: Claude chats and live state; `claudeChatsTick`, `claudeChatsScan`, `claudeChatView`, `claudeAgentLiveState`.
 - `server/opencode.js`: read-only SQLite sessions and transcripts; `opencodeConnection`, `opencodeChatsTick`, `opencodeTranscriptPage`.
 - `server/usage.js`: Claude usage and Codex limits; `claudeUsageCheck`, `refreshCodexLimits`.
+- `server/media.js`: opaque tokens for transcript images (500 entries, 10 MB, image types only); `registerMedia`, `readMedia`. `GET /media?ref=` serves them behind `trustedControlOrigin`.
 - `server/http.js`: assets, routes and server creation; `handleRequest`, `handleLaunch`, `createViewerServer`.
 
 `runtime.js` owns stable shared maps and sets, including `claudeWfReaders`. Never reassign these containers. Read and write replaceable frames, arrays and flags through the `shared` object; do not destructure its properties. Keep private state in its owning module. Startup stays in `ai-live-viewer.js`; requiring a module must not bind a port or start a timer.
@@ -43,13 +44,15 @@ CSS:
 - `ui/layout.css`: reset, sidebar, tabs, chips, tree rows, rails and folds.
 - `ui/marks.css`: kind marks, working halos, animations and kind words.
 - `ui/surfaces.css`: overview, activity, plans, workflows, panels, headers, menus, controls, result card and feed frame.
-- `ui/feed.css`: feed grammar, messages, thinking/work rows, Markdown and pagination.
+- `ui/feed.css`: feed grammar, messages, thinking/work rows, Markdown, code, diff and tool views, and pagination.
 - `ui/responsive.css`: mobile token/layout overrides, container query and reduced motion. Keep last.
 
 JavaScript:
 
 - `ui/js/state.js`: preferences, shared state and DOM handles; `loadPrefs`, `firstLine`.
 - `ui/js/markdown.js`: Markdown parsing and DOM output; `parseInline`, `parseMarkdown`, `renderMarkdown`.
+- `ui/js/highlight.js`: syntax highlighting without a library, off above 3,000 lines or 200 KB; `highlight`, `languageOf`.
+- `ui/js/content.js`: format detection and the one content renderer for every feed, card and panel (code, diff, ANSI, JSON, sections, images); `detectFormat`, `parseDiff`, `parseAnsi`, `renderContent`.
 - `ui/js/feed-model.js`: result sections, event grouping, actors and internal context; `startedBy`, `workingLine`, `workSummary`.
 - `ui/js/rows.js`: row models, metadata, menus and result targets; `buildRows`, `menuItems`, `resultCardModel`, `rowTooltip`.
 - `ui/js/workflow-model.js`: workflow filters, phases and selection predicates; `claudeStatusView`, `isEditableElement`.
