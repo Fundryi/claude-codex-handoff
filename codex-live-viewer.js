@@ -2109,7 +2109,7 @@ function claudeChatsTick() {
 // ---------------- HTTP ----------------
 const FALLBACK_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>AI Live Viewer</title><style>
 :root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#c9d1d9;--dim:#8b949e;--green:#3fb950;--yellow:#d29922;--blue:#58a6ff;--red:#f85149;--purple:#bc8cff}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 "Cascadia Code",Consolas,monospace;display:flex;height:100vh}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 Consolas,Menlo,monospace;display:flex;height:100vh}
 #side{width:340px;min-width:280px;border-right:1px solid var(--border);overflow-y:auto;background:var(--panel)}
 #side h1{font-size:14px;padding:12px 14px;margin:0;border-bottom:1px solid var(--border)}
 #tabs{display:flex;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel);z-index:1}

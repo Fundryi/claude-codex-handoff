@@ -104,7 +104,7 @@
       flex: none;
     }
     .icon-button:hover { background: var(--hover); color: var(--fg); }
-    .mono { font-family: "Cascadia Code", Consolas, monospace; }
+    .mono { font-family: Consolas, Menlo, monospace; }
     svg { flex: none; }
     ::-webkit-scrollbar { width: 10px; height: 10px; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
@@ -991,7 +991,7 @@
     .result-section-body { overflow-wrap: anywhere; word-break: break-word; line-height: 1.55; font-size: 13px; }
     .result-section-body > :first-child { margin-top: 0; }
     .result-section-body > :last-child { margin-bottom: 0; }
-    .result-section-body code { font: 11px "Cascadia Code", Consolas, monospace; background: var(--panel-3); color: var(--tree-text); padding: 1px 5px; border-radius: 4px; }
+    .result-section-body code { font: 11px Consolas, Menlo, monospace; background: var(--panel-3); color: var(--tree-text); padding: 1px 5px; border-radius: 4px; }
     .result-card-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
     .answer-box { margin-top: 10px; display: grid; gap: 7px; }
     .answer-box textarea { width: 100%; min-height: 70px; resize: vertical; border: 1px solid var(--border); border-radius: var(--r-btn); padding: 7px 9px; color: var(--fg); background: var(--bg); }
@@ -1122,7 +1122,7 @@
       border-radius: var(--r-chip);
       background: var(--bg);
       color: var(--muted);
-      font: 11px/1.5 "Cascadia Code", Consolas, monospace;
+      font: 11px/1.5 Consolas, Menlo, monospace;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
@@ -1173,10 +1173,10 @@
     .md-list li { margin: 2px 0; }
     .md-quote { margin: 6px 0; padding: 2px 10px; border-left: 2px solid var(--border); color: var(--muted); }
     .md-code { margin: 8px 0; border: 1px solid var(--border); border-radius: var(--r-btn); overflow: hidden; background: var(--bg); }
-    .md-code-lang { padding: 4px 10px; color: var(--muted); font: 10px/1.4 "Cascadia Code", Consolas, monospace; border-bottom: 1px solid var(--border); }
-    .md-code pre { margin: 0; padding: 10px; color: var(--fg); font: 11px/1.55 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .md-code-lang { padding: 4px 10px; color: var(--muted); font: 10px/1.4 Consolas, Menlo, monospace; border-bottom: 1px solid var(--border); }
+    .md-code pre { margin: 0; padding: 10px; color: var(--fg); font: 11px/1.55 Consolas, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
     /* inline code: the reference chip (#313747 fill, violet text) */
-    .event-body code, .msg-body code, .md-quote code { font: 11px "Cascadia Code", Consolas, monospace; background: var(--panel-3); color: var(--tree-text); padding: 1px 5px; border-radius: 4px; }
+    .event-body code, .msg-body code, .md-quote code { font: 11px Consolas, Menlo, monospace; background: var(--panel-3); color: var(--tree-text); padding: 1px 5px; border-radius: 4px; }
     .thinkgroup-step { padding: 8px 10px; border-top: 1px solid var(--border); }
     .thinkgroup-step:first-of-type { border-top: none; }
     .thinkgroup-step-time { color: var(--faint); font-size: 10px; margin-bottom: 3px; }
@@ -1191,13 +1191,13 @@
     details.technical > summary { padding: 5px 9px; }
     details.technical > summary:hover, details.quiet > summary:hover .sum-text, details.work > summary:hover .sum-text { color: var(--fg); }
     .step-kind { flex: none; min-width: 62px; color: color-mix(in srgb, var(--actor, var(--codex)) 80%, var(--muted)); font-size: 10px; font-weight: 600; }
-    .step-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font: 11px "Cascadia Code", Consolas, monospace; }
+    .step-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font: 11px Consolas, Menlo, monospace; }
     details.technical pre {
       margin: 0;
       border-top: 1px solid var(--border);
       padding: 10px;
       color: var(--fg);
-      font: 11px/1.55 "Cascadia Code", Consolas, monospace;
+      font: 11px/1.55 Consolas, Menlo, monospace;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: break-word;

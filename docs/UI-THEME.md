@@ -92,7 +92,7 @@ Rules: `--faint` is under 4.5 everywhere, so it is used only for decoration and 
 
 ## Typography
 
-Use Segoe UI Variable, Segoe UI, or the platform system font for the interface. Use Cascadia Code or Consolas only for code-like text: ids (session, thread, agent), sandbox names, the current tool, commands and paths. Everything else, including every number and every usage cell, is the interface font with tabular figures (`font-variant-numeric: tabular-nums` on `:root`). Marks and kind glyphs are SVG, never font glyphs.
+Use Segoe UI Variable, Segoe UI, or the platform system font for the interface. Use the code font stack `Consolas, Menlo, monospace` only for code-like text: ids (session, thread, agent), sandbox names, the current tool, commands and paths. Name only fonts that are part of the system (Consolas on Windows, Menlo on macOS, the `monospace` default on Linux). Never name a font that an app brings along, such as Cascadia Code: Windows Terminal shares it with all apps, and when Terminal updates, the font file moves and an open browser draws every letter as a box (seen 2026-10-03). Everything else, including every number and every usage cell, is the interface font with tabular figures (`font-variant-numeric: tabular-nums` on `:root`). Marks and kind glyphs are SVG, never font glyphs.
 
 | Use | Size | Weight |
 |---|---:|---:|
