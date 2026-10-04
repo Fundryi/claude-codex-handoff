@@ -54,7 +54,7 @@ Corner radii measured on the 2x crops: cards (the three panels) about 10 px; but
 
 | Token | Value | Use |
 |---|---|---|
-| `--bg` | `#0d0f14` | the backdrop behind the cards, code blocks |
+| `--bg` | `#0d0f14` | the backdrop behind the cards, code blocks (thinking-step code blocks are transparent) |
 | `--panel` | `#15181f` | main card, side panel card, feed, header, toolbar |
 | `--panel-2` | `#1c202b` | sidebar panel, message cards, menus, dialogs, secondary buttons |
 | `--panel-3` | `#313747` | the active filter chip, inline code |
@@ -65,9 +65,19 @@ Corner radii measured on the 2x crops: cards (the three panels) about 10 px; but
 | `--border-soft` | `#1f2431` | dividers inside blocks |
 | `--fg` | `#f3f4f6` | text |
 | `--muted` | `#9aa0bd` | secondary text |
-| `--faint` | `#646984` | decoration only, never a fact |
+| `--faint` | `#646984` | decoration, repeated facts, prompt-section captions and tool-output labels |
 | `--r-panel` / `--r-btn` / `--r-chip` | `10px` / `8px` / `6px` | the three radii; every surface uses one of them |
 | `--gutter` | `8px` | the backdrop gap around and between the cards |
+
+Content tokens (2.27.0, `ui/theme.css`). Syntax colors are for code only, never a status, actor or structure.
+
+| Group | Tokens |
+|---|---|
+| Syntax | `--syn-keyword` `#c792ea` (keywords, JSON keys), `--syn-string` `#c3e88d`, `--syn-number` `#f78c6c`, `--syn-comment` `#8d93b3`, `--syn-function` `#85d7f9`, `--syn-type` `#ffcb6b` (capitalized identifiers), `--syn-punct` `#9aa0bd` |
+| Code | `--code-fg` `#e5e7eb`; `--code-size` `12px` for block code, diffs, commands and JSON; thinking-step code is 11 px |
+| Diff | `--diff-add` `#4ade80`, `--diff-del` `#fca5a5`, `--diff-add-bg` `#142620`, `--diff-del-bg` `#2c2327`, `--diff-hunk-bg` `#1d1a35` |
+| Failed badge | `--fail-bg` `#40353f`, `--fail-border` `#6b4a50` |
+| Terminal (ANSI 30-37 and 90-97 share them) | `--term-black` `#8087a8`, `--term-red` `#fca5a5`, `--term-green` `#4ade80`, `--term-yellow` `#f9b141`, `--term-blue` `#82aaff`, `--term-magenta` `#ff6fe1`, `--term-cyan` `#85d7f9`, `--term-white` `#f3f4f6` |
 
 Status pills (`.status`) exist only in the task header's title row: pastel text on a dark fill of the same hue, 1 px border in a mid tint, 18 px tall, 10 px 700, 6 px corners. Running `#172a45` / `--blue` / `#274a7d`; Finished `#152929` / `--green` / `#1e5a44`; Waiting and Stopped `#252a3a` / `--muted` / `--border-strong`; Needs attention `#3a2618` / `--amber` / `#6b4522`; Needs answer transparent / `--amber` / `--amber`; FAST transparent / `--muted` / `--border-strong`; background tag (`.status.BG`) `--panel-3` / `--muted` / `--border-strong`, weight 600. The Running pill carries a 7 px blue dot that breathes (opacity only); the Running chip and the "is working" footer line use the same breathing dot. Nothing rotates. Rows and cards never carry a pill: the kind mark carries the state (arc, amber ring, dotted ring, dim) next to a state word. Green confirmation row (`.done-row`): `#152929` / `#6ee7b7` / `#134b3e`. Progress fill: `linear-gradient(90deg, #a855f7, #38bdf8)`, the one gradient (the reference has it). No glows: the unread dot is a plain 6 px `--accent` dot. Danger (stop, cancel, kill) is the Failed red mixed into the panel with `color-mix`; there is no separate danger color.
 
@@ -99,7 +109,7 @@ Text on the backgrounds it sits on. Computed with a local one-off script.
 
 Pill text on its fill: Running 6.29, Finished 8.73, Needs attention 7.75, Stopped and Waiting 5.53, green row 9.98, `--fg` on `--accent-fill` 11.08.
 
-Rules: `--faint` is under 4.5 everywhere, so it is used only for decoration and for words that repeat a nearby fact ("window unknown", captions' counts, the "USAGE" caption, the tokens of a finished child row that the tooltip repeats). Every 10 px word that carries information uses `--muted` or a color from the table. The selected band (`#41386f`) is bright, so on a selected sidebar row the dim text (meta, time, roll-up) lifts to `#c9cbe0` (6.49:1); the kind word keeps its actor color because the kind mark beside it says the same thing. `--accent` is never text; violet text uses `--tree-text`. Inline code is `--tree-text` on `--panel-3` (4.79:1).
+Rules: `--faint` is under 4.5 everywhere, so it is used only for decoration, for words that repeat a nearby fact ("window unknown", captions' counts, the "USAGE" caption, the tokens of a finished child row that the tooltip repeats), for prompt-section captions (GOAL, RULES) and for tool-output labels (Output, Result). Every 10 px word that carries information uses `--muted` or a color from the table. The selected band (`#41386f`) is bright, so on a selected sidebar row the dim text (meta, time, roll-up) lifts to `#c9cbe0` (6.49:1); the kind word keeps its actor color because the kind mark beside it says the same thing. `--accent` is never text; interface violet text uses `--tree-text`, and syntax keywords and JSON keys use `--syn-keyword`. Inline code is `--tree-text` on `--panel-3` (4.79:1), except in thinking steps, where it is `--muted` on a transparent background with no chip padding.
 
 ## Typography
 

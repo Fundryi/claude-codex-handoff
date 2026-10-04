@@ -256,7 +256,7 @@ Claude transcripts (chats, subagents and workflow agents) can hold text from eve
 
 - `ai-live-viewer.js`: CLI and server startup
 - `server/`: CommonJS modules for sessions, jobs, transcripts, access, HTTP and usage. See the server file map in [AGENTS.md](AGENTS.md). Node standard library only, no build step
-- `ui/`: markup in `index.html`, six CSS files and 19 classic scripts in `js/`. Keep the fixed load order. No ES modules, bundler or build step. See the UI file map in [AGENTS.md](AGENTS.md)
+- `ui/`: markup in `index.html`, six CSS files and 21 classic scripts in `js/`. Keep the fixed load order. No ES modules, bundler or build step. See the UI file map in [AGENTS.md](AGENTS.md)
 - `plugin/`: the Claude Code plugin, forked from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (keeps OpenAI's Apache-2.0 `LICENSE` and `NOTICE`; the changes fall under the root [LICENSE](LICENSE))
 - `plugin/.codex-plugin/plugin.json`: the manifest Codex reads when the plugin is installed there. It points at `codex-hooks/hooks.json` for the optional approval hook (it makes the viewer refresh sooner) and keeps the Claude hooks out of Codex. Keep its version equal to `plugin/.claude-plugin/plugin.json`
 - `plugin/viewer/`: copies of the entry, logo and complete `server/` and `ui/` trees. Refresh with `npm run sync:viewer`. Tests check for drift

@@ -51,8 +51,8 @@ JavaScript:
 
 - `ui/js/state.js`: preferences, shared state and DOM handles; `loadPrefs`, `firstLine`.
 - `ui/js/markdown.js`: Markdown parsing and DOM output; `parseInline`, `parseMarkdown`, `renderMarkdown`.
-- `ui/js/highlight.js`: syntax highlighting without a library, off above 3,000 lines or 200 KB; `highlight`, `languageOf`.
-- `ui/js/content.js`: format detection and the one content renderer for every feed, card and panel (code, diff, ANSI, JSON, sections, images); `detectFormat`, `parseDiff`, `parseAnsi`, `renderContent`.
+- `ui/js/highlight.js`: syntax highlighting without a library, off above 3,000 lines or 200 KB; `highlight`.
+- `ui/js/content.js`: format detection and the shared renderers for code, diffs, ANSI, JSON, tagged sections and images, used by tool bodies, result cards and injected rows (message and thinking bodies call `renderMarkdown`); `languageOf`, `detectFormat`, `parseDiff`, `parseAnsi`, `renderContent`.
 - `ui/js/feed-model.js`: result sections, event grouping, actors and internal context; `startedBy`, `workingLine`, `workSummary`.
 - `ui/js/rows.js`: row models, metadata, menus and result targets; `buildRows`, `menuItems`, `resultCardModel`, `rowTooltip`.
 - `ui/js/workflow-model.js`: workflow filters, phases and selection predicates; `claudeStatusView`, `isEditableElement`.
@@ -74,7 +74,7 @@ JavaScript:
 ## Hard rules
 
 - **Zero npm dependencies.** Node stdlib only (`node >= 22.13`; requirements always track a current LTS, never an EOL line). Never add a package.
-- The server uses CommonJS modules in `server/`, with `ai-live-viewer.js` as the entry. Keep server functions as top-level named function declarations. There is no build step. Add each new server file to the `serverSource` list in `tests/helpers/source.js` and ensure `scripts/sync-viewer.js` copies it.
+- The server uses CommonJS modules in `server/`, with `ai-live-viewer.js` as the entry. Keep server functions as top-level named function declarations. There is no build step. Add each new server file to `SERVER_SOURCES` in `tests/helpers/source.js` (read by `serverSource()`) and ensure `scripts/sync-viewer.js` copies it.
 - The UI lives in `ui/` as ordered classic `<script src>` files and CSS files: no ES modules, no bundler, no build step. The scripts share globals, as one page script did before. Only `ui/js/boot.js` runs code at load (bindings, SSE, timers, first render); every other script only declares functions, constants and state. Keep regex-extracted functions as top-level named declarations. A new UI file goes into `ui/index.html`, `UI_ASSET_FILES` in `server/http.js`, `tests/helpers/source.js` and `scripts/sync-viewer.js`.
 - A complete viewer install needs the entry, `server/`, `ui/` and `assets/logo.svg`. Required UI assets load before the server listens. A missing asset fails startup; there is no embedded fallback page.
 - Setup changes user config only with consent, by writing or removing our one OpenCode viewer plugin file. It never edits Codex config or hook files, or `opencode.json`. Codex viewer hooks ship in `plugin/codex-hooks/hooks.json`; Claude hooks in `plugin/hooks/hooks.json` must never run inside Codex.
