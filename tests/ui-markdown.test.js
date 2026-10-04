@@ -131,9 +131,9 @@ test("emphasis nests in both directions and permits real multiword italic prose"
 test("links: only http(s) get an href; angle-bracket targets with spaces parse", () => {
   const ok = plain(lib.parseInline("[docs](https://example.com/a)"))[0];
   assert.deepEqual(ok, { type: "link", href: "https://example.com/a", title: "https://example.com/a", children: [{ type: "text", text: "docs" }] });
-  const local = plain(lib.parseInline("[probe](</D:/GIT/PC-XENNTEC FIRMA/probe>)"))[0];
+  const local = plain(lib.parseInline("[probe](</D:/work/demo project/probe>)"))[0];
   assert.equal(local.href, null);
-  assert.equal(local.title, "/D:/GIT/PC-XENNTEC FIRMA/probe");
+  assert.equal(local.title, "/D:/work/demo project/probe");
   for (const bad of ["javascript:alert(1)", "data:text/html,x", "file:///C:/x", "vbscript:x", "//example.com", "java\tscript:alert(1)"]) {
     const token = plain(lib.parseInline("[x](<" + bad + ">)"))[0];
     assert.equal(token.href, null, bad);
