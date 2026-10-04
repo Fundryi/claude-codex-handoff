@@ -40,7 +40,7 @@ function uuid() {
   return `11111111-1111-4111-8111-${String(uidCounter).padStart(12, "0")}`;
 }
 
-// ---- rollout line builders (schema matches codex-live-viewer.js's simplify()) ----
+// ---- rollout line builders (schema matches simplify() in the single-file server codex-live-viewer.js) ----
 // originator: "Claude Code" for a handoff (the companion), a CLI value for sessions you typed in.
 function metaLine(ts, { id, cwd, model = "gpt-5", parentThreadId, agentNickname, originator = "codex_cli_rs" }) {
   const payload = { id, timestamp: new Date(ts).toISOString(), cwd, model, originator, cli_version: "0.98.0" };

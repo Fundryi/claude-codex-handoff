@@ -1,0 +1,59 @@
+    /* ---- kind marks: one 16 px box, one SVG set (GL), one stroke weight ---- */
+    /* Pixel rules for marks: no borders on any shape, so every shape has the same 16 px box, the same glyph position (10 px
+       glyph, 3 px in) and the same halo distance. The ring is an inset shadow, the ghost a dashed ring in ::before, the stroke
+       --bw is a whole number of device pixels at every DPR (1 / 2 / 2 / 2 / 3 at DPR 1 / 1.25 / 1.5 / 1.75 / 2). Rows have whole-pixel
+       heights (explicit line-heights), so a mark never sits on a half pixel. */
+    :root { --bw: 1px; }
+    @media (min-resolution: 1.25dppx) { :root { --bw: 1.6px; } }
+    @media (min-resolution: 1.5dppx) { :root { --bw: 1.3334px; } }
+    @media (min-resolution: 1.75dppx) { :root { --bw: 1.1429px; } }
+    @media (min-resolution: 2dppx) { :root { --bw: 1.5px; } }
+    @media (min-resolution: 3dppx) { :root { --bw: 1.3334px; } }
+    .mark { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; flex: none; color: var(--k); position: relative; border: 0; }
+    .mark svg { width: 10px; height: 10px; display: block; }
+    .mark.fill { background: var(--k); color: var(--bg); }
+    .mark.ring { box-shadow: inset 0 0 0 var(--bw) var(--k); background: transparent; }
+    /* topic mark (a run's topic row): a small hollow dot in place of the agent's ring and glyph, so five topics under a run read as
+       headings, not as five more agents. The halo slot (::after: arc, dim) is untouched, so a topic with running agents still carries the arc. */
+    .mark.ring.topic { box-shadow: none; }
+    .mark.topic svg { display: none; }
+    .mark.topic::before { content: ''; position: absolute; left: 4px; top: 4px; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 var(--bw) var(--k); } /* 8 px, 4 px in: whole device pixels at every DPR */
+    .mark.ghost { background: transparent; }
+    .mark.ghost::before { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+      background: repeating-conic-gradient(var(--k) 0 22deg, transparent 22deg 45deg);
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--bw)), #000 calc(100% - var(--bw)));
+      mask: radial-gradient(farthest-side, transparent calc(100% - var(--bw)), #000 calc(100% - var(--bw))); }
+    .k-claude { --k: var(--claude); }
+    .k-opencode { --k: var(--opencode); }
+    .k-codex { --k: var(--codex); }
+    .k-system { --k: var(--system); }
+    /* ---- working mark: the state lives on the kind mark. One halo slot (::after) around every mark, 3 px outside it.
+       mk-busy = a 1.5 px arc in the actor color travels around the mark (running). Only the gradient angle animates;
+               the box, the ring mask and the stroke never move, so it is identical at every DPR and zoom.
+       mk-ask = a solid amber ring (needs answer).   mk-warn = a dotted amber ring (needs attention).
+       mk-dim = the mark dims (finished, stopped, ended, archived, background). Waiting = the plain mark.
+       @property makes --mk-a interpolate; without it the arc stands still (nothing breaks). ---- */
+    @property --mk-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+    .mark.mk-busy::after, .mark.mk-ask::after, .mark.mk-warn::after {
+      content: ''; position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--bw)), #000 calc(100% - var(--bw)));
+      mask: radial-gradient(farthest-side, transparent calc(100% - var(--bw)), #000 calc(100% - var(--bw)));
+    }
+    .mark.mk-busy::after { background: conic-gradient(from var(--mk-a), transparent 0 30%, color-mix(in srgb, var(--k) 20%, transparent) 30%, var(--k) 100%); animation: mk-orbit 1.4s linear infinite; }
+    .mark.mk-ask::after { background: var(--amber); }
+    .mark.mk-warn::after { background: repeating-conic-gradient(var(--amber) 0 24deg, transparent 24deg 45deg); }
+    .mark.mk-dim { opacity: .5; }
+    .row.selected .mark.mk-dim, .ov-row.selected .mark.mk-dim, .agent-row.open .mark.mk-dim { opacity: .7; } /* the violet band lifts dim text the same way */
+    @keyframes mk-orbit { to { --mk-a: 360deg; } }
+    @keyframes breathe { 50% { opacity: .35; } }
+    /* kind word: the color is the actor who does the work. A starter glyph shows only when the starter is someone else. */
+    .kind-label { font-size: 10px; font-weight: 700; color: var(--k); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; height: 18px; }
+    .kind-label .g { display: inline-grid; place-items: center; width: 12px; height: 12px; }
+    .kind-label .g svg { width: 11px; height: 11px; }
+    .kind-label .starter { color: var(--claude); }
+    .you-tag { margin-left: 4px; font-size: 9px; font-weight: 700; color: var(--you); border: 1px solid var(--you); border-radius: 999px; padding: 0 5px; line-height: 14px; }
+    .src { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+    .flag { font-size: 10px; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 4px; padding: 0 5px; line-height: 15px; white-space: nowrap; }
+    .g { display: inline-grid; place-items: center; }
+    .g svg { width: 11px; height: 11px; }
+

@@ -1,0 +1,67 @@
+    @media (max-width: 760px) {
+      :root { --main-w: 100vw; }
+      body { padding: 0; } /* a phone shows one full-bleed pane; the sidebar is a drawer */
+      .pane { box-shadow: none; border-radius: 0; }
+      .claude-desc { display: none; } /* the title tooltip keeps it; on a phone the agent panel needs the room */
+      #side {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 20;
+        width: min(88vw, 340px) !important;
+        max-width: none;
+        min-width: 0;
+        border-right: 1px solid var(--border);
+        transform: translateX(-102%);
+        transition: transform .18s ease;
+        box-shadow: 15px 0 40px #000a;
+      }
+      body.mobile-side-open #side { transform: translateX(0); display: flex; }
+      body.side-collapsed #side { display: flex; }
+      #splitter { display: none !important; }
+      #show-side { display: inline-grid; }
+      #hide-side { display: inline-grid; }
+      /* the header wraps into rows: menu button, counter and ... first; title, facts, meta and usage below */
+      #task-header { padding: 8px 12px; }
+      #header-top { flex-wrap: wrap; gap: 8px; }
+      /* the actions share row 1 with the menu button (a zero basis, so a wide counter never pushes them under it);
+         the title starts on row 2 at most */
+      #header-actions { order: 2; flex: 1 1 0; flex-wrap: wrap; min-width: 0; }
+      #task-copy, .hd-main { order: 3; flex-basis: 100%; }
+      #task-title-row { min-height: 0; }
+      #task-meta { gap: 4px 9px; }
+      #counter { padding: 0 8px; gap: 8px; min-width: 0; }
+      #auto-open-toggle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .fact.fact-from { display: none; }
+      #feed-toolbar { padding-left: 12px; padding-right: 12px; }
+      #feed-toolbar .inner { overflow-x: auto; scrollbar-width: none; }
+      #feed { padding: 10px 12px 56px; }
+      #result-card { padding-left: 12px; padding-right: 12px; }
+      .control-grid { grid-template-columns: 1fr; }
+      /* chips scroll sideways in one row; the kind chips follow the status chips */
+      #chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 2px; }
+      #chips::-webkit-scrollbar { display: none; }
+      #side-backdrop { display: none; position: fixed; inset: 0; z-index: 19; background: rgba(0, 0, 0, .5); }
+      body.mobile-side-open #side-backdrop { display: block; }
+      /* Badges and the header counter leave little room: the title wraps under the badges instead of shrinking to nothing. */
+      #task-title-row { flex-wrap: wrap; row-gap: 4px; }
+      #task-title { flex: 1 1 100%; min-width: 120px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .meta-item { white-space: normal; overflow: visible; text-overflow: clip; }
+      .legend-title { display: none; }
+      #legend { gap: 12px; }
+      .result-section.question { padding: 0; border: 0; background: none; }
+      .result-card-body .answer-box { position: sticky; bottom: -12px; margin: 10px -14px -12px; padding: 10px 14px 12px; background: var(--panel-2); border-top: 1px solid var(--border); }
+      .agent-row .tail .w, .agent-row .tool { display: none; }
+      #claude-overview { padding-left: 12px; padding-right: 12px; }
+      /* the unified side panel covers the main pane, full width, with a back button */
+      #panel { position: fixed; inset: 0; width: 100%; min-width: 0; z-index: 10; margin: 0; }
+      #back { display: inline-flex; height: 28px; align-items: center; gap: 4px; border: 1px solid var(--border-strong); border-radius: var(--r-chip); background: transparent; padding: 0 8px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+    }
+    /* A narrow main pane (a small window with the sidebar open): the run view may shrink below its usual floor. */
+    @container (max-width: 640px) {
+      #claude-overview { min-width: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .mark.mk-busy::after { animation: none; --mk-a: 45deg; } /* a still three-quarter arc, head at the top right */
+      .chip-button.on::before, .chip-button[data-chip="RUNNING"].has-sessions::before, .status.LIVE::before, .working::before { animation: none; }
+      #feed { scroll-behavior: auto; }
+    }

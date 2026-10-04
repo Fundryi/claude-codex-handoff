@@ -1,0 +1,62 @@
+    /* Tokens (docs/UI-THEME.md, design spec 9.1). Base colors come from the owner's reference image;
+       meaning colors (status, actor) keep one meaning each. */
+    :root {
+      color-scheme: dark;
+      /* base */
+      --bg: #0d0f14;               /* page, gaps between panels, code blocks */
+      --panel: #15181f;            /* main pane, feed, cards */
+      --panel-2: #1c202b;          /* sidebar, header, toolbar, buttons */
+      --panel-3: #313747;          /* nested fills: the active chip, inline code (reference "All 17" chip) */
+      --hover: #242a3a;
+      --selected: #41386f;         /* selected row band (reference) */
+      --border: #2c3142;           /* panels, cards, inputs */
+      --border-strong: #3a4054;    /* chips, buttons */
+      --border-soft: #1f2431;      /* dividers between rows */
+      --fg: #f3f4f6;
+      --muted: #9aa0bd;
+      --faint: #646984;            /* decoration only, never a fact */
+      /* structure (violet family) */
+      --accent: #7c5cff;           /* active tab, focus ring, unread dot, primary button border, Jump pill */
+      --accent-fill: #342f60;      /* primary button fill */
+      --tree: #7c5cff;             /* rails and captions when project colors are off */
+      --tree-text: #b693f4;        /* structure text: fold row, brand mark */
+      /* project colors. Only captions, group tint and rails. Never a node. */
+      --p1: #c792ea; --p2: #82aaff; --p3: #4ade80; --p4: #7ac4e2; --p5: #ff6fe1;
+      /* status (status only) */
+      --blue: #82aaff;             /* Running */
+      --green: #4ade80;            /* Finished */
+      --yellow: #fcd14a;           /* Waiting */
+      --amber: #f9b141;            /* Needs attention, Needs answer, near a limit */
+      --red: #fca5a5;              /* Failed, over a limit */
+      --gray: #8087a8;             /* Stopped, Ended */
+      /* actors (actor only): who sent a feed message */
+      --you: #f28fbf;
+      --claude: #e0825e;
+      --plugin: #c3e88d;
+      --codex: #4fd1bd;
+      --opencode: #aabcf8;
+      --codex-lead: #9ae0d4;       /* a lead agent writing to its child: Codex family, lighter, ring avatar */
+      --system: #8087a8;
+      /* meters */
+      --meter-track: #2c3142;
+      --meter-fill: #8087a8;       /* neutral. Status colors only on a plan meter near its limit */
+      /* geometry */
+      --r-panel: 10px;             /* the three cards (sidebar, main, side panel), dialogs */
+      --r-btn: 8px;                /* buttons, inputs, cards, code blocks */
+      --r-chip: 6px;               /* chips, pills, selected rows, usage cells */
+      --gutter: 8px;               /* the backdrop gap around and between the cards */
+      --sidebar-width: 340px;      /* 400px from 2200 px viewport width */
+      --indent: 16px;              /* one tree level (levels 1 to 4); a multiple of 4 keeps every mark on the device-pixel grid */
+      --indent-deep: 8px;          /* one tree level from level 5 on */
+      --rail-x: 16px;              /* level 1 rail, from the row's padding edge */
+      --content-max: 1360px;       /* feed and header column on wide screens */
+      --main-w: calc(100vw - var(--sidebar-width) - 3 * var(--gutter)); /* width of the main pane (gutters off) */
+      --panel-w: clamp(320px, calc(var(--main-w) * .46), 760px);    /* side panel: an agent transcript */
+      font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+      font-variant-numeric: tabular-nums;
+    }
+    /* wide screens (2K, 4K at scale 1): the sidebar grows, and the side panel takes the width beyond the content column */
+    @media (min-width: 2200px) { :root { --sidebar-width: 400px; --panel-w: clamp(560px, calc(var(--main-w) - var(--content-max) - 32px), 1400px); } }
+

@@ -2,7 +2,16 @@
 
 AI Live Viewer is a compact task monitor. It should feel calm while work is progressing and make changes in task state obvious without moving controls around.
 
-The design base is the owner's reference image `.superpowers/workspace.png` (OctoShell, 1920x1032: three rounded panels on a near-black backdrop, one violet for structure, a few small status colors). The owner-approved October 3 list mockup defines the Live overview and Activity rail. Its sidebar and chat page are examples only. Keep the real sidebar and page. Every meaning color (status, actor, structure, project) keeps one meaning each. The `:root` block in `viewer-ui.html` is the one owner of the values.
+The design base is the owner's reference image `.superpowers/workspace.png` (OctoShell, 1920x1032: three rounded panels on a near-black backdrop, one violet for structure, a few small status colors). The owner-approved October 3 list mockup defines the Live overview and Activity rail. Its sidebar and chat page are examples only. Keep the real sidebar and page. Every meaning color (status, actor, structure, project) keeps one meaning each. The `:root` block in `ui/theme.css` owns the values. The mobile token override stays in `ui/responsive.css`.
+
+CSS files load in this order:
+
+- `ui/theme.css`: tokens and the wide-screen token override.
+- `ui/layout.css`: reset, sidebar, tabs, chips, tree rows and rails.
+- `ui/marks.css`: kind marks, working halos and animations.
+- `ui/surfaces.css`: overview, Activity rail, plans, workflows, panels, headers, menus and controls.
+- `ui/feed.css`: feed grammar, messages, thinking/work rows and Markdown.
+- `ui/responsive.css`: mobile, container and reduced-motion overrides. Keep last.
 
 ## Reference samples (the token source)
 
@@ -168,7 +177,7 @@ The violet family is structure and never an actor or a status: `--accent` `#7c5c
 
 ## Kind marks
 
-One SVG set (`GL` in `viewer-ui.html`: `claude`, `codex`, `flow`, `ghost`, `you`, `plugin`, `info`; 16-unit box, 1.7 stroke, round caps) for every mark, kind word, avatar, chip and usage cell. `glyph(name)` returns the SVG element; `markElement(shape, k, name)` the 16 px mark; `kindLabel(text, k, { starter, glyph })` the kind word.
+One SVG set (`GL` in `ui/js/marks.js`: `claude`, `codex`, `flow`, `ghost`, `you`, `plugin`, `info`; 16-unit box, 1.7 stroke, round caps) for every mark, kind word, avatar, chip and usage cell. The helpers live in the same file. `glyph(name)` returns the SVG element; `markElement(shape, k, name)` the 16 px mark; `kindLabel(text, k, { starter, glyph })` the kind word.
 
 | Kind | Mark | Kind word | Color |
 |---|---|---|---|

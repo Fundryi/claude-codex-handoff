@@ -1,10 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const { serverSource } = require("./helpers/source");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const source = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
+const source = serverSource();
 const searchMatchSource = source.match(/function searchMatch[\s\S]*?\n}/)[0];
 
 function searchContext() {

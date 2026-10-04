@@ -5,7 +5,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 const crypto = require("node:crypto");
 
-const source = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
+const source = require("./helpers/source.js").serverSource();
 
 function extract(name, context = {}) {
   const src = source.match(new RegExp("function " + name + "[\\s\\S]*?\\n}"))[0];
@@ -179,15 +179,19 @@ test("loopbackDirect: loopback socket and loopback Host, no proxy headers", () =
 
 // The guards above are only predicates; this checks they are wired into the real
 // request handler. A spawned viewer must refuse a wrong method or a foreign origin
-// on every state-changing route, and keep running after a refused /shutdown.
-test("serve: control routes refuse GET and foreign origins, with no side effects", async () => {
+// on every state-changing route, keep running after a refused /shutdown, and expose
+// only the fixed UI assets without interpreting raw request paths as file paths.
+test("serve: fixed UI assets and guarded control routes, with no side effects", async () => {
   const http = require("node:http");
   const net = require("node:net");
   const os = require("node:os");
   const { spawn } = require("node:child_process");
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "clv-guard-"));
-  fs.mkdirSync(path.join(home, "sessions"));
+  const codexHome = path.join(home, "codex");
+  fs.mkdirSync(path.join(codexHome, "sessions"), { recursive: true });
   const stateRoot = path.join(home, "state");
+  const opencodeDb = path.join(home, "opencode", "opencode.db");
+  fs.mkdirSync(path.dirname(opencodeDb)); // absent DB, never the owner's OpenCode data
   const port = await new Promise((resolve) => {
     const probe = net.createServer().listen(0, "127.0.0.1", () => {
       const p = probe.address().port;
@@ -212,9 +216,9 @@ test("serve: control routes refuse GET and foreign origins, with no side effects
   fs.writeFileSync(path.join(home, "claude", "projects", "p", chatId + ".jsonl"),
     cline({ type: "user", message: { role: "user", content: "Check the hook" } }) +
     cline({ type: "assistant", message: { id: "msg_1", model: "claude-opus-5-5", role: "assistant", content: [{ type: "text", text: "Checked." }], stop_reason: "end_turn", usage: { input_tokens: 7, output_tokens: 2 } } }));
-  const env = { ...process.env, CODEX_VIEWER_PORT: String(port), CODEX_HOME: home, CODEX_COMPANION_STATE_ROOT: stateRoot, CLAUDE_CONFIG_DIR: path.join(home, "claude") };
+  assert.notEqual(port, 8377, "never use the owner's live viewer port");
+  const env = { ...process.env, CODEX_VIEWER_PORT: String(port), CODEX_VIEWER_HOST: "127.0.0.1", CODEX_VIEWER_AUTOSTART: "0", CODEX_HOME: codexHome, CODEX_COMPANION_STATE_ROOT: stateRoot, CLAUDE_CONFIG_DIR: path.join(home, "claude"), OPENCODE_DB: opencodeDb };
   delete env.CODEX_VIEWER_ALLOWED_HOSTS; // the owner's own settings must not widen the bind
-  delete env.CODEX_VIEWER_HOST;
   const child = spawn(process.execPath, [path.join(__dirname, "..", "codex-live-viewer.js"), "serve", "--no-open"], { env, stdio: "ignore" });
   const exited = new Promise((resolve) => child.on("exit", resolve));
   const call = (method, url, headers = {}, body) => new Promise((resolve) => {
@@ -224,6 +228,17 @@ test("serve: control routes refuse GET and foreign origins, with no side effects
     });
     req.on("error", () => resolve(0));
     req.end(body);
+  });
+  // http.request's path is sent verbatim, unlike URL/fetch traversal normalization.
+  const assetRequest = (method, rawPath) => new Promise((resolve, reject) => {
+    const req = http.request({ host: "127.0.0.1", port, method, path: rawPath }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("error", reject);
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
+    });
+    req.on("error", reject);
+    req.end();
   });
   const getJson = (url) => new Promise((resolve) => {
     http.get({ host: "127.0.0.1", port, path: url }, (res) => {
@@ -239,6 +254,44 @@ test("serve: control routes refuse GET and foreign origins, with no side effects
       if (up !== 200) await new Promise((r) => setTimeout(r, 100));
     }
     assert.equal(up, 200, "viewer did not start");
+
+    const assets = [
+      ["/", "ui/index.html", "text/html; charset=utf-8", "no-store"],
+      ["/logo.svg", "assets/logo.svg", "image/svg+xml", "public, max-age=3600"],
+      ...["theme", "layout", "marks", "surfaces", "feed", "responsive"].map((name) =>
+        ["/ui/" + name + ".css", "ui/" + name + ".css", "text/css; charset=utf-8", "no-store"]),
+      ...["state", "markdown", "feed-model", "rows", "workflow-model", "tree-model", "navigation", "tree", "header", "marks", "plans", "node-header", "feed", "overview", "pages", "workflows", "jobs", "controls", "boot"].map((name) =>
+        ["/ui/js/" + name + ".js", "ui/js/" + name + ".js", "text/javascript; charset=utf-8", "no-store"]),
+    ];
+    for (const [url, file, mime, cache] of assets) {
+      const bytes = fs.readFileSync(path.join(__dirname, "..", file));
+      for (const method of ["GET", "HEAD"]) {
+        const response = await assetRequest(method, url);
+        const label = method + " " + url;
+        assert.equal(response.status, 200, label);
+        assert.equal(response.headers["content-type"], mime, label + " MIME");
+        assert.equal(response.headers["cache-control"], cache, label + " cache");
+        assert.equal(response.headers["x-content-type-options"], "nosniff", label + " nosniff");
+        assert.equal(response.headers["content-length"], String(bytes.length), label + " byte length");
+        assert.deepEqual(response.body, method === "HEAD" ? Buffer.alloc(0) : bytes, label + " bytes");
+      }
+    }
+    for (const rawPath of [
+      "/ui/../codex-live-viewer.js",
+      "/ui/%2e%2e/codex-live-viewer.js",
+      "/ui/%2e%2e%2fcodex-live-viewer.js",
+      "/ui/%252e%252e%252fcodex-live-viewer.js",
+      "/ui/..\\codex-live-viewer.js",
+      "/ui/%2e%2e%5ccodex-live-viewer.js",
+      "/ui/unknown.css", "/ui/js/unknown.js", "/ui/js/state.js.map",
+      "/package.json", "/codex-live-viewer.js", "/ui/index.html",
+      "/ui/", "/ui/js/", "/ui/theme.css?version=1", "/?version=1",
+    ]) {
+      assert.equal((await assetRequest("GET", rawPath)).status, 404, "unmapped raw path " + rawPath);
+    }
+    const postAsset = await assetRequest("POST", "/ui/theme.css");
+    assert.equal(postAsset.status, 405, "POST asset");
+    assert.equal(postAsset.headers.allow, "GET, HEAD", "POST asset Allow");
 
     const trusted = { Origin: "http://127.0.0.1:" + port, "Content-Type": "application/json" };
     const evil = { Origin: "https://evil.example", "Content-Type": "application/json" };

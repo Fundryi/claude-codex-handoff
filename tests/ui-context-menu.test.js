@@ -1,11 +1,10 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const { uiSource } = require("./helpers/source");
 const test = require("node:test");
 const vm = require("node:vm");
 
 // The ... menu and the right-click menu share one builder: menuItems(row, context).
-const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
+const html = uiSource();
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const block = script.match(/function firstLine[\s\S]*?(?=\n    function setConnection)/)[0];
 

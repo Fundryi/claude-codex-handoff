@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Live Viewer</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui/theme.css">
+  <link rel="stylesheet" href="/ui/layout.css">
+  <link rel="stylesheet" href="/ui/marks.css">
+  <link rel="stylesheet" href="/ui/surfaces.css">
+  <link rel="stylesheet" href="/ui/feed.css">
+  <link rel="stylesheet" href="/ui/responsive.css">
+</head>
+<body>
+  <aside id="side" class="pane" aria-label="Task list">
+    <div id="brand">
+      <img id="brand-mark" src="/logo.svg" alt="">
+      <div id="brand-copy">
+        <div id="brand-title">AI Live Viewer</div>
+        <div id="brand-subtitle"><span id="connection"><span id="connection-dot"></span><span id="connection-text">Connecting</span></span></div>
+      </div>
+      <button id="hide-side" class="icon-button" type="button" title="Collapse session list" aria-label="Collapse session list">&#x2039;</button>
+    </div>
+    <div id="side-controls">
+      <input id="search" type="search" placeholder="Search tasks, chats, projects, or IDs" aria-label="Search tasks">
+      <div id="tabs" aria-label="Views"></div>
+      <div id="chips-wrap"><div id="chips" aria-label="Filter this view"></div></div>
+    </div>
+    <div id="open-elsewhere" hidden>Open: <span id="open-elsewhere-title"></span> (not in this view) &#xB7; <button id="open-elsewhere-show" type="button">Show</button></div>
+    <div id="list-wrap"><div id="list"></div></div>
+    <div id="plans" aria-label="Plan limits" hidden></div>
+  </aside>
+
+  <div id="side-backdrop" aria-hidden="true"></div>
+
+  <div id="splitter" role="separator" aria-label="Resize session list" aria-orientation="vertical" tabindex="0"></div>
+
+  <main id="main" class="pane">
+    <header id="task-header"><div class="inner">
+      <div id="crumbs" aria-label="Path to this node"></div>
+      <div id="header-top">
+        <button id="show-side" class="icon-button" type="button" title="Show session list" aria-label="Show session list">&#x2630;</button>
+        <div id="task-copy" class="hd-main">
+          <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-handoff" class="status HANDOFF" hidden>Handoff</span><span id="task-claude" class="status CLAUDE_WF claude-only" title="A Claude Code workflow (Workflow tool), not a Codex task" hidden>Workflow</span><span id="task-fast" class="status FAST" title="Priority processing (fast tier)" hidden>FAST</span><span id="task-title">Select a task</span></div>
+          <div id="task-facts" hidden></div>
+          <div id="task-meta"><span class="meta-item">Running tasks are selected automatically</span></div>
+          <div id="usage" aria-label="Token usage"></div>
+        </div>
+        <div id="header-actions">
+          <button id="counter" type="button" title="Open Live: what runs or needs you" hidden></button>
+          <button id="resume-session-button" class="toolbar-button" type="button" hidden>Resume</button>
+          <button id="auto-open-toggle" type="button" role="switch" aria-pressed="false" title="Automatically open each new running task" hidden>Auto-open: Off</button>
+          <button id="actions-button" class="icon-button" type="button" title="Task actions" aria-label="Task actions" aria-expanded="false">&#x22EF;</button>
+        </div>
+      </div>
+      <div id="action-menu" role="menu" hidden></div>
+      <div id="process-panel" class="codex-only" hidden></div>
+    </div></header>
+
+    <div id="feed-toolbar"><div class="inner">
+      <div id="legend" role="note" aria-label="Who's who in the feed">
+        <span class="legend-title">Who's who</span>
+        <span class="legend-item actor-you codex-only" title="You: a message you typed, or your answer relayed through Claude or the answer box">You</span>
+        <span class="legend-item actor-claude codex-only" title="Claude: a handoff prompt, or an answer Claude gave by itself">Claude</span>
+        <span class="legend-item actor-plugin codex-only" title="Plugin: the return format the codex plugin adds to every handoff">Plugin</span>
+        <span class="legend-item actor-codex codex-only" title="Codex: replies, and questions it asks you. In a child agent's session, the lead agent's messages show as Codex (lead), in a lighter teal with a ring avatar">Codex</span>
+        <span class="legend-item actor-work codex-only" title="Codex work: thinking, commands, output, patches and tools">Codex work</span>
+        <span class="legend-item actor-system codex-only" title="System: injected context and hook text, collapsed">System</span>
+        <span class="legend-item actor-you chat-only" title="You: what you typed in this chat">You</span>
+        <span class="legend-item actor-claude chat-only claude-chat-only" title="Claude: its replies to you">Claude</span>
+        <span class="legend-item actor-chat-work chat-only claude-chat-only" title="Claude work: tool calls, output and thinking">Claude work</span>
+        <span class="legend-item actor-opencode opencode-only" title="OpenCode replies">OpenCode</span>
+        <span class="legend-item actor-opencode-work opencode-only" title="OpenCode tools, output and thinking">OpenCode work</span>
+        <span class="legend-item actor-system chat-only" title="System: injected context and hook text, collapsed">System</span>
+        <span class="legend-item actor-workflow-script claude-only" title="Workflow script: the prompt a Claude workflow script gave this agent">Workflow script</span>
+        <span class="legend-item actor-claude-agent claude-only" title="Claude agent: the replies of an agent a Claude workflow started (not Codex)">Claude agent</span>
+        <span class="legend-item actor-claude-work claude-only" title="Agent work: the Claude agent's tool calls, output and thinking">Agent work</span>
+        <span class="legend-item actor-system claude-only" title="System: injected context and hook text, collapsed">System</span>
+      </div>
+    </div></div>
+
+    <section id="result-card" aria-label="Handoff result" hidden></section>
+
+    <div id="main-body">
+      <section id="claude-overview" class="claude-only" aria-label="Claude workflow run"></section>
+      <div id="feed-wrap">
+        <div id="feed"><div id="feed-inner"></div></div>
+        <div id="feed-pill"><button id="jump-latest" type="button" hidden>&darr; <b id="feed-new"></b> Jump to latest</button></div>
+      </div>
+    </div>
+  </main>
+
+  <section id="panel" class="pane" aria-label="Side panel">
+    <div id="panel-head"></div>
+    <div id="panel-body"></div>
+  </section>
+
+  <div id="stop-modal" hidden>
+    <div id="stop-modal-box" role="dialog" aria-modal="true" aria-labelledby="stop-modal-title">
+      <h2 id="stop-modal-title">Stop Codex process?</h2>
+      <div id="stop-modal-body"></div>
+      <div id="stop-modal-actions">
+        <button id="stop-modal-cancel" type="button">Cancel</button>
+        <button id="stop-modal-confirm" type="button">Stop process</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="job-modal" hidden>
+    <div id="job-modal-box" role="dialog" aria-modal="true" aria-labelledby="job-modal-title">
+      <h2 id="job-modal-title">Job result</h2>
+      <label id="job-modal-runs-field" class="control-field" hidden><span>Run on this thread</span><select id="job-modal-runs"></select></label>
+      <div id="job-modal-meta"></div>
+      <div id="job-modal-result"></div>
+      <div id="job-modal-actions">
+        <button id="job-modal-resume" type="button" hidden>Resume</button>
+        <button id="job-modal-close" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="context-menu" role="menu" hidden></div>
+
+  <div id="control-modal" hidden>
+    <div id="control-modal-box" role="dialog" aria-modal="true" aria-labelledby="control-modal-title">
+      <h2 id="control-modal-title">Codex action</h2>
+      <form id="control-modal-form">
+        <div id="control-modal-body"></div>
+        <div id="control-modal-error" role="status" aria-live="polite"></div>
+        <div id="control-modal-actions">
+          <button id="control-modal-cancel" type="button">Back</button>
+          <button id="control-modal-confirm" type="submit">Continue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/ui/js/state.js"></script>
+  <script src="/ui/js/markdown.js"></script>
+  <script src="/ui/js/feed-model.js"></script>
+  <script src="/ui/js/rows.js"></script>
+  <script src="/ui/js/workflow-model.js"></script>
+  <script src="/ui/js/tree-model.js"></script>
+  <script src="/ui/js/navigation.js"></script>
+  <script src="/ui/js/tree.js"></script>
+  <script src="/ui/js/header.js"></script>
+  <script src="/ui/js/marks.js"></script>
+  <script src="/ui/js/plans.js"></script>
+  <script src="/ui/js/node-header.js"></script>
+  <script src="/ui/js/feed.js"></script>
+  <script src="/ui/js/overview.js"></script>
+  <script src="/ui/js/pages.js"></script>
+  <script src="/ui/js/workflows.js"></script>
+  <script src="/ui/js/jobs.js"></script>
+  <script src="/ui/js/controls.js"></script>
+  <script src="/ui/js/boot.js"></script>
+</body>
+</html>

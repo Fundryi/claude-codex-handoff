@@ -29,7 +29,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           New-Item -ItemType Directory -Force -Path "$folder/assets" | Out-Null
           Copy-Item "tray-launcher/target/release/codex-live-viewer-tray.exe" "$folder/AI Live Viewer.exe"
-          Copy-Item "codex-live-viewer.js", "viewer-ui.html", "README.md", "LICENSE" $folder
+          Copy-Item "codex-live-viewer.js", "README.md", "LICENSE" $folder
+          Copy-Item -Recurse "ui" $folder
           Copy-Item "assets/logo.svg" "$folder/assets/logo.svg"
           # The companion Resume/Cancel run; the server finds it at plugin/scripts/.
           New-Item -ItemType Directory -Force -Path "$folder/plugin/.claude-plugin" | Out-Null
@@ -65,7 +66,8 @@ jobs:
           mkdir -p "$folder"
           mkdir -p "$folder/assets"
           cp tray-launcher/target/release/codex-live-viewer-tray "$folder/ai-live-viewer-tray"
-          cp codex-live-viewer.js viewer-ui.html README.md LICENSE "$folder/"
+          cp codex-live-viewer.js README.md LICENSE "$folder/"
+          cp -R ui "$folder/"
           cp assets/logo.svg "$folder/assets/logo.svg"
           # The companion Resume/Cancel run; the server finds it at plugin/scripts/.
           mkdir -p "$folder/plugin/.claude-plugin"

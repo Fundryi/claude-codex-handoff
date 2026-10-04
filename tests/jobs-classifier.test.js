@@ -1,10 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const { serverSource } = require("./helpers/source");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
+const src = serverSource();
 const slice = src.match(/const STUCK_AFTER_MS[\s\S]*?function classifyJobLiveness[\s\S]*?\n\}/)[0];
 
 function ctx() {

@@ -1,11 +1,10 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const { uiSource, serverSource } = require("./helpers/source");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
-const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
+const src = serverSource();
+const html = uiSource();
 
 function serverContext() {
   const slice =

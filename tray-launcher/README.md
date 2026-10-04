@@ -10,7 +10,10 @@ npm run tray
 ```
 
 Build a release binary with `npm run build:tray`. Release archives place the
-renamed binary beside `codex-live-viewer.js`; Node must be available on `PATH`.
+renamed binary beside `codex-live-viewer.js`, the complete `ui/` tree and
+`assets/logo.svg`. Keep the companion directories, metadata, LICENSE and NOTICE
+under `plugin/`. The server stays one file. The UI uses six CSS files and 19
+classic scripts in a fixed load order, with no build step. Node must be on `PATH`.
 
 The launcher:
 
@@ -32,6 +35,8 @@ Useful environment variables:
 | `CODEX_VIEWER_JS` | auto-detected | Explicit path to `codex-live-viewer.js` |
 | `CODEX_TRAY_NO_OPEN` | unset | Set to `1` to suppress opening the browser |
 | `CODEX_VIEWER_NOTIFICATIONS` | `1` | Set to `0` to disable native notifications |
+
+`CODEX_VIEWER_JS` must point to the entry in a complete viewer install.
 
 Linux development packages required by `tray-icon` on Debian/Ubuntu:
 

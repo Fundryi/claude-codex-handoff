@@ -1,10 +1,10 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const { uiSource } = require("./helpers/source");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
+const html = uiSource();
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const pureHelpers = script.match(/function firstLine[\s\S]*?(?=\n    function setConnection)/)[0];
 

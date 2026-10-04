@@ -7,19 +7,54 @@ The same tree shows Claude chats and OpenCode TUI, CLI and child sessions. Claud
 ## Layout
 
 - `codex-live-viewer.js` — the entire Node server + CLI. Single file, on purpose.
-- `viewer-ui.html` — the entire frontend (HTML/CSS/JS in one file). Theme rules: `docs/UI-THEME.md`.
+- `ui/`: `index.html` markup, six CSS files and 19 classic scripts in `ui/js/`, loaded in a fixed order. Theme rules: `docs/UI-THEME.md`.
 - `plugin/` — our fork of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc): the `codex` Claude Code plugin (commands, hooks, `scripts/codex-companion.mjs`). Multi-file ESM layout is upstream's, keep it. Upstream updates are pulled selectively via `scripts/upstream-diff.mjs`. OpenCode handoffs (`task --engine opencode`) run through our own `plugin/scripts/lib/opencode.mjs`, which upstream does not have.
-- `plugin/viewer/` — bundled copies of the server and UI. Refresh with `npm run sync:viewer`; `tests/plugin-viewer-bundle.test.js` guards against drift.
+- `plugin/viewer/`: bundled copies of `codex-live-viewer.js`, `assets/logo.svg` and the complete `ui/` tree. Refresh with `npm run sync:viewer`; `tests/plugin-viewer-bundle.test.js` guards against drift.
 - `.claude-plugin/marketplace.json` — makes this repo an installable Claude Code marketplace (`fundryi`), serving the `codex` plugin from `./plugin`.
 - `scripts/upstream-diff.mjs` — clones upstream and diffs it against `plugin/` for manual cherry-picking.
 - `tests/` — `node:test` suites. Server/UI functions are extracted via regex + `vm.runInNewContext`, so keep function declarations self-contained (`function name(...) { ... }` at top level, no closures over outer state) or the extraction breaks. Plugin `.mjs` modules are imported directly with dynamic `import()`.
 - `tray-launcher/` — Rust tray app that runs the Node server in the background (Windows/Linux).
 - `docs/superpowers/` — design specs (`specs/`), implementation plans (`plans/`), finished ones in `archive/`. Whole dir is gitignored: plans/specs stay local, never committed.
 
+## UI file map
+
+`ui/index.html` holds markup. It is served at `/`. CSS URLs are `/ui/<name>.css`; script URLs are `/ui/js/<name>.js`. The logo stays at `/logo.svg`. Lists below are in load order.
+
+CSS:
+
+- `ui/theme.css`: tokens, `:root` and the 2200px token override.
+- `ui/layout.css`: reset, sidebar, tabs, chips, tree rows, rails and folds.
+- `ui/marks.css`: kind marks, working halos, animations and kind words.
+- `ui/surfaces.css`: overview, activity, plans, workflows, panels, headers, menus, controls, result card and feed frame.
+- `ui/feed.css`: feed grammar, messages, thinking/work rows, Markdown and pagination.
+- `ui/responsive.css`: mobile token/layout overrides, container query and reduced motion. Keep last.
+
+JavaScript:
+
+- `ui/js/state.js`: preferences, shared state and DOM handles; `loadPrefs`, `firstLine`.
+- `ui/js/markdown.js`: Markdown parsing and DOM output; `parseInline`, `parseMarkdown`, `renderMarkdown`.
+- `ui/js/feed-model.js`: result sections, event grouping, actors and internal context; `startedBy`, `workingLine`, `workSummary`.
+- `ui/js/rows.js`: row models, metadata, menus and result targets; `buildRows`, `menuItems`, `resultCardModel`, `rowTooltip`.
+- `ui/js/workflow-model.js`: workflow filters, phases and selection predicates; `claudeStatusView`, `isEditableElement`.
+- `ui/js/tree-model.js`: unified nodes, roots, filters and counts; `buildNodes`, `nodeIdFor`.
+- `ui/js/navigation.js`: connection, preferences, views and auto-open; `setConnection`, `chooseView`, `followRunningSession`.
+- `ui/js/tree.js`: sidebar badges, rails and row rendering; `nodeBadge`, `renderList`.
+- `ui/js/header.js`: selected-row header and actions; `statusChip`, `selectedRow`, `renderHeader`.
+- `ui/js/marks.js`: shared avatars, SVG glyphs and kind marks; `GL`, `glyph`, `markElement`, `kindChipsElement`.
+- `ui/js/plans.js`: usage windows, reset times and plan rows; `planRow`, `renderPlans`.
+- `ui/js/node-header.js`: task facts, breadcrumbs, usage and chat menus; `renderNodeHeader`, `fillChatMenu`, `nodeContextMenu`.
+- `ui/js/feed.js`: feed DOM: messages, command/work rows, thinking groups, markers and render batching; `createEvent`, `createWorkBlock`, `createThinkGroupEvent`, `renderFeed`, `renderGhostPage`, `requestFeedRender`.
+- `ui/js/overview.js`: Live groups and Activity rail; `overviewRowElement`, `renderHome`, `renderActivity`.
+- `ui/js/pages.js`: selection, transcript polling, shared transcript drawing (Codex, Claude, OpenCode and panel feeds) and side panels; `drawTranscript`, `newClaudeFeed`, `snapScrollToGrid`, `renderPanel`.
+- `ui/js/workflows.js`: workflow headers, agents, topics and menus; `claudeRunById`, `openClaudeAgent`, `runClaudeMenuAction`.
+- `ui/js/jobs.js`: handoff/history loading, run picker and result cards; `refreshJobs`, `openJob`.
+- `ui/js/controls.js`: resume/stop dialogs, copy actions and processes; `openStopModal`, `rovingKeydown`, `COPY_COMMANDS`, `showProcesses`.
+- `ui/js/boot.js`: panel setup, event bindings, observers, SSE, preference migration, initial renders and polling.
+
 ## Hard rules
 
 - **Zero npm dependencies.** Node stdlib only (`node >= 22.13`; requirements always track a current LTS, never an EOL line). Never add a package.
-- Server stays one file, UI stays one file. No build step for the Node side.
+- Server stays one file for now (`codex-live-viewer.js`). The UI lives in `ui/` as ordered classic `<script src>` files and CSS files: no ES modules, no bundler, no build step. The scripts share globals, as one page script did before. Only `ui/js/boot.js` runs code at load (bindings, SSE, timers, first render); every other script only declares functions, constants and state. Keep regex-extracted functions as top-level named declarations. A new UI file goes into `ui/index.html`, `UI_ASSET_FILES` in `codex-live-viewer.js`, `tests/helpers/source.js` and `scripts/sync-viewer.js`.
 - Setup changes user config only with consent, by writing or removing our one OpenCode viewer plugin file. It never edits Codex config or hook files, or `opencode.json`. Codex viewer hooks ship in `plugin/codex-hooks/hooks.json`; Claude hooks in `plugin/hooks/hooks.json` must never run inside Codex.
 - Codex turn toasts use fresh rollout done/err events and need no setup or trust. The Codex hook is only for optional approval notices, when approval policy is not `never`. Companion sessions use only their job frame. Keep one toast per event and suppress startup backfill.
 - The viewer's OpenCode source is read only. Use a lazy, guarded `node:sqlite` load and `DatabaseSync` with `readOnly: true`. Query only `session_v2` and `session_message`, with explicit columns. The same DB holds OAuth tokens and credentials in other tables. Do not query those tables or send their data to a browser or log. Reuse the handle until the file identity changes or a query fails. Poll on the Claude cadence, including its no-browser slow mode. Pull bounded transcript pages by `seq` behind `trustedControlOrigin`. Do not write, checkpoint, or run write PRAGMAs. A read-only WAL connection can touch the `-shm` file; this is accepted.

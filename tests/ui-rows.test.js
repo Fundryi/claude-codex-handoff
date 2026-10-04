@@ -1,10 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const { uiSource } = require("./helpers/source");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
+const html = uiSource();
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 // The whole pure-helper block, as tests/stuck-session.test.js extracts it.
 const block = script.match(/function firstLine[\s\S]*?(?=\n    function setConnection)/)[0];

@@ -263,7 +263,7 @@ function simplify(line) {
       // A user-role message is injected context only when it opens with one of the
       // tags Codex injects (seen in real rollouts), or with the AGENTS.md heading.
       // Prompts that open with any other tag (<goal>, <task>, <role>) are speech.
-      // Keep in step with INJECTED_BLOCK in viewer-ui.html (tests/ui-feed.test.js checks).
+      // Keep in step with INJECTED_BLOCK in ui/js/feed-model.js (tests/ui-feed.test.js checks).
       if (role === "user") {
         const INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits|subagent_notification)(?=[\s>/])|# AGENTS\.md instructions\b|The following is the Codex agent history (?:added since your last approval assessment|whose request action you are assessing)\b)/;
         return INJECTED_BLOCK.test(text) ? { kind: "user", ts, text, internal: true } : { kind: "user", ts, text };
@@ -2317,25 +2317,80 @@ es.onmessage=m=>{
 };
 </script></body></html>`;
 
-let PAGE = FALLBACK_PAGE;
-try {
-  PAGE = fs.readFileSync(path.join(__dirname, "viewer-ui.html"), "utf8");
-} catch {
-  // Keep the embedded page as a compatibility fallback for single-file installs.
+const UI_ASSET_FILES = new Map([
+  ["/", ["ui/index.html", "text/html; charset=utf-8"]],
+  ["/logo.svg", ["assets/logo.svg", "image/svg+xml"]],
+  ["/ui/theme.css", ["ui/theme.css", "text/css; charset=utf-8"]],
+  ["/ui/layout.css", ["ui/layout.css", "text/css; charset=utf-8"]],
+  ["/ui/marks.css", ["ui/marks.css", "text/css; charset=utf-8"]],
+  ["/ui/surfaces.css", ["ui/surfaces.css", "text/css; charset=utf-8"]],
+  ["/ui/feed.css", ["ui/feed.css", "text/css; charset=utf-8"]],
+  ["/ui/responsive.css", ["ui/responsive.css", "text/css; charset=utf-8"]],
+  ["/ui/js/state.js", ["ui/js/state.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/markdown.js", ["ui/js/markdown.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/feed-model.js", ["ui/js/feed-model.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/rows.js", ["ui/js/rows.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/workflow-model.js", ["ui/js/workflow-model.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/tree-model.js", ["ui/js/tree-model.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/navigation.js", ["ui/js/navigation.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/tree.js", ["ui/js/tree.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/header.js", ["ui/js/header.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/marks.js", ["ui/js/marks.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/plans.js", ["ui/js/plans.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/node-header.js", ["ui/js/node-header.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/feed.js", ["ui/js/feed.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/overview.js", ["ui/js/overview.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/pages.js", ["ui/js/pages.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/workflows.js", ["ui/js/workflows.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/jobs.js", ["ui/js/jobs.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/controls.js", ["ui/js/controls.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/boot.js", ["ui/js/boot.js", "text/javascript; charset=utf-8"]],
+]);
+
+function loadUiAssets() {
+  const assets = new Map();
+  let page, legacy = false;
+  try {
+    page = fs.readFileSync(path.join(__dirname, "ui/index.html"));
+  } catch {
+    // Preserve loose single-file installs until the separately approved server split.
+    page = Buffer.from(FALLBACK_PAGE);
+    legacy = true;
+  }
+  for (const [url, [file, contentType]] of UI_ASSET_FILES) {
+    if (legacy && url !== "/" && url !== "/logo.svg") continue;
+    let body = page;
+    if (url !== "/") {
+      try {
+        body = fs.readFileSync(path.join(__dirname, file));
+      } catch (err) {
+        // The embedded compatibility UI does not require the standalone logo asset.
+        if (legacy) continue;
+        throw new Error("Cannot read required UI asset " + file + ": " + err.message);
+      }
+    }
+    assets.set(url, { body, contentType, cacheControl: url === "/logo.svg" ? "public, max-age=3600" : "no-store" });
+  }
+  return assets;
 }
 
-let LOGO = null;
-try {
-  LOGO = fs.readFileSync(path.join(__dirname, "assets", "logo.svg"), "utf8");
-} catch {
-  // The embedded compatibility UI does not require the standalone logo asset.
+function loadUiAssetsOrExit() {
+  try { return loadUiAssets(); } catch (err) {
+    console.error("[X] " + err.message);
+    console.error("    The install is incomplete. Reinstall or update the plugin.");
+    process.exit(1);
+  }
 }
+
+// Loaded only by serve/start: status/stop/kill do not need an installed UI.
+let uiAssets = null;
 
 const server = http.createServer((req, res) => {
   const auth = tunnelAuthDecision(req.headers, req.url, TOKEN, FLAGS.tunnel);
   if (!auth.allow) { res.writeHead(401, { "Content-Type": "text/plain" }); return res.end("token required"); }
   if (auth.setCookie) res.setHeader("Set-Cookie", "clv_token=" + TOKEN + "; HttpOnly; Path=/; SameSite=Lax; Secure");
   if (auth.redirect) { res.writeHead(302, { Location: auth.redirect }); return res.end(); }
+  const asset = uiAssets.get(req.url);
   if (req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(JSON.stringify({
@@ -2343,12 +2398,18 @@ const server = http.createServer((req, res) => {
       version: APP_VERSION,
       notificationListener: notificationClients.size > 0,
     }));
-  } else if (req.url === "/") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(PAGE);
-  } else if (req.url === "/logo.svg" && LOGO) {
-    res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=3600" });
-    res.end(LOGO);
+  } else if (asset) {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      res.writeHead(405, { Allow: "GET, HEAD" });
+      return res.end("GET or HEAD only");
+    }
+    res.writeHead(200, {
+      "Content-Type": asset.contentType,
+      "Cache-Control": asset.cacheControl,
+      "X-Content-Type-Options": "nosniff",
+      "Content-Length": asset.body.length,
+    });
+    res.end(req.method === "HEAD" ? undefined : asset.body);
   } else if (req.url === "/shutdown") {
     if (req.method !== "POST") { res.writeHead(405); return res.end("POST only"); }
     if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
@@ -2618,6 +2679,8 @@ function loopbackDirect(req) {
 }
 
 function serve() {
+  // Fail before listen or any attempt to take over a port.
+  uiAssets = loadUiAssetsOrExit();
   if (!fs.existsSync(SESSIONS_DIR) && !fs.existsSync(CLAUDE_PROJECTS)) {
     console.error("[X] Neither Codex sessions (" + SESSIONS_DIR + ") nor Claude projects (" + CLAUDE_PROJECTS + ") found.");
     console.error("    Run any codex or claude command once, or set CODEX_HOME / CLAUDE_CONFIG_DIR.");
@@ -2788,6 +2851,7 @@ function openBrowser() {
 // A running viewer from an older version is replaced, so a plugin update takes effect
 // without a new session. force replaces any running viewer (restart).
 function doStart(force) {
+  loadUiAssetsOrExit();
   ping((up, info, blocked) => {
     if (blocked) return reportBlocked(blocked);
     if (!up) return launch();

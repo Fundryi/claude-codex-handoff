@@ -69,7 +69,7 @@ async (page) => {
     }
   }
 
-  // Sidebar views: tabs and chips carry data-tab / data-chip (ids from TABS in viewer-ui.html).
+  // Sidebar views: tabs and chips carry data-tab / data-chip (ids from VIEW_TABS in ui/js/tree-model.js).
   async function view(tab, chip) {
     const ok = await clickSel('#tabs [data-tab="' + tab + '"]');
     return ok && (!chip || await clickSel('#chips [data-chip="' + chip + '"]'));

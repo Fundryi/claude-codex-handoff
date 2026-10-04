@@ -1,0 +1,192 @@
+    /* Feed grammar: messages are cards with a sender -> receiver header in the actor's color;
+       Codex work is a collapsed activity log on a teal rail; System and Plugin text is quiet. */
+    .actor-you { --actor: var(--you); }
+    .actor-relay { --actor: var(--you); }
+    .actor-claude { --actor: var(--claude); }
+    .actor-opencode, .actor-opencode-work { --actor: var(--opencode); }
+    .actor-opencode-work .avatar { background: transparent; color: var(--opencode); box-shadow: inset 0 0 0 1.5px var(--opencode); }
+    .legend-item.actor-opencode-work::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--opencode); }
+    body:not(.opencode-page) .opencode-only, body.opencode-page .claude-chat-only { display: none !important; }
+    .actor-plugin { --actor: var(--plugin); }
+    .actor-codex, .actor-work { --actor: var(--codex); }
+    .actor-system { --actor: var(--system); }
+    .actor-codex-lead { --actor: var(--codex-lead); }
+    .actor-codex-lead .avatar { background: transparent; color: var(--codex-lead); box-shadow: inset 0 0 0 1.5px var(--codex-lead); }
+    /* Claude actors: Claude's clay. Ring avatar = a workflow script's prompt or Claude's own work; filled = the agent or the chat reply. */
+    .actor-workflow-script, .actor-claude-agent, .actor-claude-work, .actor-chat-work, .actor-subagent, .actor-subagent-work { --actor: var(--claude); }
+    .actor-workflow-script .avatar, .actor-claude-work .avatar, .actor-chat-work .avatar, .actor-subagent-work .avatar { background: transparent; color: var(--claude); box-shadow: inset 0 0 0 1.5px var(--claude); }
+    /* every avatar is an SVG glyph from the GL set (glyph()), never a font glyph */
+    .avatar svg { width: 11px; height: 11px; }
+    .avatar.small svg { width: 9px; height: 9px; }
+    .msg-tag.neutral { --actor: var(--system); }
+    .avatar {
+      width: 18px;
+      height: 18px;
+      flex: none;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--actor);
+      color: var(--bg);
+    }
+    .avatar.small { width: 16px; height: 16px; }
+    .actor-relay > .msg-head .avatar { background: transparent; color: var(--actor); box-shadow: none; border: 1.5px dashed var(--actor); }
+    .who { color: var(--actor); font-weight: 700; }
+    .route-arrow { color: var(--faint); font-size: 12px; }
+    .msg {
+      min-width: 0;
+      margin: 0 0 10px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
+      background: var(--panel-2);
+    }
+    .msg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 4px; font-size: 11px; }
+    .msg-tag {
+      border: 1px solid var(--actor);
+      border-radius: var(--r-chip);
+      padding: 0 6px;
+      color: var(--actor);
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 16px;
+      white-space: nowrap;
+    }
+    .msg-time { margin-left: auto; color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+    details.msg-more > summary { cursor: pointer; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    details.msg-more > summary:hover { color: var(--fg); }
+    details.msg-more[open] > summary { margin-bottom: 6px; }
+    .ask {
+      margin-top: 10px;
+      padding: 8px 12px 9px;
+      /* --asked: who the question is for (pink for you, light teal for the lead agent) */
+      border: 1px solid color-mix(in srgb, var(--asked, var(--you)) 45%, transparent);
+      border-radius: var(--r-btn);
+      background: color-mix(in srgb, var(--asked, var(--you)) 8%, var(--panel));
+    }
+    .ask.actor-codex-lead { --asked: var(--codex-lead); }
+    .ask-title { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--asked, var(--you)); font-size: 10px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+    details.part {
+      margin-top: 10px;
+      border-top: 1px dashed color-mix(in srgb, var(--actor) 35%, var(--border));
+      padding-top: 7px;
+    }
+    details.part > summary, details.quiet > summary, details.technical > summary, details.work > summary {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      cursor: pointer;
+      list-style: none;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+    .caret { flex: none; width: 8px; color: var(--faint); font-size: 9px; transition: transform .14s ease; }
+    details[open] > summary > .caret { transform: rotate(90deg); }
+    .sum-label { flex: none; color: var(--actor, var(--muted)); font-size: 11px; font-weight: 650; }
+    .sum-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 11px; }
+    .sum-time { flex: none; margin-left: auto; padding-left: 8px; color: var(--muted); font-size: 10.5px; }
+    details.part > summary { color: var(--muted); font-size: 11px; }
+    details.part pre, details.quiet pre {
+      margin: 7px 0 0;
+      max-height: 360px;
+      overflow: auto;
+      padding: 8px 10px;
+      border-radius: var(--r-chip);
+      background: var(--bg);
+      color: var(--muted);
+      font: 11px/1.5 Consolas, Menlo, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    details.quiet {
+      margin: 6px 0;
+      padding: 5px 12px;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--r-btn);
+      background: transparent;
+    }
+    details.quiet[open] { background: var(--panel-2); }
+    .quiet-step { margin-top: 8px; }
+    .quiet-step-head { display: flex; gap: 8px; color: var(--muted); font-size: 10px; }
+    .quiet-step-head b { color: var(--fg); font-weight: 600; }
+    /* work rows keep their indent under the message (no rail) so the inner boxes never touch the message cards */
+    details.work {
+      margin: 2px 0 2px 9px;
+      padding: 2px 0 2px 14px;
+    }
+    details.work > summary { padding: 4px 13px 4px 0; }
+    .work-list .event > summary { padding-right: 12px; }
+    .work-list { display: grid; gap: 4px; padding: 3px 0 6px; }
+    /* markers: thin centered rules (turn events, run markers); .warn for a run that needs attention */
+    .marker { display: flex; align-items: center; gap: 10px; margin: 10px 0; color: var(--muted); font-size: 10.5px; }
+    .marker::before, .marker::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .marker.done { color: var(--green); }
+    .marker.err { color: var(--red); }
+    .marker.warn { color: var(--amber); }
+    .working { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; padding: 6px 0; color: var(--blue); font-size: 11px; min-width: 0; }
+    .working-label { flex: none; }
+    .working-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+    .working::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: breathe 1.6s ease-in-out infinite; }
+    .event-body, .msg-body {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      line-height: 1.55;
+      font-size: 13px;
+    }
+    .event-body > :first-child, .msg-body > :first-child { margin-top: 0; }
+    .event-body > :last-child, .msg-body > :last-child { margin-bottom: 0; }
+    .md-h1, .md-h2, .md-h3 { margin: 10px 0 4px; font-weight: 650; color: var(--fg); }
+    .md-h1 { font-size: 15px; }
+    .md-h2 { font-size: 14px; }
+    .md-h3 { font-size: 13px; }
+    .md-p { margin: 6px 0; }
+    .md-list { margin: 6px 0; padding-left: 20px; }
+    .md-list li { margin: 2px 0; }
+    .md-quote { margin: 6px 0; padding: 2px 10px; border-left: 2px solid var(--border); color: var(--muted); }
+    .md-code { margin: 8px 0; border: 1px solid var(--border); border-radius: var(--r-btn); overflow: hidden; background: var(--bg); }
+    .md-code-lang { padding: 4px 10px; color: var(--muted); font: 10px/1.4 Consolas, Menlo, monospace; border-bottom: 1px solid var(--border); }
+    .md-code pre { margin: 0; padding: 10px; color: var(--fg); font: 11px/1.55 Consolas, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* inline code: the reference chip (#313747 fill, violet text) */
+    .event-body code, .msg-body code, .md-quote code { font: 11px Consolas, Menlo, monospace; background: var(--panel-3); color: var(--tree-text); padding: 1px 5px; border-radius: 4px; }
+    .thinkgroup-step { padding: 8px 10px; border-top: 1px solid var(--border); }
+    .thinkgroup-step:first-of-type { border-top: none; }
+    .thinkgroup-step-time { color: var(--faint); font-size: 10px; margin-bottom: 3px; }
+    .thinkgroup-step .event-body { color: var(--muted); font-size: 12px; }
+    details.technical {
+      border: 1px solid var(--border-soft);
+      border-radius: var(--r-chip);
+      background: var(--panel-2);
+      overflow: hidden;
+    }
+    details.technical[open] { border-color: var(--border); }
+    details.technical > summary { padding: 5px 9px; }
+    details.technical > summary:hover, details.quiet > summary:hover .sum-text, details.work > summary:hover .sum-text { color: var(--fg); }
+    .step-kind { flex: none; min-width: 62px; color: color-mix(in srgb, var(--actor, var(--codex)) 80%, var(--muted)); font-size: 10px; font-weight: 600; }
+    .step-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font: 11px Consolas, Menlo, monospace; }
+    details.technical pre {
+      margin: 0;
+      border-top: 1px solid var(--border);
+      padding: 10px;
+      color: var(--fg);
+      font: 11px/1.55 Consolas, Menlo, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .feed-empty { color: var(--muted); text-align: center; padding: 70px 25px; }
+    .feed-empty strong { display: block; color: var(--fg); font-size: 15px; margin-bottom: 7px; }
+    .load-earlier {
+      width: 100%;
+      margin: 0 0 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
+      padding: 7px 10px;
+      background: var(--panel);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .load-earlier:hover { background: var(--hover); color: var(--fg); }

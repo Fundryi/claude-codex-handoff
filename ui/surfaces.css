@@ -1,0 +1,576 @@
+    #home-view { padding: 6px 4px 30px; } /* 6: the first row's top lands 2 past a multiple of 4, its mark on one */
+    .home-heading, .ov-heading { color: var(--faint); font-size: 10px; line-height: 16px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; margin: 6px 0 8px; display: flex; align-items: center; gap: 8px; } /* a whole-pixel caption keeps the rows under it on whole pixels */
+    .home-heading .n, .ov-heading .n { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+    .ov-column { min-width: 0; container-type: inline-size; }
+    .ov-section { margin: 20px 0 0; } /* 20 + the caption's 20: sections keep the 4 px grid */
+    .ov-section > .home-heading { margin: 0 0 4px; padding: 0 10px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .08em; }
+    .ov-row { display: grid; grid-template-columns: 16px minmax(220px, 1.2fr) 150px minmax(160px, 1fr) 96px 54px; gap: 0 12px; align-items: center; width: 100%; height: 36px; padding: 0 10px 0 12px; border: 0; box-shadow: inset 0 -1px 0 var(--border-soft); border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; cursor: pointer; min-width: 0; transition: background-color .14s ease; }
+    .ov-row:hover { background: var(--hover); box-shadow: none; }
+    .ov-row:last-child { box-shadow: none; }
+    .ov-title, .ov-project, .ov-now { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+    .ov-title { font-size: 13px; font-weight: 550; }
+    .ov-project, .ov-now { color: var(--muted); font-size: 12px; }
+    .ov-now.ov-answer { color: var(--amber); }
+    .ov-row .state-word { text-align: right; white-space: nowrap; }
+    .ov-age { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
+    .ov-row.child { height: 28px; box-shadow: none; }
+    .ov-row.child > .mark, .ov-row.child > .ov-project { visibility: hidden; }
+    .ov-row.child .ov-title { display: flex; align-items: flex-start; column-gap: 6px; height: 28px; padding: 6px 0 0 min(var(--ov-indent, 28px), max(0px, calc(100% - 24px))); line-height: 14px; position: relative; /* a flex row: the 12 px mark sits exactly 6 px down (a whole-pixel position); the text line beside it */ color: var(--muted); font-weight: 450; }
+    .ov-row.child .ov-title::before { content: ''; position: absolute; left: calc(min(var(--ov-indent, 28px), max(0px, calc(100% - 24px))) - 16px); top: -2px; /* the arm's foot meets the inline mark's centre, 12 px down */ width: 8px; height: 14px; border-left: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); border-radius: 0 0 0 4px; }
+    .ov-row.child .ov-title .mark { width: 12px; height: 12px; } /* 12 px: a multiple of 4, whole device pixels at every DPR */
+    .ov-row.child .ov-title .ov-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .ov-row.child .ov-title .mark svg { width: 8px; height: 8px; } /* 2 px in */
+    .ov-row.fin .ov-title { color: var(--muted); font-weight: 450; }
+    .ov-finished { margin-top: 20px; border-top: 1px solid var(--border-soft); padding: 9px 10px 10px; line-height: 16px; color: var(--muted); font-size: 12px; } /* 56 px with its border */
+    .ov-show, .activity-live { padding: 0; border: 0; border-radius: var(--r-chip); background: transparent; color: var(--tree-text); font: inherit; cursor: pointer; }
+    .ov-show:hover, .activity-live:hover { color: var(--fg); }
+    @media (min-width: 2200px) { #home-view { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; } }
+    /* the left column's width rounds down to a multiple of 4 px, so the right column starts on the pixel grid at any pane width */
+    @media (min-width: 2200px) { #home-view { grid-template-columns: round(down, calc((100% - 32px) / 2), 4px) minmax(0, 1fr); } }
+    @container (max-width: 885px) { .ov-row { grid-template-columns: 16px minmax(0, 1.2fr) 120px minmax(0, 1fr) 96px 54px; } }
+    @container (max-width: 640px) { .ov-row { grid-template-columns: 16px minmax(0, 1.2fr) minmax(0, 1fr) 96px 44px; gap: 0 6px; } .ov-row > .ov-project { display: none; } }
+    @container (max-width: 440px) { .ov-row { grid-template-columns: 16px minmax(0, 1fr) 80px 36px; } .ov-row > .ov-now { display: none; } .ov-row .state-word { font-size: 10px; } }
+    body.activity-open #panel { width: 320px; }
+    body.activity-open #panel-head { padding: 12px 14px; border-bottom: 0; line-height: 16px; } /* 60 px: with the pane border the list starts on the 4 px grid */
+    body.activity-open #panel-body { padding: 4px 8px 12px; }
+    .activity-count { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .activity-list .ov-section { margin-top: 12px; }
+    .activity-list .home-heading { padding: 0 8px; }
+    .activity-list .ov-row { grid-template-columns: 16px minmax(0, 1fr) 46px; height: 32px; padding: 0 8px; }
+    .activity-list .ov-row.child { height: 28px; }
+    .activity-list .ov-row.child .ov-title { padding-top: 8px; } /* rows start on the grid here, so the mark sits at y +8 */
+    .activity-list .ov-row.child .ov-title::before { top: 0; }
+    .activity-list .ov-title { font-size: 12.5px; font-weight: 500; }
+    .activity-list .ov-row.selected { background: var(--selected); }
+    .activity-list .ov-row.selected .ov-age, .activity-list .ov-row.selected .ov-title { color: var(--fg); }
+    .activity-foot { margin-top: 14px; padding: 6px 8px; color: var(--muted); font-size: 11.5px; line-height: 1.7; }
+    /* secondary button (reference "New worktree"): panel fill, thin border, rounded, muted text */
+    .empty-action { display: inline-flex; align-items: center; justify-content: center; height: 32px; margin-top: 10px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--r-btn); background: var(--panel-2); color: var(--muted); font-size: 12px; cursor: pointer; transition: color .14s ease, background-color .14s ease; }
+    .empty-action:hover { background: var(--hover); color: var(--fg); }
+    .empty-list .empty-action { display: inline-flex; margin-top: 12px; }
+    .history-caption {
+      padding: 10px 12px 4px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .search-count { padding: 6px 12px 2px; color: var(--muted); font-size: 11px; }
+    .unread { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; flex: none; }
+
+    /* ---- status pills and state dots (tinted chips: pastel text on a dark fill of the same hue, thin border) ---- */
+    .status {
+      display: inline-flex;
+      align-items: center;
+      border-radius: var(--r-chip);
+      padding: 0 7px;
+      height: 18px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      gap: 5px;
+      border: 1px solid transparent;
+      transition: color .15s ease, background-color .15s ease;
+    }
+    .status.LIVE { background: #172a45; color: var(--blue); border-color: #274a7d; }
+    .status.LIVE::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); animation: breathe 1.6s ease-in-out infinite; }
+    .status.DONE { background: #152929; color: var(--green); border-color: #1e5a44; }
+    .status.IDLE { background: #252a3a; color: var(--muted); border-color: var(--border-strong); }
+    .status.STALE { background: #3a2618; color: var(--amber); border-color: #6b4522; }
+    .status.NEEDS_ANSWER { background: transparent; color: var(--amber); border-color: var(--amber); }
+    .status.STOPPED { background: #252a3a; color: var(--muted); border-color: var(--border-strong); }
+    .status.ARCHIVED { background: #252a3a; color: var(--muted); border-color: var(--border-strong); }
+    .status.FAST { background: transparent; color: var(--muted); border-color: var(--border-strong); }
+    .status.BG { background: var(--panel-3); color: var(--muted); border-color: var(--border-strong); font-weight: 600; }
+    /* state dot: a 10 px box, one color per state. Survives only on the roll-up line and the kind counts; rows carry the state on the kind mark. */
+    .sdot { width: 10px; height: 10px; display: inline-grid; place-items: center; flex: none; }
+    .sdot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--s, var(--gray)); }
+    .sdot.LIVE, .sdot.running { --s: var(--blue); }
+    .sdot.DONE, .sdot.done { --s: var(--green); }
+    .sdot.IDLE { --s: var(--gray); }
+    .sdot.BG { --s: var(--blue); }
+    .state-word.BG { color: var(--blue); }
+    .sdot.STALE, .sdot.failed { --s: var(--amber); }
+    .sdot.NEEDS_ANSWER::before { background: transparent; border: 1.5px solid var(--amber); }
+    .sdot.STOPPED { --s: var(--gray); }
+    .sdot.ENDED, .sdot.ended { --s: #4b5265; }
+    .rollup { display: inline-flex; align-items: center; gap: 4px; }
+    .rollup i { font-style: normal; color: var(--fg); }
+    .state-word { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+    .state-word.LIVE { color: var(--blue); } .state-word.DONE { color: var(--green); } .state-word.STALE, .state-word.NEEDS_ANSWER { color: var(--amber); } .state-word.STOPPED, .state-word.IDLE, .state-word.ENDED { color: var(--muted); }
+    /* green confirmation row */
+    .done-row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border: 1px solid #134b3e; border-radius: var(--r-btn); background: #152929; color: #6ee7b7; font-size: 11px; margin: 10px 0; }
+    .done-row .msg-time { color: #6ee7b7; opacity: .8; }
+    /* usage bits */
+    .meter { display: inline-block; width: 44px; height: 5px; border-radius: 3px; background: var(--meter-track); vertical-align: middle; position: relative; overflow: hidden; }
+    .meter i { position: absolute; left: 0; top: 0; bottom: 0; width: var(--p); background: var(--meter-fill); border-radius: 3px; }
+    .meter.warn i { background: var(--amber); }
+    .meter.crit i { background: var(--red); }
+    /* sidebar plans block (Claude and Codex plan limits), under the tree. The block is one grid and every
+       plan row is a column subgrid of it, so the name, meter, value and reset columns line up on every row
+       of both sources. Column 1 is the indent under the source icon (16 px icon + 6 px gap = 14 px + the gap). */
+    #plans { display: grid; grid-template-columns: 14px fit-content(76px) minmax(32px, 1fr) var(--pl-val-w) auto; column-gap: 8px; align-items: center; --pl-val-w: 58px; border-top: 1px solid var(--border); padding: 6px 12px 8px; font-size: 10.5px; color: var(--muted); background: var(--panel-2); flex: none; }
+    .plans-head { grid-column: 1 / -1; display: flex; align-items: center; height: 22px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .plan-src { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; min-height: 22px; }
+    .plan-src + .plan-src, .plan-row + .plan-src { margin-top: 4px; }
+    .plan-src .pl-ic { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; }
+    .plan-src .pl-ic svg { width: 11px; height: 11px; }
+    .plan-src.claude .pl-ic { color: var(--claude); }
+    .plan-src.codex .pl-ic { color: var(--codex); }
+    .plan-src .pl-src { flex: 1 0 auto; color: var(--fg); font-weight: 600; white-space: nowrap; } /* never cut: the note wraps instead */
+    .plan-src .pl-resets { flex: none; height: 18px; line-height: 16px; padding: 0 7px; border: 1px solid var(--border-strong); border-radius: var(--r-chip); background: var(--panel-3); color: var(--muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
+    .plan-src .pl-note { flex: 0 1 auto; text-align: right; line-height: 14px; }
+    .plan-src .pl-note.stale { color: var(--amber); }
+    .plan-src .pl-note.crit { color: var(--red); }
+    .plan-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; min-height: 20px; }
+    .plan-row .pl-name { grid-column: 2; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plan-row .meter { grid-column: 3; display: block; width: auto; }
+    .plan-row .pl-val { grid-column: 4; text-align: right; white-space: nowrap; }
+    .plan-row .pl-val b { color: var(--fg); font-weight: 600; }
+    .plan-row .pl-val .u { color: var(--muted); }
+    .plan-row.warn .pl-val b { color: var(--amber); }
+    .plan-row.crit .pl-val b { color: var(--red); }
+    .plan-row .pl-reset { grid-column: 5; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* narrow sidebar (under 330 px): a plan row drops its reset column and writes the reset time on a
+       second line under the meter. No toggle, nothing hidden. (After the base rules: same specificity.) */
+    @container (max-width: 329px) {
+      #plans { grid-template-columns: 14px fit-content(76px) minmax(32px, 1fr) var(--pl-val-w); }
+      .plan-row { padding-bottom: 3px; }
+      .plan-row .pl-reset { grid-column: 2 / -1; font-size: 10px; line-height: 12px; }
+    }
+
+    /* The header's Handoff kind word, the same rule as the tree's: the worker's teal, the clay starter glyph (prepended by the
+       startup code: Claude started it, Codex does the work), no pill, so it never reads as a status. */
+    .status.HANDOFF { background: transparent; color: var(--codex); padding: 0 1px; gap: 4px; }
+    .status.HANDOFF svg { width: 11px; height: 11px; color: var(--claude); }
+    /* The header's Workflow kind word: Claude's clay, the flow glyph (prepended by the startup code), no pill, like the
+       tree's kind label, so it never reads as a status and never as Codex work. */
+    .status.CLAUDE_WF { background: transparent; color: var(--claude); padding: 0 1px; gap: 4px; }
+    .status.CLAUDE_WF svg, .tab-button svg { width: 11px; height: 11px; vertical-align: -1px; color: var(--claude); flex: none; }
+    /* the unified header counter: one button, three counts (running · need you · need attention), filled by the logic */
+    #counter { height: 32px; border: 1px solid var(--border); border-radius: var(--r-btn); background: transparent; padding: 0 10px; display: inline-flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+    #counter:hover { background: var(--hover); }
+    #counter span { display: inline-flex; align-items: center; gap: 5px; }
+    body.claude-tab .codex-only, body:not(.claude-tab) .claude-only { display: none !important; }
+    body.chat-page .codex-only, body:not(.chat-page) .chat-only { display: none !important; }
+    /* Live overview: the legend row carries a one-line note instead of the actor legend */
+    body.overview-page #feed-toolbar { display: none !important; }
+    /* Main body: the feed (a chat or a Codex task), or the workflow run view (#claude-overview, body.claude-tab)
+       in the main pane; the side panel (#panel) on the right. The run view keeps the same content column as the feed. */
+    #main-body { flex: 1; min-height: 0; display: flex; position: relative; overflow: hidden; container-type: inline-size; }
+    #main-body > #feed-wrap { flex: 1 1 60%; min-width: 0; }
+    #claude-overview { flex: 1 1 40%; min-width: 280px; overflow: auto; padding: 12px 16px 40px; background: var(--panel); }
+    .claude-view { max-width: var(--content-max); margin: 0 auto; width: 100%; min-width: 0; }
+    body.claude-tab #feed-wrap { display: none; }
+    /* run view: summary box, progress bar, phase headings, agent rows */
+    .claude-summary { margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--panel-2); font-size: 12px; }
+    .claude-summary-line { display: flex; flex-wrap: wrap; gap: 3px 12px; color: var(--muted); font-size: 11px; }
+    .claude-summary-line b { color: var(--fg); font-weight: 650; }
+    /* Progress: the violet-to-sky fill for done, failed amber (a status color), the rest of the started agents on the track. */
+    .claude-bar { display: flex; height: 4px; margin-top: 8px; border-radius: 2px; background: var(--meter-track); overflow: hidden; }
+    .claude-bar span { display: block; height: 100%; }
+    .claude-bar .bar-done { background: linear-gradient(90deg, #a855f7, #38bdf8); }
+    .claude-bar .bar-failed { background: var(--amber); }
+    /* phase caption: a plain caption like .ov-heading, no stripe */
+    .claude-phase { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; height: 16px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .claude-phase .phase-count { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+    .claude-phase .claude-bar { flex: 1; max-width: 120px; margin: 0 0 0 auto; height: 3px; }
+    /* agent row: kind mark (ring, carries the state), label (and tool while running), tail (last write, state word). The open row is selected; a running row has a faint blue tint. */
+    .agent-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; width: 100%; height: 32px; padding: 0 8px 0 16px; border: 0; border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; font-size: 12px; cursor: pointer; transition: background-color .14s ease; }
+    .agent-row:hover { background: var(--hover); }
+    .agent-row.open { background: var(--selected); }
+    .agent-row.running, .agent-row.live { background: color-mix(in srgb, var(--blue) 6%, transparent); }
+    .agent-row.running.open, .agent-row.live.open { background: var(--selected); }
+    .agent-row .lab { font-weight: 600; display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .agent-row .lab .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .agent-row .tool { color: var(--muted); font-size: 11px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .agent-row .tail { color: var(--muted); font-size: 10.5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+    .agent-row.child { grid-template-columns: 16px minmax(0, 1fr) auto; padding-left: 36px; position: relative; }
+    .agent-row.child .rl { left: 19px; }
+    /* topic row in the run view: one line that opens or closes its agents. Chevron, title, steps, state word, tokens, time. */
+    .topic-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) fit-content(40%) auto auto auto; column-gap: 8px; align-items: center; width: 100%; height: 28px; margin-top: 4px; padding: 0 8px 0 12px; border: 0; border-radius: var(--r-chip); background: transparent; color: var(--fg); text-align: left; font-size: 12px; cursor: pointer; transition: background-color .14s ease; }
+    .topic-row:hover { background: var(--hover); }
+    .topic-row .chev { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--muted); transition: transform .14s ease; }
+    .topic-row .chev svg { width: 10px; height: 10px; }
+    .topic-row[aria-expanded="true"] .chev { transform: rotate(90deg); }
+    .topic-row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .topic-row.done .t { font-weight: 500; color: var(--muted); }
+    .topic-row:hover .t { color: var(--fg); }
+    .topic-row .wf-steps { font-size: 11px; }
+    .topic-row .use, .topic-row .when { color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+    .topic-row .when { min-width: 52px; text-align: right; }
+    .topic-note { margin: 4px 0 4px 36px; color: var(--faint); font-size: 10.5px; }
+    .claude-note { margin: 18px 0 0; color: var(--faint); font-size: 11px; }
+    .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
+    /* The side panel holds an open Claude agent or the wide-screen Activity rail. */
+    /* the third card: beside the main pane, after a gutter */
+    #panel { width: var(--panel-w); flex: none; margin-left: var(--gutter); display: none; flex-direction: column; background: var(--panel); }
+    body.panel-open #panel { display: flex; }
+    /* with the side panel open the main pane takes a width that is a multiple of 4 px and the panel the rest, so the panel's
+       left edge (and so every Activity row) stays on the pixel grid at any window width; the fraction ends on the panel's right */
+    @media (min-width: 761px) {
+      body.panel-open #main { flex: none; width: round(down, calc(var(--main-w) - var(--gutter) - var(--panel-w)), 4px); }
+      body.panel-open.activity-open #main { width: round(down, calc(var(--main-w) - var(--gutter) - 320px), 4px); }
+      body.panel-open #panel { flex: 1 1 auto; width: auto; min-width: 0; }
+    }
+    #panel-head { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; gap: 8px; align-items: flex-start; }
+    /* head line: pill, kind word, flag, then the title. The title shares the line while it fits, else it takes the next line whole. */
+    #panel-head .row-top { flex-wrap: wrap; height: auto; min-height: 18px; row-gap: 2px; }
+    #panel-head .t { font-weight: 650; font-size: 13px; flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #panel-head .m { color: var(--muted); font-size: 11px; line-height: 16px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+    #panel-head .m > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #panel-close { margin-left: auto; }
+    #panel-body { flex: 1; overflow: auto; padding: 12px; }
+    #back { display: none; }
+
+    /* the splitter is the gutter between the sidebar card and the main card; it shows itself only under the pointer */
+    #splitter {
+      width: var(--gutter);
+      flex: none;
+      cursor: col-resize;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      touch-action: none;
+      border-radius: 3px;
+      transition: background-color .14s ease;
+    }
+    #splitter:hover, #splitter.dragging { background: var(--accent-fill); }
+    body.side-collapsed #splitter { display: none; }
+    body.side-collapsed { --main-w: calc(100vw - 2 * var(--gutter)); } /* no sidebar: the main pane is the viewport */
+
+    #main { min-width: 0; flex: 1; display: flex; flex-direction: column; background: var(--panel); }
+    /* One content column: header, toolbar, result card and feed share it, at most --content-max wide, centered in the pane.
+       The side panel is a card of its own beside the pane, so the column centers in what is left on its own. */
+    .inner, #feed-inner, .result-card-box { max-width: var(--content-max); margin: 0 auto; width: 100%; min-width: 0; }
+    body.overview-page .inner, body.overview-page #feed-inner { max-width: 2080px; }
+    /* centring on the pixel grid: the left margin rounds down to a multiple of 4 px (browsers without round() keep the plain auto margin) */
+    .claude-view, .inner, #feed-inner, .result-card-box { margin-left: round(down, calc((100% - min(100%, var(--content-max))) / 2), 4px); margin-right: 0; }
+    body.overview-page .inner, body.overview-page #feed-inner { margin-left: round(down, calc((100% - min(100%, 2080px)) / 2), 4px); }
+    #task-header {
+      padding: 10px 16px 9px; /* 10 + rows of 4 + 9 + the 1 px line: the pane body starts on the 4 px grid */
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex: none;
+    }
+    #task-header .inner { position: relative; } /* the ... menu anchors to the column's right edge, never the pane's */
+    #header-top { display: flex; align-items: flex-start; gap: 10px; min-width: 0; line-height: 16px; }
+    #show-side { display: none; flex: none; }
+    #side-backdrop { display: none; } /* the mobile drawer's backdrop; shown only in the 760px media query */
+    body.side-collapsed #show-side { display: inline-grid; }
+    #task-copy, .hd-main { flex: 1; min-width: 0; }
+    /* breadcrumb above the title: ancestors with their kind marks; hidden while empty */
+    #crumbs { display: flex; align-items: center; gap: 6px; line-height: 16px; font-size: 11px; color: var(--muted); margin: 4px 0 0; flex-wrap: wrap; min-height: 0; } /* 4 + 16: the 12 px crumb mark lands on the 4 px grid */
+    #crumbs:empty { display: none; }
+    #crumbs a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+    #crumbs a:hover { color: var(--fg); text-decoration: underline; }
+    #crumbs .sep { color: var(--faint); }
+    #crumbs .mark { width: 12px; height: 12px; } #crumbs .mark svg { width: 8px; height: 8px; } /* 12 px: whole device pixels at every DPR */
+    #task-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; min-height: 32px; }
+    #task-title {
+      font-weight: 650;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #task-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+    #task-meta:empty { display: none; }
+    /* meta line as items (.mi inside .mi-wrap): items never split (nowrap). The separator is drawn in each item's left gap
+       and clipped away for the first item of every line, so none dangles. The old .meta-item flex items keep working beside it. */
+    .mi-wrap { display: flex; flex-wrap: wrap; margin-left: -13px; row-gap: 1px; min-width: 0; overflow: hidden; }
+    .mi { position: relative; margin-left: 13px; white-space: nowrap; line-height: 18px; }
+    .mi::before { content: '|'; position: absolute; left: -9px; top: 0; color: var(--faint); }
+    .mi.who { white-space: normal; }   /* the sentence may wrap inside itself */
+    #task-meta .who b { color: var(--claude); font-weight: 600; }
+    #task-meta .who.you b { color: var(--you); }
+    #task-meta .who.codex b { color: var(--codex); }
+    #task-meta a { color: var(--fg); text-decoration: none; border-bottom: 1px dotted var(--faint); cursor: pointer; }
+    /* Project, model, effort (and from): neutral chips under the title. The accent (icon, project border) is the
+       actor color of whose task it is: Codex teal, Claude clay. Never a status color. */
+    #task-facts { --fact-accent: var(--codex); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; min-width: 0; }
+    #task-facts.claude { --fact-accent: var(--claude); }
+    #task-facts.opencode { --fact-accent: var(--opencode); }
+    #task-facts + #task-meta { margin-top: 8px; }
+    .fact { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--r-chip); background: transparent; color: var(--fg); font-size: 11px; white-space: nowrap; }
+    .fact .fact-key, .fact .dim { color: var(--muted); font-weight: 400; white-space: nowrap; }
+    .fact .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .fact-project { font-weight: 600; }
+    .fact-project.other { border-style: dashed; } /* a child that runs in another project (--cwd) */
+    .fact-project b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+    .fact-project svg { flex: none; width: 13px; height: 13px; color: var(--fact-accent); }
+    .row-project { color: var(--fg); font-weight: 600; }
+    /* usage strip under the meta line: one cell per fact; .lower = a lower bound (≥), .unk = unknown */
+    #usage { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    #usage:empty { display: none; }
+    /* usage cells: quiet bordered items like the reference toolbar chips (no fill) */
+    .ucell { display: inline-flex; align-items: center; gap: 6px; height: 24px; border: 1px solid var(--border); border-radius: var(--r-chip); padding: 0 8px; font-size: 11px; background: transparent; color: var(--muted); white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; }
+    .ucell b { color: var(--fg); font-weight: 600; }
+    .ucell .lab { text-transform: uppercase; font-size: 10px; letter-spacing: .05em; color: var(--faint); font-weight: 700; }
+    .ucell .sc { color: var(--claude); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+    .ucell .so { color: var(--opencode); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+    .ucell .sp { color: var(--codex); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+    .ucell .g { width: 12px; height: 12px; } .ucell .g svg { width: 10px; height: 10px; }
+    .ucell.lower b::before { content: '\2265\00a0'; color: var(--muted); font-weight: 400; }
+    .ucell .unk { color: var(--faint); }
+    .agent-tag { flex: none; border: 1px solid var(--claude); border-radius: 4px; padding: 0 4px; color: var(--claude); font-size: 10px; font-weight: 600; line-height: 15px; white-space: nowrap; }
+    .meta-item { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meta-button {
+      border: 0;
+      padding: 0;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 11px;
+      text-align: left; /* a <button>: it must not center its text when it wraps on a phone */
+    }
+    .meta-button:hover { color: var(--fg); }
+    #wait-reason {
+      flex-basis: 100%;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 11px;
+      color: var(--yellow);
+    }
+    #wait-reason.STALE { color: var(--amber); }
+    #header-actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+    #auto-open-toggle {
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
+      background: transparent;
+      padding: 0 10px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    #auto-open-toggle:hover { color: var(--fg); background: var(--hover); }
+    /* On rests on the card tone with a quiet border; the hover tone stays for the pointer only */
+    #auto-open-toggle.on { color: var(--fg); background: var(--panel-2); border-color: var(--border-strong); }
+    #action-menu {
+      position: absolute;
+      right: 0;
+      top: 40px;
+      width: 210px;
+      max-height: calc(100vh - 70px);
+      overflow-y: auto;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-panel);
+      background: var(--panel-2);
+      box-shadow: 0 12px 30px #0008;
+      z-index: 5;
+    }
+    #context-menu {
+      position: fixed;
+      width: 210px;
+      max-height: calc(100vh - 16px);
+      overflow-y: auto;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-panel);
+      background: var(--panel-2);
+      box-shadow: 0 12px 30px #0008;
+      z-index: 30;
+    }
+    #action-menu button, #context-menu button {
+      width: 100%;
+      border: 0;
+      border-radius: var(--r-chip);
+      padding: 8px 9px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #action-menu button:hover, #context-menu button:hover { background: var(--hover); }
+    #action-menu button.danger, #context-menu button.danger { color: var(--red); }
+    .menu-group {
+      padding: 7px 9px 3px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .menu-group:first-child { padding-top: 3px; }
+    #job-modal-runs-field { margin-bottom: 10px; }
+    #process-panel {
+      margin-top: 9px;
+      padding-top: 9px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .process { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; overflow-wrap: anywhere; }
+    /* danger: the Failed red mixed into the panel, never a new color */
+    .kill-button {
+      border: 0;
+      border-radius: var(--r-chip);
+      padding: 3px 7px;
+      background: color-mix(in srgb, var(--red) 28%, var(--panel));
+      color: var(--red);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+      flex: none;
+    }
+    #stop-modal, #job-modal, #control-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: #000a;
+      display: grid;
+      place-items: center;
+    }
+    #stop-modal-box, #job-modal-box, #control-modal-box {
+      width: min(92vw, 560px);
+      max-height: 84vh;
+      overflow-y: auto;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-panel);
+      padding: 16px;
+      box-shadow: 0 18px 50px #000c;
+    }
+    #stop-modal-box h2, #job-modal-box h2, #control-modal-box h2 { margin: 0 0 12px; font-size: 14px; }
+    .stop-modal-row { display: flex; gap: 10px; margin-bottom: 6px; font-size: 12px; }
+    .stop-modal-label { color: var(--muted); flex: none; width: 70px; }
+    .stop-modal-value { min-width: 0; overflow-wrap: anywhere; }
+    .stop-modal-warning {
+      border-radius: var(--r-btn);
+      padding: 8px 10px;
+      margin-top: 10px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .stop-modal-warning.red { background: color-mix(in srgb, var(--red) 14%, var(--panel)); color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 40%, var(--panel)); }
+    .stop-modal-warning.yellow { background: #42331b; color: var(--yellow); border: 1px solid #6b5222; }
+    .stop-modal-warning.ok { background: #152929; color: var(--green); border: 1px solid #1e5a44; }
+    #stop-modal-actions, #job-modal-actions, #control-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    #stop-modal-actions button, #job-modal-actions button, #control-modal-actions button {
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-btn);
+      padding: 7px 12px;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #stop-modal-actions button:hover, #job-modal-actions button:hover, #control-modal-actions button:hover { background: var(--hover); }
+    #stop-modal-confirm { background: color-mix(in srgb, var(--red) 28%, var(--panel)); border-color: color-mix(in srgb, var(--red) 45%, var(--panel)); color: var(--red); font-weight: 700; }
+    #stop-modal-confirm:disabled { opacity: .6; cursor: default; }
+    #job-modal-box { width: min(92vw, 760px); }
+    #job-modal-result {
+      max-height: 55vh;
+      overflow: auto;
+      margin: 12px 0 0;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
+      background: var(--bg);
+      color: var(--fg);
+      font-size: 13px;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+    #job-modal-result > :first-child { margin-top: 0; }
+    #job-modal-result > :last-child { margin-bottom: 0; }
+    #control-modal-box { width: min(92vw, 640px); }
+    #control-modal-body { display: grid; gap: 11px; }
+    .control-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+    .control-field input:not([type="checkbox"]), .control-field select, .control-field textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
+      padding: 7px 9px;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    .control-field textarea { min-height: 90px; resize: vertical; }
+    .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .control-checkbox { display: flex; align-items: center; gap: 7px; color: var(--fg); font-size: 12px; }
+    #control-modal-error { min-height: 18px; margin-top: 10px; color: var(--red); font-size: 12px; white-space: pre-wrap; }
+    #control-modal-confirm { background: var(--accent-fill); border-color: var(--accent); color: var(--fg); font-weight: 700; }
+    #control-modal-confirm.danger { background: color-mix(in srgb, var(--red) 28%, var(--panel)); border-color: color-mix(in srgb, var(--red) 45%, var(--panel)); color: var(--red); }
+    #control-modal-confirm:disabled { opacity: .6; cursor: default; }
+
+    #feed-toolbar {
+      min-height: 35px; /* 35 + the 1 px line = 36: the pane body below stays on the 4 px grid */
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      flex: none;
+    }
+    #feed-toolbar .inner { display: flex; align-items: center; gap: 5px; min-height: 35px; }
+    .toolbar-button {
+      border: 1px solid var(--border);
+      border-radius: var(--r-chip);
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .toolbar-button:hover { background: var(--hover); color: var(--fg); }
+    #legend { display: flex; align-items: center; gap: 4px 14px; min-width: 0; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .legend-title { color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .legend-item { display: inline-flex; align-items: center; gap: 5px; cursor: default; }
+    .legend-item::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--actor); flex: none; }
+    .legend-item.actor-work::before, .legend-item.actor-claude-work::before, .legend-item.actor-chat-work::before, .legend-item.actor-workflow-script::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--actor); }
+    .legend-item.actor-system::before { background: transparent; box-shadow: none; border: 1.5px dashed var(--system); width: 8px; height: 8px; }
+    .started-by { display: inline-flex; align-items: center; gap: 6px; }
+    .started-by b { color: var(--actor); font-weight: 650; }
+    #result-card { flex: none; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+    .result-card-box { border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--panel-2); }
+    .result-card-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 4px; }
+    .result-card-toggle { display: flex; align-items: center; gap: 7px; border: 0; border-radius: var(--r-chip); padding: 4px 6px; background: transparent; color: var(--fg); cursor: pointer; font-size: 12px; font-weight: 650; transition: background-color 160ms; }
+    .result-card-toggle:hover { background: var(--hover); }
+    .result-card-caret { color: var(--muted); font-size: 10px; width: 10px; }
+    .result-card-runs { color: var(--muted); font-size: 11px; font-weight: 400; }
+    .result-card-head .spacer { flex: 1; }
+    .result-card-body { max-height: 38vh; overflow: auto; padding: 2px 14px 12px; border-top: 1px solid var(--border); }
+    .result-section { margin-top: 10px; min-width: 0; }
+    .result-section-title { margin: 0 0 4px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .result-section.question { margin-top: 12px; padding: 8px 12px 10px; border: 1px solid var(--you); border-radius: var(--r-btn); background: color-mix(in srgb, var(--you) 6%, var(--panel)); }
+    .result-section.question .result-section-title { color: var(--you); }
+    .result-section-body { overflow-wrap: anywhere; word-break: break-word; line-height: 1.55; font-size: 13px; }
+    .result-section-body > :first-child { margin-top: 0; }
+    .result-section-body > :last-child { margin-bottom: 0; }
+    .result-section-body code { font: 11px Consolas, Menlo, monospace; background: var(--panel-3); color: var(--tree-text); padding: 1px 5px; border-radius: 4px; }
+    .result-card-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .answer-box { margin-top: 10px; display: grid; gap: 7px; }
+    .answer-box textarea { width: 100%; min-height: 70px; resize: vertical; border: 1px solid var(--border); border-radius: var(--r-btn); padding: 7px 9px; color: var(--fg); background: var(--bg); }
+    .answer-box-actions { display: flex; justify-content: flex-end; }
+    .answer-box-actions button { height: 32px; border: 1px solid var(--accent); border-radius: var(--r-btn); padding: 0 12px; background: var(--accent-fill); color: var(--fg); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .answer-box-actions button:disabled { opacity: .5; cursor: default; }
+    #feed-wrap { min-height: 0; flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+    #feed {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 12px 16px 56px;
+      scroll-behavior: smooth;
+      background: var(--panel);
+    }
+    /* Jump to latest: a pill floating over the bottom of the feed viewport; its <b> holds the "N new" count when there is one */
+    #feed-pill { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: center; pointer-events: none; }
+    #jump-latest {
+      pointer-events: auto;
+      height: 28px;
+      border: 1px solid var(--accent);
+      border-radius: var(--r-btn);
+      background: var(--accent-fill);
+      color: var(--fg);
+      padding: 0 12px;
+      cursor: pointer;
+      font-size: 11px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+    }
+    #jump-latest:hover { background: color-mix(in srgb, var(--accent) 20%, var(--accent-fill)); }
+    #jump-latest b { color: var(--tree-text); }
+    #jump-latest b:empty { display: none; }

@@ -1,0 +1,321 @@
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    /* Three rounded cards on the backdrop (reference): the sidebar, the main pane and the side panel, with a gutter between. */
+    body {
+      margin: 0;
+      padding: var(--gutter);
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      overflow: hidden;
+      min-width: 0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    /* The card border is a 1 px shadow outside the box, not a border: the box (and so the scroll layer inside it, which the
+       compositor snaps to device pixels) then starts at a multiple of 4 CSS px, a whole device pixel at DPR 1.25, 1.5 and 1.75. */
+    .pane { box-shadow: 0 0 0 1px var(--border); border-radius: var(--r-panel); overflow: hidden; }
+    button, input, select, textarea { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [role="separator"]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .icon-button {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+      flex: none;
+    }
+    .icon-button:hover { background: var(--hover); color: var(--fg); }
+    .mono { font-family: Consolas, Menlo, monospace; }
+    svg { flex: none; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+
+    /* The sidebar is a size container: rows drop repeated words under 300 px; plan rows go two-line under 330 px. */
+    #side {
+      container-type: inline-size;
+      width: var(--sidebar-width);
+      min-width: 240px;
+      max-width: 55vw;
+      background: var(--panel-2);
+      display: flex;
+      flex-direction: column;
+      flex: none;
+    }
+    body.side-collapsed #side { display: none; }
+    #brand {
+      min-height: 58px; /* with the controls below (98 + 24 per chip row) the list starts at a multiple of 4 px */
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    #brand-mark {
+      width: 30px;
+      height: 30px;
+      object-fit: contain;
+      flex: none;
+    }
+    #brand-copy { min-width: 0; flex: 1; }
+    #brand-title { font-size: 14px; font-weight: 650; letter-spacing: .1px; }
+    #brand-subtitle { color: var(--muted); font-size: 11px; margin-top: 1px; }
+    #resume-session-button { height: 32px; white-space: nowrap; }
+    #connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #connection-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--yellow);
+    }
+    #connection.connected #connection-dot { background: var(--green); }
+    #connection.disconnected #connection-dot { background: var(--red); }
+
+    #side-controls { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); }
+    #search {
+      width: 100%;
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
+      color: var(--fg);
+      background: var(--panel);
+      padding: 0 10px;
+      font-size: 13px;
+    }
+    #search::placeholder { color: var(--faint); }
+    [hidden] { display: none !important; }
+    /* Tabs: one fixed row, 28 px, active underline in the structure violet. Chips: one wrapping row under them. */
+    #tabs { display: flex; gap: 2px; margin-top: 8px; border-bottom: 1px solid var(--border); }
+    .tab-button {
+      flex: 1 1 auto;
+      height: 28px;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      border-radius: var(--r-chip) var(--r-chip) 0 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      /* four tabs fit a 240 px sidebar */
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 6px;
+    }
+    .tab-button:hover { color: var(--fg); background: var(--hover); }
+    .tab-button.on { color: var(--fg); border-bottom-color: var(--accent); }
+    .tab-button .count { margin-left: 0; color: var(--muted); opacity: 1; }
+    /* A narrow sidebar drops the tab counts so the tab names stay whole (the chips keep theirs). */
+    @container (max-width: 300px) { .tab-button .count { display: none; } }
+    /* The chip row is one compact line (reference "All 17 · Working 2 · Error 0 · Done 12 · Idle 3"): plain words with a
+       dot and an inline count, the active one on a small filled block. It scrolls sideways when the sidebar is narrow. */
+    #chips-wrap { position: relative; }
+    #chips { display: flex; flex-wrap: wrap; gap: 2px 0; margin-top: 6px; padding: 3px 0; } /* 24 px per chip row: the list below starts on the 4 px grid at any row count */
+    /* phone: the chip row scrolls sideways; a fade at the edge that still has more shows it (chipEdges toggles the classes) */
+    #chips-wrap::before, #chips-wrap::after { content: ''; position: absolute; top: 0; bottom: 0; width: 36px; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 1; }
+    #chips-wrap::before { left: 0; background: linear-gradient(to right, var(--panel-2), transparent); }
+    #chips-wrap::after { right: 0; background: linear-gradient(to left, var(--panel-2), transparent); }
+    #chips-wrap.more-left::before, #chips-wrap.more-right::after { opacity: 1; }
+    .chip-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 22px;
+      border: 0;
+      border-radius: var(--r-chip);
+      padding: 0 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      white-space: nowrap;
+      flex: none;
+    }
+    .chip-button.zero { opacity: .45; } /* a chip with nothing in it is dim, like the reference "Error 0" */
+    .tab-button, .chip-button, .toolbar-button {
+      transition: color .14s ease, background-color .14s ease, border-color .14s ease;
+    }
+    /* The chip dot takes the status color through --c; hollow for Needs answer. */
+    .chip-button::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--c, var(--muted));
+      flex: none;
+    }
+    .chip-button.hollow::before, .chip-button[data-chip="ANSWER"]::before { background: transparent; border: 1.5px solid var(--c); }
+    .chip-button[data-chip="ALL"], .chip-button[data-chip="EVERYTHING"], .chip-button[data-chip="RUNNING"] { --c: var(--blue); }
+    .chip-button[data-chip="RUNNING"].has-sessions::before { width: 7px; height: 7px; background: var(--blue); animation: breathe 1.6s ease-in-out infinite; }
+    .chip-button[data-chip="WAITING"] { --c: var(--yellow); }
+    .chip-button[data-chip="ATTENTION"], .chip-button[data-chip="ANSWER"] { --c: var(--amber); }
+    .chip-button[data-chip="FINISHED"] { --c: var(--green); }
+    .chip-button[data-chip="STOPPED"], .chip-button[data-chip="ARCHIVED"], .chip-button[data-chip="DISMISSED"] { --c: var(--gray); }
+    .chip-button:hover { background: var(--hover); color: var(--fg); }
+    .chip-button.on { background: var(--panel-3); color: var(--fg); opacity: 1; }
+    .chip-button .count { color: var(--muted); opacity: 1; margin-left: 0; }
+    .chip-button.on .count { color: var(--tree-text); }
+    /* kind chips (Claude, Codex): an SVG glyph instead of the dot; the two wrap as one unit */
+    .chip-button.kind::before { display: none; }
+    .chip-button.kind .k { display: inline-grid; place-items: center; width: 12px; height: 12px; }
+    .chip-button.kind .k svg { width: 11px; height: 11px; }
+    .chip-kinds { display: inline-flex; align-items: center; gap: 2px; flex: none; margin-left: 4px; padding-left: 6px; border-left: 1px solid var(--border); }
+    #open-elsewhere {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    #open-elsewhere-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+    #open-elsewhere-show { flex: none; border: 0; padding: 0 2px; background: transparent; color: var(--tree-text); cursor: pointer; font-size: 11px; }
+    #open-elsewhere-show:hover { text-decoration: underline; }
+    .count { opacity: .7; margin-left: auto; }
+    #list-wrap { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
+    #list { overflow-y: auto; min-height: 0; flex: 1; }
+    /* scroll edges: a fade at the top or bottom of the tree only while there is more to scroll (listEdges toggles the classes) */
+    #list-wrap::before, #list-wrap::after { content: ''; position: absolute; left: 0; right: 0; height: 40px; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 1; }
+    #list-wrap::before { top: 0; background: linear-gradient(to bottom, var(--panel-2), transparent); }
+    #list-wrap::after { bottom: 0; background: linear-gradient(to top, var(--panel-2), transparent); }
+    #list-wrap.more-above::before, #list-wrap.more-below::after { opacity: 1; }
+    /* ---- tree rows (unified view): one root row, child rows on rails, fold and cap rows, project groups ---- */
+    .group { --pc: var(--tree); --rail: color-mix(in srgb, var(--pc) 55%, transparent); background: color-mix(in srgb, var(--pc) 5%, var(--panel-2)); box-shadow: inset 0 -1px 0 var(--border); /* the separator as a shadow: a group's height stays a multiple of 4 */ }
+    .group:last-child { box-shadow: none; }
+    .group-caption { width: calc(100% - 8px); margin: 0 4px; border-radius: var(--r-chip); display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; background: transparent; border: 0; cursor: pointer; color: var(--pc, var(--tree)); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: left; }
+    .group-caption .caret { color: var(--faint); width: 10px; font-size: 9px; flex: none; }
+    .group-caption .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .group-caption .n, .group-caption .use { flex: none; }
+    .group-caption svg { width: 12px; height: 12px; }
+    .group-caption .n { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+    .group-caption .use { margin-left: auto; color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+    .group.ghost { --pc: var(--system); }
+    .rows { display: flex; flex-direction: column; } /* no margin collapsing: a fold row is always 22 + 1 + 1 = 24 px */
+    .group.closed .rows { display: none; }
+    /* narrow sidebar (under 300 px): drop the words that repeat a nearby fact */
+    @container (max-width: 299px) {
+      .row.root .src, .row-sum .rollup i, .row-sum .use { display: none; } /* the tree total stays on the group caption */
+      .row.child.fin .state-word, .row.child.fin .row-use { display: none; } /* the dimmed mark says done; the tokens stay in the tooltip */
+      .row.root .kind-label { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+    }
+    /* rows: shared bits. A row is a rounded band inset 4 px from the sidebar edges (reference: the selected row is a
+       rounded violet band; the fill alone marks selection, no bar). */
+    .row { width: calc(100% - 8px); margin: 0 4px; text-align: left; border: 0; border-radius: var(--r-chip); background: transparent; cursor: pointer; position: relative; color: var(--fg); transition: background-color .14s ease; }
+    .row:hover { background: var(--hover); }
+    .row.selected { background: var(--selected); }
+    .row-title { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    /* list titles rest in the dim text color (reference); only the selected, hovered or focused row lifts to --fg */
+    .row .row-title { color: var(--muted); }
+    .row:hover .row-title, .row.selected .row-title, .row:focus-visible .row-title { color: var(--fg); }
+    .row.selected .row-title { font-weight: 600; }
+    .row-meta { color: var(--muted); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .row-meta b { color: var(--fg); font-weight: 600; }
+    .row-meta .fl { color: var(--muted); }
+    .row-meta .fl.ask { color: var(--amber); font-weight: 600; }
+    .row-meta .fl.fast { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: .05em; }
+    .row-meta .kind-label { height: auto; font-size: 10.5px; font-weight: 600; vertical-align: top; }
+    /* whole-pixel rows: the root line-height (1.45) makes 13 px text 18.85 px tall and 10.5 px text 15.225 px, so every row and so
+       every mark sat on a fraction of a pixel and rasterized unevenly (a ring one device pixel taller than wide, a glyph off by one).
+       Explicit line-heights for the row text keep every row height whole: root 50, child 41, quiet child 20, fold 24, caption 30. */
+    #side { line-height: 15px; }
+    .row-top, .row-title { line-height: 18px; }
+    .row-sum { height: 15px; line-height: 15px; }
+    .claude-summary-line, .claude-note, .topic-note { line-height: 16px; }
+    .row-sum .flag { margin-left: 2px; }
+    .row-time { color: var(--muted); font-size: 10.5px; white-space: nowrap; text-align: right; flex: none; }
+    /* on the selected band the dim text lifts so it keeps its contrast on the violet */
+    .row.selected .row-meta, .row.selected .row-time, .row.selected .row-sum, .row.selected .row-meta .fl { color: #c9cbe0; }
+    /* root row: two lines. Line 1: kind mark (it carries the state), title, state word, time. Line 2: the kind word and the meta
+       on the left, the quiet roll-up (kind counts, tree total) on the right. */
+    .row.root { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 1px; padding: 6px 10px 6px 12px; margin-top: 0; } /* 48 px tall, mark at x 24, y +8 */
+    .row-top { display: flex; align-items: center; gap: 6px; min-width: 0; height: 20px; grid-column: 1 / -1; }
+    .row-top .row-title { flex: 1; font-size: 12.5px; }
+    .row-top .state-word { margin-left: auto; }
+    .row-top .state-word + .row-time { margin-left: 0; }
+    .row-top .row-time { margin-left: auto; }
+    .row.root .row-meta { grid-column: 1; }
+    .row.root:has(.row-sum .use) .row-meta .tok { display: none; }
+    .row-sum { grid-column: 2; display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--muted); white-space: nowrap; }
+    /* a sidebar under 400 px keeps the roll-up word and the tree total; the kind counts come back at 400 px (2K and up) */
+    @container (max-width: 399px) { .row.root .row-sum .cnt { display: none; } }
+    /* fixed cells on the roll-up line (the count 33 + gap 7 = 40, the tree total 58): the 12 px count marks land on the 4 px grid from the row's right edge */
+    .row-sum .cnt { display: inline-grid; grid-template-columns: 12px auto; align-items: center; column-gap: 3px; width: 33px; }
+    .row-sum .cnt .mark { width: 12px; height: 12px; align-self: start; margin-top: 1px; } .row-sum .cnt .mark svg { width: 8px; height: 8px; } /* 1 px down on the 15 px line: the mark's top is 28 px under the row top */
+    .row-sum .use { width: 58px; text-align: right; white-space: nowrap; }
+    .row-sum .rollup i { font-style: normal; font-weight: 600; }
+    /* child row: a grid. Columns: mark box (it carries the state), title, state word, time. Line 2 (active work only) starts under the title.
+       Level offset --lx: one formula for rows, fold rows and rails. 18 px per level to level 4, 10 px per level after that. --d = depth.
+       The row starts at --lx + 8 px so the 16 px mark is centred on --lx + 16 px: the x of the next level's rail.
+       Pixel grid: the list starts at a multiple of 4 px, every row pitch is a multiple of 4 and every mark sits 0, 4 or 8 px under its
+       row top, so every mark lands on a multiple of 4 CSS px in x and y (= whole device pixels at DPR 1, 1.25, 1.5, 1.75 and 2), also
+       when a row is scrolled to the top. Row pitches: root 48, child 40, quiet child and topic 20, fold 24, group caption 32. */
+    .row.child, .fold { --lx: calc(var(--rail-x) + var(--indent) * (min(var(--d, 1), 4) - 1) + var(--indent-deep) * max(var(--d, 1) - 4, 0)); }
+    .row.child { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto auto; grid-template-rows: 18px auto; column-gap: 5px; row-gap: 1px; align-items: center; padding: 3px 10px 3px calc(var(--lx) + 8px); } /* 40 px tall, mark at y +4 */
+    .row.child:not(.fin) { grid-template-columns: 16px minmax(0, 1fr) auto auto; }
+    .row.child .row-meta { grid-column: 2 / -1; }
+    .row.child .row-time { padding-left: 4px; }
+    .row.child .state-word { padding-left: 6px; }
+    /* finished work is small and quiet: one line, muted title, the state word and the tokens on the right */
+    .row.child.fin { grid-template-rows: 16px; padding: 0 10px 4px calc(var(--lx) + 8px); } /* 20 px pitch: a 16 px line with the mark at y +0, 4 px of air under it */
+    .row.child.fin .row-title { color: var(--muted); font-weight: 400; font-size: 11.5px; }
+    .row.child.fin .row-meta { display: none; }
+    .row.child.fin .state-word { font-weight: 400; }
+    .row.child.fin .row-use { color: var(--muted); font-size: 10px; padding-left: 6px; white-space: nowrap; }
+    .row.child.fin:hover .row-title, .row.child.fin.selected .row-title { color: var(--fg); }
+    /* topic row (a run's topic, or a phase bucket for loose agents): always one line, running or not.
+       Columns: mark, title, the steps ("Review 1/1 › Verify 24/24", right-packed so the step columns line up across rows),
+       state word, tokens, time. The steps column gives way before the title does. */
+    .row.child.topic, .row.child.topic.fin { grid-template-columns: 16px minmax(0, 1fr) fit-content(46%) auto auto auto; grid-template-rows: 16px; padding: 0 10px 4px calc(var(--lx) + 8px); }
+    .row.child.topic .row-meta { display: none; }
+    .row.child.topic .row-title { font-size: 11.5px; font-weight: 500; }
+    .row.child.topic.fin .row-title { font-weight: 400; }
+    .row.child.topic .row-use { color: var(--muted); font-size: 10px; padding-left: 6px; white-space: nowrap; }
+    .row.child.topic .rl.stem { top: 19px; }
+    .row.child.topic:hover .row-title { color: var(--fg); }
+    /* steps: one span per step, the step with running agents in the running blue, the others muted; tabular figures line the counts up */
+    .wf-steps { color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-align: right; }
+    .wf-steps .on { color: var(--blue); font-weight: 600; }
+    .wf-steps .sep { color: var(--faint); padding: 0 3px; }
+    /* a sidebar under 420 px has no room for the step words beside the title: the counts stay ("1/1 › 14/14", in the order of the
+       workflow's own phase line right above), the words live in the tooltip, and a finished topic drops its state word (the dimmed mark says done) */
+    @container (max-width: 419px) { .row.child.topic .wf-steps .n { display: none; } .row.child.topic.fin .state-word { display: none; } }
+    /* rails: full-height guides per continuing ancestor level (--l), an elbow into this row, a through line when not last */
+    .rl { position: absolute; left: calc(var(--rail-x) + var(--indent) * (min(var(--l, 1), 4) - 1) + var(--indent-deep) * max(var(--l, 1) - 4, 0)); border-left: 1px solid var(--rail); pointer-events: none; }
+    .rl.thru { top: 0; bottom: 0; }
+    .rl.elbow { top: 0; height: 13px; width: 5px; border-bottom: 1px solid var(--rail); border-radius: 0 0 0 5px; } /* the arm meets the mark's centre line (12 px down on a 40 px row) and ends at its halo edge */
+    .row.child.fin .rl.elbow, .row.child.topic .rl.elbow { height: 9px; } /* their mark's centre is 8 px down */
+    .fold .rl.elbow { height: 11px; }
+    /* stem: from under this child row's mark (mark bottom 20 px, halo 23 px; a quiet .fin row sits 2 px higher) down to its open children. Root rows draw no stem. */
+    .rl.stem { top: 23px; bottom: 0; }
+    .row.child.fin .rl.stem { top: 19px; }
+    /* fold and cap rows share the child grid */
+    /* The fold row ("+ 18 finished") is a small rounded button in the structure violet, so the hidden work is one click away. */
+    .fold { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 5px; align-items: center; height: 22px; width: calc(100% - 8px); margin: 1px 4px; text-align: left; border: 0; border-radius: var(--r-chip); background: color-mix(in srgb, var(--accent-fill) 45%, transparent); color: var(--tree-text); font-size: 10.5px; font-weight: 600; padding: 0 10px 0 calc(var(--lx) + 8px); cursor: pointer; position: relative; }
+    .fold > .txt { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fold:hover { background: var(--accent-fill); color: var(--fg); }
+    /* cap row: the server sent at most N children of this chat. The rest live in History; the row says so and is not a link. */
+    .fold.cap { background: transparent; color: var(--muted); font-weight: 400; cursor: default; height: 22px; }
+    .fold.cap:hover { color: var(--muted); }
+    .fold.cap b { color: var(--fg); font-weight: 600; }
+    .rows { padding-bottom: 4px; } /* a multiple of 4: the next group starts on the pixel grid */
+

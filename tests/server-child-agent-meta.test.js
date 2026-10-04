@@ -1,11 +1,12 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const { serverSource } = require("./helpers/source");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
+const src = serverSource();
 
 function serverContext() {
   const slice = [

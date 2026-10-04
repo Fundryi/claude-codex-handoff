@@ -1,10 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const { uiSource, serverSource } = require("./helpers/source");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const html = fs.readFileSync(path.join(__dirname, "..", "viewer-ui.html"), "utf8");
+const html = uiSource();
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const pureHelpers = script.match(/function firstLine[\s\S]*?(?=\n    function setConnection)/)[0];
 
@@ -185,7 +184,7 @@ test("a reply's question moves whole into the callout and nothing is lost or res
 });
 
 test("the UI and the server flag the same injected blocks", () => {
-  const server = fs.readFileSync(path.join(__dirname, "..", "codex-live-viewer.js"), "utf8");
+  const server = serverSource();
   const list = (src) => src.match(/INJECTED_BLOCK = (\/.*\/);/)[1];
   assert.equal(list(script), list(server));
 });

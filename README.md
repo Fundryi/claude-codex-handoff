@@ -235,14 +235,16 @@ Claude transcripts (chats, subagents and workflow agents) can hold text from eve
 <summary><b>Project layout</b></summary>
 
 - `codex-live-viewer.js`: Node server, CLI, rollout parser, control endpoints (one file, no dependencies)
-- `viewer-ui.html`: the whole frontend (one file)
+- `ui/`: markup in `index.html`, six CSS files and 19 classic scripts in `js/`. Keep the fixed load order. No ES modules, bundler or build step. See the UI file map in [AGENTS.md](AGENTS.md)
 - `plugin/`: the Claude Code plugin, forked from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (keeps OpenAI's Apache-2.0 `LICENSE` and `NOTICE`; the changes fall under the root [LICENSE](LICENSE))
 - `plugin/.codex-plugin/plugin.json`: the manifest Codex reads when the plugin is installed there. It points at `codex-hooks/hooks.json` for optional approval notices and keeps the Claude hooks out of Codex. Keep its version equal to `plugin/.claude-plugin/plugin.json`
-- `plugin/viewer/`: bundled dashboard copies, refreshed by `npm run sync:viewer`, drift-guarded by tests
+- `plugin/viewer/`: copies of the server, logo and complete `ui/` tree. Refresh with `npm run sync:viewer`. Tests check for drift
 - `handoff/`: ready-to-copy handoff contract templates
 - `scripts/upstream-diff.mjs`: diff `plugin/` against upstream for selective, manual cherry-picks
 - `tests/`: zero-dependency `node:test` suites
 - `tray-launcher/`: Rust tray app for Windows and Linux
+
+A complete viewer install needs `codex-live-viewer.js`, the sibling `ui/` tree and `assets/logo.svg`. Keep the companion files under `plugin/` for Resume and Cancel.
 
 </details>
 
