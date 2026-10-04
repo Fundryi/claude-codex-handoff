@@ -119,7 +119,7 @@
     // plus the older text patterns) are System, never speech.
     function isInternal(event) {
       if (event.internal) return true;
-      // The same list as the server's (codex-live-viewer.js simplify); a test keeps them equal.
+      // The same list as the server's (server/sessions.js simplify); a test keeps them equal.
       var INJECTED_BLOCK = /^\s*(?:<(?:environment_context|permissions|user_instructions|recommended_plugins|skills?|skills_instructions|apps|plugins|developer|multi_agent_mode|multi_agent_role|collaboration_mode|context_window[\w-]*|context_guidance|model_switch|app-context|codex-jobs|codex_internal_context|image_resize_notice|task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|ide_opened_file|ide_selection|system-reminder|turn_aborted|external_codex_apps_writing_block_edits|subagent_notification)(?=[\s>/])|# AGENTS\.md instructions\b|The following is the Codex agent history (?:added since your last approval assessment|whose request action you are assessing)\b)/;
       if (event.kind !== 'agent' && event.kind !== 'user') return false;
       var body = String(event.text || '');
@@ -235,7 +235,7 @@
       return { actor: 'you', label: 'you (' + (Object.prototype.hasOwnProperty.call(names, value) ? names[value] : value) + ')' };
     }
     // The two texts a Resume sends when no prompt is typed: the viewer's (DEFAULT_RESUME_PROMPT in
-    // codex-live-viewer.js) and the companion's (DEFAULT_CONTINUE_PROMPT in plugin/scripts/lib/codex.mjs).
+    // server/jobs.js) and the companion's (DEFAULT_CONTINUE_PROMPT in plugin/scripts/lib/codex.mjs).
     function isResumePrompt(text) {
       var value = String(text == null ? '' : text).trim();
       return value === 'Continue the previous task where it left off and finish it.' ||
@@ -269,4 +269,3 @@
         return counts[kind] + ' ' + names[kind][counts[kind] === 1 ? 0 : 1];
       }).join(' · ');
     }
-

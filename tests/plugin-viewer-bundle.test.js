@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { uiSource } = require("./helpers/source");
+const { uiSource, UI_STYLES, UI_SCRIPTS, SERVER_SOURCES } = require("./helpers/source");
 
 const rootDir = path.join(__dirname, "..");
 const bundleDir = path.join(rootDir, "plugin", "viewer");
@@ -17,10 +17,13 @@ function regularFiles(dir, relative = "") {
   }).sort();
 }
 
-const files = ["codex-live-viewer.js", "assets/logo.svg", ...regularFiles(rootDir, "ui")].sort();
+const files = ["ai-live-viewer.js", "assets/logo.svg", ...regularFiles(rootDir, "ui"), ...regularFiles(rootDir, "server")].sort();
 
 test("ui/index.html references the fixed helper asset lists in order", () => {
   uiSource();
+  const { UI_ASSET_FILES } = require("../server/http");
+  assert.deepEqual([...UI_ASSET_FILES.values()].map(([file]) => file), ["ui/index.html", "assets/logo.svg", ...UI_STYLES, ...UI_SCRIPTS]);
+  assert.deepEqual(SERVER_SOURCES.filter((file) => file.startsWith("server/")).sort(), regularFiles(rootDir, "server"));
 });
 
 test("plugin/viewer has exactly the runtime file set and no legacy viewer-ui.html", () => {

@@ -66,7 +66,7 @@ function bundlePath(relative, directory = false) {
 }
 
 // Validate the complete source inventory before changing generated files.
-const sources = ['codex-live-viewer.js', 'assets/logo.svg'];
+const sources = ['ai-live-viewer.js', 'assets/logo.svg'];
 for (const relative of sources) regularFile(path.join(root, relative));
 treeFiles(path.join(root, 'assets'));
 const uiRoot = path.join(root, 'ui');
@@ -74,15 +74,27 @@ const uiFiles = treeFiles(uiRoot);
 for (const relative of requiredUi) regularFile(path.join(uiRoot, relative));
 sources.push(...uiFiles.map(file => path.relative(root, file)));
 
+const serverRoot = path.join(root, 'server');
+const serverFiles = treeFiles(serverRoot);
+for (const name of [
+  'runtime.js', 'access.js', 'jobs.js', 'readers.js', 'events.js', 'usage.js',
+  'sessions.js', 'claude-workflows.js', 'opencode.js', 'claude-chats.js',
+  'discovery.js', 'http.js', 'os-notify.js',
+]) regularFile(path.join(serverRoot, name));
+sources.push(...serverFiles.map(file => path.relative(root, file)));
+
 const copies = sources.map(relative => [path.join(root, relative), bundlePath(relative)]);
 const uiTarget = bundlePath('ui', true);
-const previous = statIfPresent(uiTarget) ? treeFiles(uiTarget) : [];
+const serverTarget = bundlePath('server', true);
+const previous = [uiTarget, serverTarget].flatMap(target => statIfPresent(target) ? treeFiles(target) : []);
 const destinations = new Set(copies.map(([, target]) => target));
 const stale = previous.filter(file => !destinations.has(file));
-const legacy = bundlePath('viewer-ui.html');
-if (statIfPresent(legacy)) {
-  regularFile(legacy);
-  stale.push(legacy);
+for (const name of ['viewer-ui.html', 'codex-live-viewer.js']) {
+  const legacy = bundlePath(name);
+  if (statIfPresent(legacy)) {
+    regularFile(legacy);
+    stale.push(legacy);
+  }
 }
 for (const file of stale) bundlePath(path.relative(bundle, file));
 

@@ -3,23 +3,22 @@
   "version": "2.25.0",
   "private": true,
   "description": "Delegate coding tasks from Claude Code to the OpenAI Codex CLI and get the results back. Codex plugin fork with jobs that survive restarts, plus a live dashboard to watch, resume and cancel Codex runs.",
-  "main": "codex-live-viewer.js",
+  "main": "ai-live-viewer.js",
   "scripts": {
-    "start": "node codex-live-viewer.js serve",
-    "stop": "node codex-live-viewer.js stop",
+    "start": "node ai-live-viewer.js serve",
+    "stop": "node ai-live-viewer.js stop",
     "test": "node --test tests/*.test.js",
-    "sync:viewer": "node scripts/sync-viewer.js",
-    "tray": "cargo run --manifest-path tray-launcher/Cargo.toml",
-    "build:tray": "cargo build --release --locked --manifest-path tray-launcher/Cargo.toml"
+    "sync:viewer": "node scripts/sync-viewer.js"
   },
   "bin": {
-    "codex-live-viewer": "codex-live-viewer.js"
+    "ai-live-viewer": "ai-live-viewer.js"
   },
   "engines": {
     "node": ">=22.13"
   },
   "files": [
-    "codex-live-viewer.js",
+    "ai-live-viewer.js",
+    "server/",
     "ui/",
     "assets/logo.svg",
     "README.md"

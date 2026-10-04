@@ -170,26 +170,26 @@ The plugin copies the script to `~/.codex-companion/claude-statusline.mjs` at ea
 <details>
 <summary><b>Standalone dashboard</b> (no plugin needed)</summary>
 
-The dashboard runs on its own and only reads `~/.codex/sessions/`:
+The dashboard runs on its own. It reads Codex, Claude and OpenCode sessions:
 
 ```sh
-node codex-live-viewer.js start    # background + open browser (add --no-open to skip the tab)
-node codex-live-viewer.js serve    # foreground
-node codex-live-viewer.js stop
-node codex-live-viewer.js restart  # stop whatever viewer runs, start this one
-node codex-live-viewer.js status   # running or not, and its version
-node codex-live-viewer.js kill     # force-quit, also a hung viewer
+node ai-live-viewer.js start    # background + open browser (add --no-open to skip the tab)
+node ai-live-viewer.js serve    # foreground
+node ai-live-viewer.js stop
+node ai-live-viewer.js restart  # stop whatever viewer runs, start this one
+node ai-live-viewer.js status   # running or not, and its version
+node ai-live-viewer.js kill     # force-quit, also a hung viewer
 ```
 
 `start` replaces a viewer left running by an older version, so after an update it brings up the new one.
 
 **Port and address.** The viewer listens on `127.0.0.1:8377`. The port is fixed on purpose: the plugin finds the viewer by it to report finished jobs. If another program already uses 8377, the viewer does not start and says so; set `CODEX_VIEWER_PORT` to a free port where Claude and Codex run. Under WSL, `localhost:8377` on Windows reaches a viewer running inside WSL, and it shows the Codex runs from the WSL side. In a Docker container, set `CODEX_VIEWER_HOST=0.0.0.0` and publish the port to the host only, for example `-p 127.0.0.1:8377:8377`.
 
-Or grab a tray app from [Releases](../../releases): `AI-Live-Viewer-Windows-x64.zip` (double-click `AI Live Viewer.exe`) or `AI-Live-Viewer-Linux-x64.zip` (run `ai-live-viewer-tray`; needs GTK 3 + Ayatana AppIndicator). The tray supervises the server and shows completion toasts. No macOS tray; use the Node CLI or the plugin's autostart.
+The Node server shows desktop pop-ups itself on Windows, Linux with `notify-send`, and macOS. Use the Node CLI or the plugin's autostart to run it. Releases have no zip assets. The plugin installs from the marketplace.
 
 ### Integrations
 
-The viewer reads Codex rollouts and sends a turn toast with no setup, plugin or hook trust. It ignores old lines read at startup. Companion sessions use the job's own toast, so each event gets one toast. The integrations use the same files on Windows, macOS and Linux. A macOS viewer updates without a tray toast because no macOS tray is shipped.
+The viewer reads Codex rollouts and sends a turn toast with no setup, plugin or hook trust. It ignores old lines read at startup. Companion sessions use the job's own toast, so each event gets one toast. The integrations use the same files on Windows, macOS and Linux.
 
 Run `/codex:setup` for optional Codex approval notices and the OpenCode viewer plugin. The Codex PermissionRequest hook ships inside `codex@fundryi`, separate from the Claude hooks. It runs synchronously with a 3-second hook timeout and a 1.5-second HTTP timeout. Codex substitutes the plugin path before it runs the command, so the command does not depend on shell variables or plugin versions.
 
@@ -226,25 +226,24 @@ Claude transcripts (chats, subagents and workflow agents) can hold text from eve
 | `CODEX_HOME` | `~/.codex` | Where Codex session files are read from |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Where Claude workflow runs are read from (its `projects` folder) |
 | `OPENCODE_DB` | `$XDG_DATA_HOME/opencode/opencode.db` or `~/.local/share/opencode/opencode.db` | OpenCode database, read only |
-| `CODEX_VIEWER_TRAY_PORT` | port + 1 | Tray single-instance lock |
-| `CODEX_VIEWER_NOTIFICATIONS` | `1` | `0` disables tray toasts |
+| `CODEX_VIEWER_NOTIFICATIONS` | `1` | `0` disables the server's desktop pop-ups |
 
 </details>
 
 <details>
 <summary><b>Project layout</b></summary>
 
-- `codex-live-viewer.js`: Node server, CLI, rollout parser, control endpoints (one file, no dependencies)
+- `ai-live-viewer.js`: CLI and server startup
+- `server/`: CommonJS modules for sessions, jobs, transcripts, access, HTTP, usage and desktop pop-ups. See the server file map in [AGENTS.md](AGENTS.md). Node standard library only, no build step
 - `ui/`: markup in `index.html`, six CSS files and 19 classic scripts in `js/`. Keep the fixed load order. No ES modules, bundler or build step. See the UI file map in [AGENTS.md](AGENTS.md)
 - `plugin/`: the Claude Code plugin, forked from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (keeps OpenAI's Apache-2.0 `LICENSE` and `NOTICE`; the changes fall under the root [LICENSE](LICENSE))
 - `plugin/.codex-plugin/plugin.json`: the manifest Codex reads when the plugin is installed there. It points at `codex-hooks/hooks.json` for optional approval notices and keeps the Claude hooks out of Codex. Keep its version equal to `plugin/.claude-plugin/plugin.json`
-- `plugin/viewer/`: copies of the server, logo and complete `ui/` tree. Refresh with `npm run sync:viewer`. Tests check for drift
+- `plugin/viewer/`: copies of the entry, logo and complete `server/` and `ui/` trees. Refresh with `npm run sync:viewer`. Tests check for drift
 - `handoff/`: ready-to-copy handoff contract templates
 - `scripts/upstream-diff.mjs`: diff `plugin/` against upstream for selective, manual cherry-picks
 - `tests/`: zero-dependency `node:test` suites
-- `tray-launcher/`: Rust tray app for Windows and Linux
 
-A complete viewer install needs `codex-live-viewer.js`, the sibling `ui/` tree and `assets/logo.svg`. Keep the companion files under `plugin/` for Resume and Cancel.
+A complete viewer install needs `ai-live-viewer.js`, the sibling `server/` and `ui/` trees, and `assets/logo.svg`. Missing required UI assets fail startup. There is no embedded fallback page. Keep the companion files under `plugin/` for Resume and Cancel.
 
 </details>
 

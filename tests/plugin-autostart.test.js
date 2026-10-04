@@ -93,7 +93,7 @@ function fakePluginRoot(version) {
   fs.mkdirSync(path.join(root, ".claude-plugin"));
   fs.mkdirSync(path.join(root, "viewer"));
   fs.writeFileSync(path.join(root, ".claude-plugin", "plugin.json"), JSON.stringify({ version }));
-  fs.writeFileSync(path.join(root, "viewer", "codex-live-viewer.js"), "require('fs').writeFileSync(require('path').join(__dirname, 'started'), '')\n");
+  fs.writeFileSync(path.join(root, "viewer", "ai-live-viewer.js"), "require('fs').writeFileSync(require('path').join(__dirname, 'started'), '')\n");
   const started = async () => {
     for (let i = 0; i < 50 && !fs.existsSync(path.join(root, "viewer", "started")); i++) await new Promise((r) => setTimeout(r, 100));
     return fs.existsSync(path.join(root, "viewer", "started"));

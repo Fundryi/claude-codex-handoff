@@ -219,7 +219,7 @@ test("serve: fixed UI assets and guarded control routes, with no side effects", 
   assert.notEqual(port, 8377, "never use the owner's live viewer port");
   const env = { ...process.env, CODEX_VIEWER_PORT: String(port), CODEX_VIEWER_HOST: "127.0.0.1", CODEX_VIEWER_AUTOSTART: "0", CODEX_HOME: codexHome, CODEX_COMPANION_STATE_ROOT: stateRoot, CLAUDE_CONFIG_DIR: path.join(home, "claude"), OPENCODE_DB: opencodeDb };
   delete env.CODEX_VIEWER_ALLOWED_HOSTS; // the owner's own settings must not widen the bind
-  const child = spawn(process.execPath, [path.join(__dirname, "..", "codex-live-viewer.js"), "serve", "--no-open"], { env, stdio: "ignore" });
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "ai-live-viewer.js"), "serve", "--no-open"], { env, stdio: "ignore" });
   const exited = new Promise((resolve) => child.on("exit", resolve));
   const call = (method, url, headers = {}, body) => new Promise((resolve) => {
     const req = http.request({ host: "127.0.0.1", port, method, path: url, headers }, (res) => {
@@ -277,14 +277,17 @@ test("serve: fixed UI assets and guarded control routes, with no side effects", 
       }
     }
     for (const rawPath of [
-      "/ui/../codex-live-viewer.js",
-      "/ui/%2e%2e/codex-live-viewer.js",
-      "/ui/%2e%2e%2fcodex-live-viewer.js",
-      "/ui/%252e%252e%252fcodex-live-viewer.js",
-      "/ui/..\\codex-live-viewer.js",
-      "/ui/%2e%2e%5ccodex-live-viewer.js",
+      "/ui/../server/runtime.js", "/ui/%2e%2e/server/runtime.js",
+      "/ui/%2e%2e%2fserver/runtime.js", "/ui/%252e%252e%252fserver/runtime.js",
+      "/ui/..\\server/runtime.js", "/ui/%2e%2e%5cserver/runtime.js", "/server/runtime.js",
+      "/ui/../ai-live-viewer.js",
+      "/ui/%2e%2e/ai-live-viewer.js",
+      "/ui/%2e%2e%2fai-live-viewer.js",
+      "/ui/%252e%252e%252fai-live-viewer.js",
+      "/ui/..\\ai-live-viewer.js",
+      "/ui/%2e%2e%5cai-live-viewer.js",
       "/ui/unknown.css", "/ui/js/unknown.js", "/ui/js/state.js.map",
-      "/package.json", "/codex-live-viewer.js", "/ui/index.html",
+      "/package.json", "/ai-live-viewer.js", "/ui/index.html",
       "/ui/", "/ui/js/", "/ui/theme.css?version=1", "/?version=1",
     ]) {
       assert.equal((await assetRequest("GET", rawPath)).status, 404, "unmapped raw path " + rawPath);

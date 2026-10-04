@@ -6,15 +6,33 @@ The same tree shows Claude chats and OpenCode TUI, CLI and child sessions. Claud
 
 ## Layout
 
-- `codex-live-viewer.js` — the entire Node server + CLI. Single file, on purpose.
+- `ai-live-viewer.js`: CLI and server startup.
+- `server/`: CommonJS server modules. See the server file map below.
 - `ui/`: `index.html` markup, six CSS files and 19 classic scripts in `ui/js/`, loaded in a fixed order. Theme rules: `docs/UI-THEME.md`.
 - `plugin/` — our fork of [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc): the `codex` Claude Code plugin (commands, hooks, `scripts/codex-companion.mjs`). Multi-file ESM layout is upstream's, keep it. Upstream updates are pulled selectively via `scripts/upstream-diff.mjs`. OpenCode handoffs (`task --engine opencode`) run through our own `plugin/scripts/lib/opencode.mjs`, which upstream does not have.
-- `plugin/viewer/`: bundled copies of `codex-live-viewer.js`, `assets/logo.svg` and the complete `ui/` tree. Refresh with `npm run sync:viewer`; `tests/plugin-viewer-bundle.test.js` guards against drift.
+- `plugin/viewer/`: bundled copies of `ai-live-viewer.js`, the complete `server/` and `ui/` trees, and `assets/logo.svg`. Refresh with `npm run sync:viewer`; `tests/plugin-viewer-bundle.test.js` guards against drift.
 - `.claude-plugin/marketplace.json` — makes this repo an installable Claude Code marketplace (`fundryi`), serving the `codex` plugin from `./plugin`.
 - `scripts/upstream-diff.mjs` — clones upstream and diffs it against `plugin/` for manual cherry-picking.
 - `tests/` — `node:test` suites. Server/UI functions are extracted via regex + `vm.runInNewContext`, so keep function declarations self-contained (`function name(...) { ... }` at top level, no closures over outer state) or the extraction breaks. Plugin `.mjs` modules are imported directly with dynamic `import()`.
-- `tray-launcher/` — Rust tray app that runs the Node server in the background (Windows/Linux).
 - `docs/superpowers/` — design specs (`specs/`), implementation plans (`plans/`), finished ones in `archive/`. Whole dir is gitignored: plans/specs stay local, never committed.
+
+## Server file map
+
+- `server/runtime.js`: startup config, paths and shared state; `parseFlags`.
+- `server/access.js`: tunnel, process inspection and origin guards; `startTunnel`, `codexProcs`, `trustedControlOrigin`.
+- `server/events.js`: SSE and plain-run notices; `broadcast`, `plainRunNotification`.
+- `server/sessions.js`: Codex rollouts, search and polling; `ingest`, `sessionSummary`, `buildSearchIndex`, `tick`.
+- `server/jobs.js`: companion jobs and liveness; `listCompanionJobs`, `classifyJobLiveness`, `buildCompanionTaskArgs`, `runCompanion`.
+- `server/readers.js`: bounded file readers; `readAppended`, `claudeCursor`, `claudeReadHead`, `claudeReadTail`.
+- `server/claude-workflows.js`: workflow runs and agents; `claudeTick`, `claudeAgentState`, `claudeTranscriptPage`.
+- `server/discovery.js`: Claude file discovery; `claudeDiscover`.
+- `server/claude-chats.js`: Claude chats and live state; `claudeChatsTick`, `claudeChatsScan`, `claudeChatView`, `claudeAgentLiveState`.
+- `server/opencode.js`: read-only SQLite sessions and transcripts; `opencodeConnection`, `opencodeChatsTick`, `opencodeTranscriptPage`.
+- `server/usage.js`: Claude usage and Codex limits; `claudeUsageCheck`, `refreshCodexLimits`.
+- `server/http.js`: assets, routes and server creation; `handleRequest`, `handleLaunch`, `createViewerServer`.
+- `server/os-notify.js`: desktop pop-ups; `notifyDesktop`.
+
+`runtime.js` owns stable shared maps and sets, including `claudeWfReaders`. Never reassign these containers. Read and write replaceable frames, arrays and flags through the `shared` object; do not destructure its properties. Keep private state in its owning module. Startup stays in `ai-live-viewer.js`; requiring a module must not bind a port or start a timer.
 
 ## UI file map
 
@@ -54,7 +72,9 @@ JavaScript:
 ## Hard rules
 
 - **Zero npm dependencies.** Node stdlib only (`node >= 22.13`; requirements always track a current LTS, never an EOL line). Never add a package.
-- Server stays one file for now (`codex-live-viewer.js`). The UI lives in `ui/` as ordered classic `<script src>` files and CSS files: no ES modules, no bundler, no build step. The scripts share globals, as one page script did before. Only `ui/js/boot.js` runs code at load (bindings, SSE, timers, first render); every other script only declares functions, constants and state. Keep regex-extracted functions as top-level named declarations. A new UI file goes into `ui/index.html`, `UI_ASSET_FILES` in `codex-live-viewer.js`, `tests/helpers/source.js` and `scripts/sync-viewer.js`.
+- The server uses CommonJS modules in `server/`, with `ai-live-viewer.js` as the entry. Keep server functions as top-level named function declarations. There is no build step. Add each new server file to the `serverSource` list in `tests/helpers/source.js` and ensure `scripts/sync-viewer.js` copies it.
+- The UI lives in `ui/` as ordered classic `<script src>` files and CSS files: no ES modules, no bundler, no build step. The scripts share globals, as one page script did before. Only `ui/js/boot.js` runs code at load (bindings, SSE, timers, first render); every other script only declares functions, constants and state. Keep regex-extracted functions as top-level named declarations. A new UI file goes into `ui/index.html`, `UI_ASSET_FILES` in `server/http.js`, `tests/helpers/source.js` and `scripts/sync-viewer.js`.
+- A complete viewer install needs the entry, `server/`, `ui/` and `assets/logo.svg`. Required UI assets load before the server listens. A missing asset fails startup; there is no embedded fallback page.
 - Setup changes user config only with consent, by writing or removing our one OpenCode viewer plugin file. It never edits Codex config or hook files, or `opencode.json`. Codex viewer hooks ship in `plugin/codex-hooks/hooks.json`; Claude hooks in `plugin/hooks/hooks.json` must never run inside Codex.
 - Codex turn toasts use fresh rollout done/err events and need no setup or trust. The Codex hook is only for optional approval notices, when approval policy is not `never`. Companion sessions use only their job frame. Keep one toast per event and suppress startup backfill.
 - The viewer's OpenCode source is read only. Use a lazy, guarded `node:sqlite` load and `DatabaseSync` with `readOnly: true`. Query only `session_v2` and `session_message`, with explicit columns. The same DB holds OAuth tokens and credentials in other tables. Do not query those tables or send their data to a browser or log. Reuse the handle until the file identity changes or a query fails. Poll on the Claude cadence, including its no-browser slow mode. Pull bounded transcript pages by `seq` behind `trustedControlOrigin`. Do not write, checkpoint, or run write PRAGMAs. A read-only WAL connection can touch the `-shm` file; this is accepted.
@@ -64,7 +84,7 @@ JavaScript:
 - Nothing depends on the Claude process staying alive. Hosts like CloudCLI end it on every new message. The session id stays the same for a normal message (CloudCLI resumes the same chat file), but changes on a fork or `/clear`. Every result must reach Claude through the prompt hook on the next message, so the hook's scope is the whole workspace, never one session.
 - Every companion run is detached. Codex is never a child of the calling process, so no harness timeout can end a run. `--background` returns a job id; the default follows the detached job and hands back a job id if it outlives the follow budget.
 - Every Codex companion connection spawns its own `codex app-server`. Every OpenCode task uses `opencode run --standalone`. There is no shared broker. Never reintroduce one: a SessionEnd in any Claude session of the workspace used to shut it down and abort every turn on it.
-- License: Apache 2.0 + Commons Clause (root `LICENSE`: use, change, fork and share, never sell). `plugin/` came from openai/codex-plugin-cc under Apache 2.0, so `plugin/LICENSE` stays byte-identical to upstream and `plugin/NOTICE` keeps OpenAI's notice, with our addendum and the Commons Clause text at its end (the installed plugin holds only `plugin/`, so the clause travels in NOTICE). Release zips carry the root `LICENSE` beside `plugin/LICENSE` and `plugin/NOTICE`.
+- License: Apache 2.0 + Commons Clause (root `LICENSE`: use, change, fork and share, never sell). `plugin/` came from openai/codex-plugin-cc under Apache 2.0, so `plugin/LICENSE` stays byte-identical to upstream and `plugin/NOTICE` keeps OpenAI's notice, with our addendum and the Commons Clause text at its end (the installed plugin holds only `plugin/`, so the clause travels in NOTICE).
 
 ## Env vars
 
@@ -76,6 +96,7 @@ JavaScript:
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state root (plugin CLI + viewer) |
 | `CODEX_VIEWER_PORT` | `8377` | Viewer HTTP port; also where the companion POSTs job completions (`/notify`) |
 | `CODEX_VIEWER_NOTIFY_QUIET` | `0` | `1` limits plain-run toasts to approval/question notices, failures and turns of at least 60 seconds |
+| `CODEX_VIEWER_NOTIFICATIONS` | `1` | Set `0` to disable the server's desktop pop-ups |
 | `CODEX_VIEWER_HOST` | `127.0.0.1` | Viewer bind address (`--host` overrides; `0.0.0.0` = LAN, no token) |
 | `CODEX_VIEWER_ALLOWED_HOSTS` | (none) | Comma list of reverse-proxy names trusted by `controlHosts`; when set, the default bind becomes `0.0.0.0` |
 | `CODEX_VIEWER_AUTOSTART` | `1` | Set to `0` to disable SessionStart viewer autostart |
@@ -86,17 +107,15 @@ JavaScript:
 
 ```sh
 npm test          # node --test tests/*.test.js
-npm start         # node codex-live-viewer.js serve
-npm run stop      # node codex-live-viewer.js stop
-npm run tray      # cargo run (tray-launcher)
-npm run build:tray
+npm start         # node ai-live-viewer.js serve
+npm run stop      # node ai-live-viewer.js stop
 node scripts/upstream-diff.mjs   # diff plugin/ against upstream (--full for whole diff)
 ```
 
 ## Workflow
 
 - Feature work follows spec → plan → TDD implementation; plans live in `docs/superpowers/plans/` with checkbox steps.
-- Release zips: build them locally (Windows: `npm run build:tray`; Linux: in WSL Ubuntu) and upload them with `gh release upload`. `.github/workflows/release.yml` is only a fallback for what cannot build here (global rule in `~/.codex/AGENTS.md`, "Builds and releases").
+- Create releases by hand with `gh`. Releases have no zip assets. The plugin installs from the marketplace.
 - Commit style: conventional commits (`feat(server):`, `feat(ui):`, `feat(plugin):`, `docs:`, `chore(release):`).
 - Every release gets a hand-written `plugin/CHANGELOG.md` entry; nothing generates it. The GitHub release notes are that entry, cut from the file. Style: plain ASD-STE100 English, a bold lead sentence per bullet, and every removed test named with its reason.
 - Every plugin release: sweep for stale facts before the version bump. Facts: model aliases and defaults, effort lists (`max`/`ultra`), the checked Codex CLI version, command options, file paths, versions. Places: `README.md`, `plugin/skills/`, `plugin/commands/`, `plugin/agents/`, `plugin/CHANGELOG.md` (new entry only), the viewer, `docs/superpowers/STATUS.md`, the KB pages in `../knowledge-base/wiki/projects/claude-handoff-improvment/`, auto-memory, and routing tables in other projects that quote the plugin. One owner per fact (the code for aliases and efforts, the README effort table for users, the runtime skill for Claude); other places link to it. A model whose Codex retirement date (`upgrade.retirement_at` in `codex debug models`) is less than 3 months away is removed from the docs, aliases and skills; no shortcut ever points at it.

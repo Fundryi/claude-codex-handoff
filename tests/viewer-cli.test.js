@@ -8,7 +8,7 @@ const test = require("node:test");
 
 // End to end: the real viewer CLI against a fake "running viewer" on a spare port.
 // This is what /codex:viewer runs: `start "<argument>"`.
-const SCRIPT = path.join(__dirname, "..", "codex-live-viewer.js");
+const SCRIPT = path.join(__dirname, "..", "ai-live-viewer.js");
 const VERSION = require("../package.json").version;
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "clv-cli-"));
 fs.mkdirSync(path.join(home, "sessions")); // serve refuses to run without it

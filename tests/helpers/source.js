@@ -32,8 +32,15 @@ const UI_SCRIPTS = Object.freeze([
   "ui/js/controls.js",
   "ui/js/boot.js",
 ]);
-// Extend this ordered list only when the server extraction is approved.
-const SERVER_SOURCES = ["codex-live-viewer.js"];
+// Extraction input only: these modules are never evaluated as a combined script.
+const SERVER_SOURCES = [
+  "ai-live-viewer.js",
+  ...[
+    "runtime.js", "access.js", "jobs.js", "readers.js", "events.js", "usage.js",
+    "sessions.js", "claude-workflows.js", "opencode.js", "claude-chats.js",
+    "discovery.js", "http.js", "os-notify.js",
+  ].map((file) => "server/" + file),
+];
 
 function read(relative) {
   return fs.readFileSync(path.join(ROOT, relative), "utf8");
@@ -66,4 +73,4 @@ function serverSource() {
   return SERVER_SOURCES.map(read).join("\n");
 }
 
-module.exports = { uiSource, uiScript, uiCss, serverSource, UI_SCRIPTS, UI_STYLES };
+module.exports = { uiSource, uiScript, uiCss, serverSource, UI_SCRIPTS, UI_STYLES, SERVER_SOURCES };

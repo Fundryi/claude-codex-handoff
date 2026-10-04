@@ -6,7 +6,7 @@ allowed-tools: Bash(node:*)
 
 The viewer command already ran when this command was invoked. Its output:
 
-!`node "${CLAUDE_PLUGIN_ROOT}/viewer/codex-live-viewer.js" start "$ARGUMENTS"`
+!`node "${CLAUDE_PLUGIN_ROOT}/viewer/ai-live-viewer.js" start "$ARGUMENTS"`
 
 With no argument, the viewer starts if needed and replaces a running viewer from an older plugin version. `restart` replaces any running viewer, `stop` stops it, `kill` force-quits it (also when it hangs and does not answer), and `status` shows whether it runs and its version.
 

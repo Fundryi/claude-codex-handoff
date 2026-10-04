@@ -13,6 +13,8 @@ CSS files load in this order:
 - `ui/feed.css`: feed grammar, messages, thinking/work rows and Markdown.
 - `ui/responsive.css`: mobile, container and reduced-motion overrides. Keep last.
 
+`ai-live-viewer.js` starts the server. `server/http.js` loads the required UI assets before the server listens and serves them at fixed URLs. Missing assets fail startup. There is no embedded fallback page.
+
 ## Reference samples (the token source)
 
 Sampled from the image with `design-audit/sample3.js` (fills = the modal color of the region; text = the pixel farthest from that mode). Region is `x, y, w, h` in image pixels.

@@ -44,7 +44,7 @@ export async function checkViewerHealth(port, timeoutMs = 700) {
 }
 
 export function bundledViewerPath(pluginRoot) {
-  return path.join(pluginRoot, "viewer", "codex-live-viewer.js");
+  return path.join(pluginRoot, "viewer", "ai-live-viewer.js");
 }
 
 function pluginVersion(pluginRoot) {
@@ -59,7 +59,7 @@ function companionDir(env) {
 const REPLACE_WAIT_MS = 1500;
 const REPLACE_RECORD = "viewer-replace-failed.json";
 
-// Ask the old viewer to stop (as `codex-live-viewer.js stop` does), then wait a bounded
+// Ask the old viewer to stop (as `ai-live-viewer.js stop` does), then wait a bounded
 // time for the port to free. False when it never does: nothing new starts then.
 async function stopOldViewer(port) {
   await new Promise((resolve) => {

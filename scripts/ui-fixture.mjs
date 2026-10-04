@@ -3,7 +3,7 @@
 //
 // Builds a throwaway CODEX_HOME + companion state root under os.tmpdir()
 // with 13 sessions/jobs that exercise every session/job status the UI
-// renders, then spawns `codex-live-viewer.js serve` pointed at them.
+// renders, then spawns `ai-live-viewer.js serve` pointed at them.
 //
 // Usage:
 //   node scripts/ui-fixture.mjs
@@ -40,7 +40,7 @@ function uuid() {
   return `11111111-1111-4111-8111-${String(uidCounter).padStart(12, "0")}`;
 }
 
-// ---- rollout line builders (schema matches simplify() in the single-file server codex-live-viewer.js) ----
+// ---- rollout line builders (schema matches simplify() in server/sessions.js) ----
 // originator: "Claude Code" for a handoff (the companion), a CLI value for sessions you typed in.
 function metaLine(ts, { id, cwd, model = "gpt-5", parentThreadId, agentNickname, originator = "codex_cli_rs" }) {
   const payload = { id, timestamp: new Date(ts).toISOString(), cwd, model, originator, cli_version: "0.98.0" };
@@ -425,7 +425,7 @@ for (const [jobId, record] of jobFiles) {
 console.log(`[ui-fixture] fixtures written under ${root}`);
 
 // ---------------- spawn the viewer ----------------
-const child = spawn(process.execPath, [path.join(REPO_ROOT, "codex-live-viewer.js"), "serve"], {
+const child = spawn(process.execPath, [path.join(REPO_ROOT, "ai-live-viewer.js"), "serve"], {
   cwd: REPO_ROOT,
   env: {
     ...process.env,
@@ -453,10 +453,10 @@ function stop() {
 }
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
-// The viewer exiting on its own (e.g. `codex-live-viewer.js stop` against port 8399) ends the harness too.
+// The viewer exiting on its own (e.g. `ai-live-viewer.js stop` against port 8399) ends the harness too.
 child.on("exit", (code) => { if (!stopping) { removeRoot(); process.exit(code ?? 0); } });
 child.on("error", (err) => {
-  console.error(`[ui-fixture] failed to start codex-live-viewer.js: ${err.message}`);
+  console.error(`[ui-fixture] failed to start ai-live-viewer.js: ${err.message}`);
   process.exit(1);
 });
 
