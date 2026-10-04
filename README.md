@@ -19,6 +19,21 @@
   <img src="https://img.shields.io/badge/platforms-win%20%7C%20linux%20%7C%20mac-8A2BE2" alt="platforms">
 </p>
 
+<p align="center">
+  <img src="docs/images/viewer-preview.png" alt="AI Live Viewer: a Claude chat with its Codex handoffs and a workflow in the tree, and a finished Codex handoff with its result on the right" width="900">
+</p>
+
+<details>
+<summary>A Claude workflow, grouped by topic</summary>
+
+<p align="center">
+  <img src="docs/images/viewer-workflow.png" alt="AI Live Viewer: a Claude workflow with three topic groups, each with its inspect and verify agents" width="900">
+</p>
+
+</details>
+
+The screenshots use invented demo data. To make new ones, run `node scripts/readme-shot.mjs --workflow`.
+
 ---
 
 > [!WARNING]

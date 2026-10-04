@@ -26,3 +26,6 @@ node_modules/
 
 # private agent notes
 CLAUDE.local.md
+
+# Private words for the demo privacy check
+scripts/.demo-privacy.local
