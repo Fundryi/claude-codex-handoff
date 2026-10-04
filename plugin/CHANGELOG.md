@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.27.0
+
+- **Code, diffs and Markdown look like code, diffs and Markdown.** The feeds of Codex, Claude and OpenCode, the result card and the side panel now use one renderer. Code blocks get a header with the language, syntax colors, Wrap and Copy. They keep their indent and fold above 25 lines. Markdown gets tables, nested lists, task lists, rules, strike and soft line breaks. Text stays at a readable width of about 100 characters; tables, code and diffs use the full width.
+- **File edits show as diffs.** A Claude Edit, Write or MultiEdit, a Codex patch and an OpenCode edit show which file changed, with `+` and `−` counts, hunks, two line-number columns and syntax colors. Before, an edit showed as raw JSON.
+- **Commands show what failed.** A command shows in full, also over many lines. A failed command gets a red `exit N` badge, and its folded output shows the last 10 lines, where the error usually is. "Show all" shows the rest. Terminal colors (ANSI) show as colors. Output that the harness cut off says so: "cut off: N of M characters".
+- **Each output sits under its call.** When an agent runs tools at the same time, each result shows under the call that started it. Repeated `wait` polls fold into one line, for example "waited 6 times". The work summary counts each failed call once.
+- **Images in a transcript show as thumbnails.** A screenshot that Claude read shows as a small picture with its size. Click it to see it full size. The viewer does not send the image data in the feed. The page asks for it with a random token, and only the viewer's own page can use the token (the same guard as the job controls). The viewer keeps 500 tokens and serves images up to 10 MB, PNG, JPEG, GIF and WebP only.
+- **Injected text is marked.** System reminders, task notifications, AGENTS.md text and handoff blocks such as `<goal>` show as labeled rows or sections. They no longer look like something you wrote.
+- **New harnesses work without extra code.** The page looks at plain text and finds diffs, JSON, terminal colors, tagged sections and Markdown by itself. A new tool or harness that sends plain text still gets the right view.
+- **Large content stays fast.** Syntax colors stop above 3,000 lines or 200 KB, diffs stop at 2,000 lines and tool input at 20,000 characters. The renderer uses no library and never inserts transcript text as HTML. Links work only for `http` and `https`.
+- **Tests:** new tests in `tests/ui-content.test.js` (format detection, terminal colors, diffs, tagged sections, syntax colors), in `tests/ui-markdown.test.js` (tables, nested lists, fences, links, hostile input), in `tests/ui-feed.test.js` (outputs under their calls, failure counts), in `tests/server-metadata.test.js` and `tests/server-rollout-roles.test.js` (the new fields of every adapter, line diffs) and in `tests/remote-access.test.js` (image tokens and the `/media` route). The Markdown parser now returns a new shape, so 8 existing tests in `tests/ui-markdown.test.js` and one in `tests/ui-feed.test.js` check the new shape. No test was removed.
+
 ## 2.26.0
 
 - **Code text no longer turns into boxes.** Commands, ids and paths asked for the font "Cascadia Code" first. Windows does not ship that font; Windows Terminal brings it and lends it to all apps. When Terminal updated itself, the font file moved, and an open browser drew every letter as a box. Code text now uses fonts that are part of the system: Consolas on Windows, Menlo on macOS, and the default code font on Linux.
