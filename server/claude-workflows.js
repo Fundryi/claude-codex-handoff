@@ -6,6 +6,122 @@ const { CLAUDE_TOOL_GRACE_MS, CLAUDE_MAX_AGENTS_SENT, CLAUDE_AGENT_ID, claudeRun
 const { broadcast } = require("./events");
 const { STUCK_AFTER_MS } = require("./jobs");
 const { readAppended, claudeCursor, claudeReadHead, claudeReadTail } = require("./readers");
+const { registerMedia } = require("./media");
+
+// Myers line diff. Bound its search/trace for unrelated huge inputs; the fallback
+// is a valid replacement hunk. Count the complete result, retain only 2,000 lines.
+function lineDiffResult(oldText, newText, filePath) {
+  const lines = text => { const a = String(text || "").replace(/\r\n/g, "\n").split("\n"); if (a[a.length - 1] === "") a.pop(); return a; };
+  const a = lines(oldText), b = lines(newText);
+  let prefix = 0, suffix = 0;
+  while (prefix < a.length && prefix < b.length && a[prefix] === b[prefix]) prefix++;
+  while (suffix < a.length - prefix && suffix < b.length - prefix && a[a.length - 1 - suffix] === b[b.length - 1 - suffix]) suffix++;
+  if (prefix === a.length && prefix === b.length) return { diff: "", added: 0, removed: 0 };
+  const x = a.slice(prefix, a.length - suffix), y = b.slice(prefix, b.length - suffix);
+  let edits = null;
+  if (x.length && y.length) {
+    const trace = [], v = new Map([[1, 0]]);
+    let work = 0, found = false;
+    search: for (let d = 0; d <= x.length + y.length; d++) {
+      if (work + 2 * d + 1 > 200000) break;
+      trace.push(new Map(v));
+      for (let k = -d; k <= d; k += 2) {
+        work++;
+        let i = k === -d || (k !== d && (v.get(k - 1) ?? -1) < (v.get(k + 1) ?? -1)) ? (v.get(k + 1) || 0) : (v.get(k - 1) || 0) + 1;
+        let j = i - k;
+        while (i < x.length && j < y.length && x[i] === y[j]) { i++; j++; }
+        v.set(k, i);
+        if (i >= x.length && j >= y.length) { found = true; break search; }
+      }
+    }
+    if (found) {
+      edits = [];
+      let i = x.length, j = y.length;
+      for (let d = trace.length - 1; d >= 0; d--) {
+        const prev = trace[d], k = i - j;
+        const pk = k === -d || (k !== d && (prev.get(k - 1) ?? -1) < (prev.get(k + 1) ?? -1)) ? k + 1 : k - 1;
+        const pi = prev.get(pk) || 0, pj = pi - pk;
+        while (i > pi && j > pj) edits.push([' ', x[--i]]), j--;
+        if (d) { if (i === pi) edits.push(['+', y[--j]]); else edits.push(['-', x[--i]]); }
+      }
+      edits.reverse();
+    }
+  }
+  if (!edits) edits = [...x.map(line => ['-', line]), ...y.map(line => ['+', line])];
+  const all = [...a.slice(0, prefix).map(line => [' ', line]), ...edits, ...a.slice(a.length - suffix).map(line => [' ', line])];
+  const changes = [];
+  let added = 0, removed = 0;
+  for (let i = 0; i < all.length; i++) if (all[i][0] !== ' ') { changes.push(i); if (all[i][0] === '+') added++; else removed++; }
+  const kept = [];
+  let total = 0, count = 0;
+  const emit = line => { if (count) total++; total += line.length; if (count++ < 2000) kept.push(line); };
+  emit('--- a/' + String(filePath || '').replace(/[\r\n]/g, ' '));
+  emit('+++ b/' + String(filePath || '').replace(/[\r\n]/g, ' '));
+  let oldPos = 1, newPos = 1, scanned = 0;
+  for (let ci = 0; ci < changes.length;) {
+    const start = Math.max(0, changes[ci] - 3);
+    let end = Math.min(all.length, changes[ci++] + 4);
+    while (ci < changes.length && changes[ci] - 3 <= end) end = Math.min(all.length, changes[ci++] + 4);
+    while (scanned < start) { if (all[scanned][0] !== '+') oldPos++; if (all[scanned][0] !== '-') newPos++; scanned++; }
+    let oldCount = 0, newCount = 0;
+    for (let i = start; i < end; i++) { if (all[i][0] !== '+') oldCount++; if (all[i][0] !== '-') newCount++; }
+    const range = (pos, n) => n === 1 ? String(pos) : (n ? pos : pos - 1) + ',' + n;
+    emit('@@ -' + range(oldPos, oldCount) + ' +' + range(newPos, newCount) + ' @@');
+    while (scanned < end) { const [op, line] = all[scanned++]; emit(op + line); if (op !== '+') oldPos++; if (op !== '-') newPos++; }
+  }
+  const diff = kept.join('\n');
+  return { diff, added, removed, ...(count > 2000 ? { truncated: { shown: diff.length, total } } : {}) };
+}
+
+function lineDiff(oldText, newText, path) {
+  return lineDiffResult(oldText, newText, path).diff;
+}
+
+function feedToolFields(name, input) {
+  const target = /grep|glob/i.test(name) ? input.pattern : /agent|task/i.test(name) ? input.name || input.subagent_type || input.description
+    : input.command || input.file_path || input.filePath || input.notebook_path || input.path || input.url || input.description;
+  const raw = JSON.stringify(input);
+  let bounded = input;
+  if (raw.length > 20000) {
+    const shrink = (value, budget, depth) => {
+      if (typeof value === 'string') {
+        let lo = 0, hi = value.length;
+        while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (JSON.stringify(value.slice(0, mid)).length <= budget) lo = mid; else hi = mid - 1; }
+        return value.slice(0, lo);
+      }
+      if (!value || typeof value !== 'object') return value;
+      const array = Array.isArray(value), result = array ? [] : {};
+      if (depth > 64) return result;
+      let used = 2, count = 0;
+      for (const key of Object.keys(value)) {
+        const overhead = (count ? 1 : 0) + (array ? 0 : JSON.stringify(key).length + 1);
+        if (budget - used - overhead < 2) break;
+        const child = shrink(value[key], budget - used - overhead, depth + 1);
+        const length = JSON.stringify(child).length;
+        if (used + overhead + length > budget) break;
+        if (array) result.push(child); else Object.defineProperty(result, key, { value: child, enumerable: true });
+        used += overhead + length; count++;
+      }
+      return result;
+    };
+    bounded = shrink(input, 20000, 0);
+  }
+  return { tool: { name, target: String(target || '').slice(0, 20000), input: bounded },
+    ...(raw.length > 20000 ? { truncated: { shown: JSON.stringify(bounded).length, total: raw.length } } : {}) };
+}
+
+function feedBlock(text, fallback) {
+  let type = fallback || '', title = '';
+  if (/^\s*# AGENTS\.md instructions\b/.test(text)) { type = 'agents-md'; title = 'AGENTS.md'; }
+  else if (/^\s*(?:# CLAUDE\.md|<claude-md[\s>])/.test(text)) { type = 'claude-md'; title = 'CLAUDE.md'; }
+  else if (/^\s*\[Workflow harness/.test(text)) { type = 'harness'; title = 'Workflow harness'; }
+  else if (/^\s*<task-notification[\s>]/.test(text)) { type = 'task-notification'; title = (/<summary>([\s\S]*?)<\/summary>/.exec(text) || [])[1] || 'Task notification'; }
+  else if (/^\s*<system-reminder[\s>]/.test(text)) { type = 'system-reminder'; title = 'System reminder'; }
+  else if (/^\s*<(?:skill|skills|skills_instructions)[\s>]/.test(text)) { type = 'skill'; title = 'Skill' + ((/<name>([^<]+)<\/name>/.exec(text) || [])[1] ? ': ' + (/<name>([^<]+)<\/name>/.exec(text))[1] : ''); }
+  else if (/^\s*<(?:context[\w-]*|codex-jobs|codex_internal_context)[\s>]/.test(text)) { type = 'context'; title = 'Context'; }
+  if (!type) return null;
+  return { type, title: (title || (type === 'developer' ? 'Developer' : 'Injected content')).trim().slice(0, 300), chars: text.length };
+}
 
 // ---------------- Claude workflows (read only) ----------------
 // Claude Code writes every Workflow tool run under CLAUDE_PROJECTS/<slug>/<session>/:
@@ -39,7 +155,7 @@ function claudeScriptMeta(text) {
 
 // One agent-transcript line -> viewer feed events, in the Codex event shape so the UI feed code
 // works unchanged. kind "meta" carries context tokens and never reaches the feed.
-function claudeTranscriptEvents(line) {
+function claudeTranscriptEvents(line, location) {
   let o;
   try { o = JSON.parse(line); } catch { return []; }
   if (!o || (o.type !== "user" && o.type !== "assistant")) return [];
@@ -51,16 +167,38 @@ function claudeTranscriptEvents(line) {
   const userText = (text) => {
     const ev = { kind: "user", ts, text };
     if (o.isMeta || /^\s*<(?:system-reminder|command-|local-command-)/.test(text)) ev.internal = true;
+    const block = feedBlock(text, ev.internal ? 'other' : '');
+    if (block) ev.block = block;
     return ev;
+  };
+  const cut = (ev, text, cap) => { ev.text = text.slice(0, cap); if (text.length > cap) ev.truncated = { shown: ev.text.length, total: text.length }; return ev; };
+  const media = (parts, base) => {
+    if (!location || typeof registerMedia !== 'function') return [];
+    return parts.flatMap((part, index) => {
+      if (!part || part.type !== 'image' || !part.source || part.source.type !== 'base64') return [];
+      const mime = part.source.media_type;
+      const ref = registerMedia({ ...location, part: [...base, index], mime });
+      return ref ? [{ ref, mime, alt: 'Image' }] : [];
+    });
   };
   if (o.type === "user") {
     if (typeof content === "string") return content.trim() ? [userText(content)] : [];
-    for (const b of blocks) {
+    const images = media(blocks, ['message', 'content']);
+    if (images.length) out.push({ kind: 'user', ts, text: '', media: images });
+    for (let index = 0; index < blocks.length; index++) {
+      const b = blocks[index];
       if (!b) continue;
       if (b.type === "tool_result") {
         const c = b.content;
         const text = typeof c === "string" ? c : Array.isArray(c) ? c.map((p) => (p && p.type === "text" && p.text) || "").join("\n") : "";
-        out.push({ kind: "out", ts, resultOf: String(b.tool_use_id || ""), text: (b.is_error ? "error: " : "") + text.slice(0, 1200) });
+        const prefix = b.is_error ? 'error: ' : '';
+        const ev = { kind: 'out', ts, resultOf: String(b.tool_use_id || ''), text: prefix + text.slice(0, 1200) };
+        if (text.length > 1200) ev.truncated = { shown: ev.text.length, total: prefix.length + text.length };
+        const exit = b.exit_code ?? o.toolUseResult?.exitCode ?? o.toolUseResult?.exit_code;
+        if (typeof exit === 'number' && Number.isFinite(exit)) ev.exit = exit;
+        const images = Array.isArray(c) ? media(c, ['message', 'content', index, 'content']) : [];
+        if (images.length) ev.media = images;
+        out.push(ev);
       } else if (b.type === "text" && String(b.text || "").trim()) out.push(userText(b.text));
     }
     return out;
@@ -68,15 +206,33 @@ function claudeTranscriptEvents(line) {
   for (const b of blocks) {
     if (!b) continue;
     if (b.type === "text" && String(b.text || "").trim()) out.push({ kind: "agent", ts, text: b.text });
-    else if (b.type === "thinking" && String(b.thinking || "").trim()) out.push({ kind: "think", ts, text: String(b.thinking).slice(0, 500) });
+    else if (b.type === "thinking" && String(b.thinking || "").trim()) out.push(cut({ kind: 'think', ts }, String(b.thinking), 500));
     else if (b.type === "tool_use") {
       const input = b.input && typeof b.input === "object" ? b.input : {};
       const name = String(b.name || "tool");
       const head = String(input.command || input.file_path || input.notebook_path || input.description || input.pattern || JSON.stringify(input));
       const preview = name + ": " + head.split(/\r?\n/)[0].slice(0, 90);
-      if (name === "Bash" || name === "PowerShell") out.push({ kind: "cmd", ts, callId: b.id, text: String(input.command || ""), preview });
-      else if (/^(?:Edit|Write|MultiEdit|NotebookEdit)$/.test(name)) out.push({ kind: "patch", ts, callId: b.id, text: String(input.file_path || input.notebook_path || "(edit)"), preview });
-      else out.push({ kind: "tool", ts, callId: b.id, text: name + " " + JSON.stringify(input).slice(0, 300), preview });
+      const fields = feedToolFields(name, input);
+      if (name === "Bash" || name === "PowerShell") out.push({ kind: "cmd", ts, callId: b.id, text: String(input.command || ""), preview, ...fields });
+      else if (/^(?:Edit|Write|MultiEdit|NotebookEdit)$/.test(name)) {
+        const file = String(input.file_path || input.notebook_path || '(edit)');
+        const ev = { kind: 'patch', ts, callId: b.id, text: file, preview, ...fields };
+        const edits = name === 'MultiEdit' && Array.isArray(input.edits) ? input.edits : [input];
+        const results = edits.map(edit => lineDiffResult(name === 'Write' ? '' : edit.old_string || '', name === 'Write' ? input.content || '' : edit.new_string || '', file));
+        const diff = results.map(r => r.diff).filter(Boolean).join('\n');
+        ev.diff = diff.split('\n').slice(0, 2000).join('\n');
+        if (ev.diff) ev.format = 'diff';
+        ev.files = [{ path: file, op: name === 'Write' ? 'add' : 'update', added: results.reduce((n, r) => n + r.added, 0), removed: results.reduce((n, r) => n + r.removed, 0) }];
+        const total = results.reduce((n, r) => n + (r.truncated ? r.truncated.total : r.diff.length), 0) + Math.max(0, results.filter(r => r.diff).length - 1);
+        if (total > ev.diff.length) ev.truncated = { shown: ev.diff.length, total };
+        out.push(ev);
+      }
+      else {
+        const raw = name + ' ' + JSON.stringify(input);
+        const ev = { kind: "tool", ts, callId: b.id, text: name + " " + JSON.stringify(input).slice(0, 300), preview, ...fields };
+        if (!ev.truncated && raw.length > ev.text.length) ev.truncated = { shown: ev.text.length, total: raw.length };
+        out.push(ev);
+      }
     }
   }
   const u = msg.usage;
@@ -371,9 +527,12 @@ function claudeTranscriptPage(file, offset) {
   // ponytail: a line longer than the cap is skipped, not shown; without this the offset never moves.
   if (end === skip && n === CAP) end = n;
   let events = [], contextTokens = 0;
+  let lineOffset = from + skip;
   for (const line of data.toString("utf8", skip, end).split("\n")) {
+    const location = { file, offset: lineOffset };
+    lineOffset += Buffer.byteLength(line, 'utf8') + 1;
     if (!line.trim()) continue;
-    for (const ev of claudeTranscriptEvents(line)) {
+    for (const ev of claudeTranscriptEvents(line, location)) {
       if (ev.kind === "meta") contextTokens = ev.tokens;
       else events.push(ev);
     }
@@ -383,4 +542,4 @@ function claudeTranscriptPage(file, offset) {
 }
 
 
-module.exports = { claudeNewRun, claudeTick, claudeAgentState, claudeTranscriptPage };
+module.exports = { claudeNewRun, claudeTick, claudeAgentState, claudeTranscriptPage, lineDiff, lineDiffResult, feedToolFields, feedBlock };

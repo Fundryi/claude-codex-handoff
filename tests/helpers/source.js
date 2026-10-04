@@ -14,6 +14,8 @@ const UI_STYLES = Object.freeze([
 const UI_SCRIPTS = Object.freeze([
   "ui/js/state.js",
   "ui/js/markdown.js",
+  "ui/js/highlight.js",
+  "ui/js/content.js",
   "ui/js/feed-model.js",
   "ui/js/rows.js",
   "ui/js/workflow-model.js",
@@ -38,7 +40,7 @@ const SERVER_SOURCES = [
   ...[
     "runtime.js", "access.js", "jobs.js", "readers.js", "events.js", "usage.js",
     "sessions.js", "claude-workflows.js", "opencode.js", "claude-chats.js",
-    "discovery.js", "http.js",
+    "discovery.js", "media.js", "http.js",
   ].map((file) => "server/" + file),
 ];
 

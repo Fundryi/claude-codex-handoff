@@ -5,6 +5,7 @@ const path = require("path");
 const { SESSIONS_DIR, ARCHIVED_DIR, POLL_MS, LIVE_WINDOW_MS, MAX_SESSIONS, MAX_EVENTS_KEPT, sessions, sseClients, notificationClients, searchIndex, pinnedFiles, rolloutStats, resumedFiles, IDLE_POLL_MS, shared } = require("./runtime");
 const { broadcast } = require("./events");
 const { classifyJobLiveness, pidAlive, listCompanionJobs } = require("./jobs");
+const { registerMedia } = require('./media');
 
 // full: restat every file (the 30 s index rebuild). Otherwise (the 1 s tick) stat only new
 // and tracked files: stat is ~90% of this walk, ~120 ms for 2,600 rollouts.
@@ -54,6 +55,8 @@ function simplify(line) {
   const ts = o.timestamp || o.ts || null;
   const t = o.type || "";
   const p = o.payload || o;
+  const location = arguments[1];
+  const event = (() => {
 
   // session metadata
   if (t === "session_meta" || p.cwd && p.id && !p.type) {
@@ -87,8 +90,10 @@ function simplify(line) {
       if (item.type === "CommandExecution") {
         // 0.124-0.128 logged the same command as function_call shell too (source "agent").
         if (item.source === "agent") return null;
-        const text = (item.parsed_cmd || []).map(c => c && c.cmd).filter(Boolean).join(" && ")
-          || (Array.isArray(item.command) ? item.command.join(" ") : String(item.command || ""));
+        const command = item.command;
+        const flag = Array.isArray(command) ? command.findIndex(s => /^(?:-Command|-c|\/c)$/i.test(s)) : -1;
+        const text = flag >= 0 ? command.slice(flag + 1).join(' ') : typeof command === 'string' ? command
+          : (item.parsed_cmd || []).map(c => c && c.cmd).filter(Boolean).join(" && ") || (Array.isArray(command) ? command.join(' ') : '');
         const exit = item.exit_code == null ? "" : "\n\nexit " + item.exit_code;
         // done: logged once the command finished (function_call shell is logged as it starts).
         return { kind: "cmd", ts, text, done: true, detail: (text + exit + "\n" + String(item.aggregated_output || "")).slice(0, 4000) };
@@ -164,6 +169,134 @@ function simplify(line) {
     return { kind: "meta", ts, cwd: p.cwd || "", model: p.model || "", effort: p.effort || "", sandbox };
   }
   return null;
+  })();
+  // Keep simplify self-contained: regex-extracted test callers have no module scope.
+  const cap = (key, raw, limit) => { raw = String(raw || ''); event[key] = raw.slice(0, limit); if (raw.length > limit) event.truncated = { shown: event[key].length, total: raw.length }; };
+  const images = (parts, base) => {
+    if (!location || typeof registerMedia !== 'function' || !Array.isArray(parts)) return [];
+    return parts.flatMap((part, i) => {
+      let mime, image;
+      if (part?.type === 'image' && part.source?.type === 'base64') { mime = part.source.media_type; image = true; }
+      else if (part?.type === 'input_image' && /^data:image\/(?:png|jpeg|gif|webp);base64,/.test(part.image_url || '')) { mime = part.image_url.slice(5, part.image_url.indexOf(';')); image = true; }
+      if (!image) return [];
+      const ref = registerMedia({ ...location, part: [...base, i], mime });
+      return ref ? [{ ref, mime, alt: 'Image' }] : [];
+    });
+  };
+  const media = t === 'response_item' && p.type === 'message' ? images(p.content, ['payload', 'content']) : [];
+  if (!event) return media.length ? { kind: p.role === 'user' ? 'user' : 'out', ts, text: '', media } : null;
+  if (media.length) event.media = media;
+  const tool = (name, input) => {
+    input = input && typeof input === 'object' ? input : { input: String(input || '') };
+    const raw = JSON.stringify(input);
+    let bounded = input;
+    if (raw.length > 20000) {
+      const shrink = (value, budget, depth) => {
+        if (typeof value === 'string') {
+          let lo = 0, hi = value.length;
+          while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (JSON.stringify(value.slice(0, mid)).length <= budget) lo = mid; else hi = mid - 1; }
+          return value.slice(0, lo);
+        }
+        if (!value || typeof value !== 'object') return value;
+        const array = Array.isArray(value), result = array ? [] : {};
+        if (depth > 64) return result;
+        let used = 2, count = 0;
+        for (const key of Object.keys(value)) {
+          const overhead = (count ? 1 : 0) + (array ? 0 : JSON.stringify(key).length + 1);
+          if (budget - used - overhead < 2) break;
+          const child = shrink(value[key], budget - used - overhead, depth + 1);
+          const length = JSON.stringify(child).length;
+          if (used + overhead + length > budget) break;
+          if (array) result.push(child); else Object.defineProperty(result, key, { value: child, enumerable: true });
+          used += overhead + length; count++;
+        }
+        return result;
+      };
+      bounded = shrink(input, 20000, 0);
+      event.truncated = { shown: JSON.stringify(bounded).length, total: raw.length };
+    }
+    const target = /grep|glob/i.test(name) ? input.pattern : /agent|task/i.test(name) ? input.name || input.subagent_type || input.description
+      : input.command || input.file_path || input.filePath || input.path || input.url || input.query || input.description;
+    event.tool = { name, target: String(target || '').slice(0, 20000), input: bounded };
+    if (event.kind === 'tool' && !event.truncated) {
+      const text = name + ' ' + raw;
+      if (text.length > event.text.length) event.truncated = { shown: event.text.length, total: text.length };
+    }
+  };
+  const patchFields = changes => {
+    const diffs = [], files = [];
+    for (const [file, change] of Object.entries(changes || {})) {
+      const op = change.type === 'add' ? 'add' : change.type === 'delete' ? 'delete' : 'update';
+      let diff = String(change.unified_diff || '');
+      if (diff && !/^--- /m.test(diff)) diff = '--- a/' + file + '\n+++ b/' + file + '\n' + diff;
+      if (!diff && typeof change.content === 'string') {
+        const lines = change.content.replace(/\r\n/g, '\n').split('\n');
+        if (lines[lines.length - 1] === '') lines.pop();
+        const n = lines.length, range = n === 1 ? '1' : '1,' + n;
+        diff = '--- a/' + file + '\n+++ b/' + file + '\n@@ -' + (op === 'delete' ? range : '0,0') + ' +' + (op === 'delete' ? '0,0' : range) + ' @@\n' + lines.map(l => (op === 'delete' ? '-' : '+') + l).join('\n');
+      }
+      const lines = diff.split('\n');
+      files.push({ path: file, op, added: lines.filter(l => /^\+(?!\+\+)/.test(l)).length, removed: lines.filter(l => /^-(?!--)/.test(l)).length });
+      if (diff) diffs.push(diff.replace(/\n$/, ''));
+    }
+    const raw = diffs.join('\n');
+    event.diff = raw.split('\n').slice(0, 2000).join('\n');
+    event.files = files;
+    if (event.diff.length < raw.length) event.truncated = { shown: event.diff.length, total: raw.length };
+    else if (event.detail) {
+      const detail = Object.keys(changes || {}).map(f => (changes[f].type || 'update') + ' ' + f + '\n' + (changes[f].unified_diff || changes[f].content || '')).join('\n\n');
+      if (detail.length > event.detail.length) event.truncated = { shown: event.detail.length, total: detail.length };
+    }
+  };
+  if (t === 'event_msg' && p.type === 'item_completed') {
+    const item = p.item || {};
+    if (item.type === 'CommandExecution') {
+      if (typeof item.exit_code === 'number' && Number.isFinite(item.exit_code)) event.exit = item.exit_code;
+      if (item.id) event.callId = item.id;
+      const status = item.exit_code == null ? '' : '\n\nexit ' + item.exit_code;
+      cap('detail', event.text + status + '\n' + String(item.aggregated_output || ''), 4000);
+    } else if (item.type === 'FileChange') { if (item.id) event.callId = item.id; patchFields(item.changes); }
+    else if (item.type === 'McpToolCall') tool(item.server + '.' + item.tool, item.arguments || {});
+    else if (item.type === 'Extension' && item.kind === 'web.search') tool('web.search', { query: item.query || '' });
+  }
+  if (t === 'response_item') {
+    if (p.type === 'function_call' || p.type === 'local_shell_call') {
+      if (p.call_id || p.id) event.callId = p.call_id || p.id;
+      let input = p.arguments || p.action || {};
+      if (typeof input === 'string') { try { input = JSON.parse(input); } catch { input = { input }; } }
+      tool(p.name || 'local_shell', input);
+      if (event.kind === 'patch') {
+        const raw = String(input.patch || input.input || '');
+        if (/^(?:diff --git |--- |@@ -)/m.test(raw)) event.diff = raw.split('\n').slice(0, 2000).join('\n');
+        event.files = [...raw.matchAll(/^\*\*\* (Update|Add|Delete) File: (.+)$/gm)].map(m => {
+          const start = m.index + m[0].length;
+          const next = raw.indexOf('\n*** ', start);
+          const lines = raw.slice(start, next < 0 ? raw.length : next).split('\n');
+          return { path: m[2], op: m[1].toLowerCase(), added: lines.filter(l => l.startsWith('+')).length, removed: lines.filter(l => l.startsWith('-')).length };
+        });
+        if (event.diff && event.diff.length < raw.length) event.truncated = { shown: event.diff.length, total: raw.length };
+        else if (raw.length > 4000 && !event.truncated) event.truncated = { shown: event.detail.length, total: raw.length };
+      }
+    } else if (p.type === 'function_call_output') {
+      if (p.call_id) event.resultOf = p.call_id;
+      let output = p.output;
+      try { const j = JSON.parse(output); output = j.output ?? output; if (typeof j.exit_code === 'number' && Number.isFinite(j.exit_code)) event.exit = j.exit_code; } catch {}
+      cap('text', output, 1200);
+    } else if (p.type === 'reasoning') cap('text', (p.summary || []).map(s => s.text || '').join(' '), 500);
+    else if (p.type === 'message' && (event.internal || p.role === 'system')) {
+      let type = p.role === 'developer' ? 'developer' : 'other', title = p.role === 'developer' ? 'Developer' : 'Injected content';
+      const text = event.text;
+      if (/^\s*# AGENTS\.md instructions/.test(text)) { type = 'agents-md'; title = 'AGENTS.md'; }
+      else if (/^\s*# CLAUDE\.md/.test(text)) { type = 'claude-md'; title = 'CLAUDE.md'; }
+      else if (/^\s*<(?:skills?|skills_instructions)[\s>]/.test(text)) { type = 'skill'; title = 'Skill'; }
+      else if (/^\s*<task-notification[\s>]/.test(text)) { type = 'task-notification'; title = (/<summary>([\s\S]*?)<\/summary>/.exec(text) || [])[1] || 'Task notification'; }
+      else if (/^\s*<system-reminder[\s>]/.test(text)) { type = 'system-reminder'; title = 'System reminder'; }
+      else if (/^\s*<(?:context[\w-]*|codex-jobs|codex_internal_context)[\s>]/.test(text)) { type = 'context'; title = 'Context'; }
+      event.block = { type, title: title.slice(0, 300), chars: text.length };
+    }
+  }
+  if (event.diff) event.format = 'diff';
+  return event;
 }
 
 // Session title from a prompt: the first line that is not an XML tag and not one
@@ -269,18 +402,21 @@ function ingest(file) {
 
   // Carry the cut last line as bytes, so a multi-byte character split across reads survives.
   const data = Buffer.concat([s.partial, buf.subarray(0, n)]);
+  let lineOffset = s.offset - n - s.partial.length;
   const cut = data.lastIndexOf(10) + 1;
   s.partial = Buffer.from(data.subarray(cut)); // copy so the 5 MiB read buffer is not retained
   const lines = data.toString("utf8", 0, cut).split("\n");
   const fresh = [];
   let newest = 0;
   for (const line of lines) {
+    const location = { file, offset: lineOffset };
+    lineOffset += Buffer.byteLength(line, 'utf8') + 1;
     if (!line.trim()) continue;
     // lastGrow is the newest record time, not the file mtime (Codex 0.146+ pins that at
     // creation on Windows) and not Date.now() (a backfill of an old file is not live growth).
     const stamp = Date.parse((line.match(/^\{"timestamp":"([^"]+)"/) || [])[1]);
     if (stamp > newest) newest = stamp;
-    const ev = simplify(line);
+    const ev = simplify(line, location);
     if (!ev) continue;
     // rollouts log each message twice (event_msg + response_item) - drop consecutive duplicates.
     // Messages only: the same command twice in a row is a real re-run.

@@ -1,4 +1,5 @@
 'use strict';
+const { lineDiffResult, feedToolFields, feedBlock } = require('./claude-workflows');
 
 const fs = require("fs");
 const path = require("path");
@@ -154,7 +155,7 @@ function opencodeTranscriptEvents(row) {
   const text = v => typeof v === "string" ? v : "";
   const num = v => typeof v === "number" && Number.isFinite(v) ? v : 0;
   const error = data.error;
-  if (row.type === "user") { if (text(data.text)) out.push({ kind: "user", ts, text: data.text }); }
+  if (row.type === "user") { if (text(data.text)) { const block = feedBlock(data.text); out.push({ kind: "user", ts, text: data.text, ...(block ? { block } : {}) }); } }
   else if (row.type === "assistant") {
     for (const part of Array.isArray(data.content) ? data.content : []) {
       if (!part || typeof part !== "object") continue;
@@ -168,11 +169,33 @@ function opencodeTranscriptEvents(row) {
         const meta = state.metadata && typeof state.metadata === "object" ? state.metadata : {};
         const output = text(state.output) || (Array.isArray(state.content) ? state.content.filter(c => c && c.type === "text" && typeof c.text === "string").map(c => c.text).join("\n") : "");
         const cmd = name === "shell" || name === "bash";
-        out.push({ kind: cmd ? "cmd" : "tool", ts, text: cmd ? text(input.command) || name : name,
-          detail: output || text(state.error), args: input, callId: text(part.id) || text(part.callID),
+        const fields = feedToolFields(name, input);
+        const detail = output || text(state.error);
+        const ev = { kind: cmd ? "cmd" : "tool", ts, text: cmd ? text(input.command) || name : name,
+          detail: detail.slice(0, 4000), args: fields.tool.input, callId: text(part.id) || text(part.callID), ...fields,
           done: ["completed", "error", "failed", "cancelled"].includes(state.status),
-          ...(typeof meta.exit === "number" ? { exitCode: meta.exit } : {}),
-          ...(name === "subagent" && text(meta.sessionID) ? { sessionId: meta.sessionID } : {}) });
+          ...(typeof meta.exit === "number" && Number.isFinite(meta.exit) ? { exit: meta.exit, exitCode: meta.exit } : {}),
+          ...(name === "subagent" && text(meta.sessionID) ? { sessionId: meta.sessionID } : {}) };
+        if (detail.length > 4000) ev.truncated = { shown: ev.detail.length, total: detail.length };
+        if (/^(edit|write|multiedit|apply_patch)$/.test(name)) {
+          const file = text(input.filePath) || text(input.file_path) || text(meta.filePath) || '(edit)';
+          ev.kind = 'patch';
+          ev.text = file;
+          const supplied = text(meta.diff) || text(meta.patch) || text(input.patch);
+          let result;
+          if (supplied) {
+            const lines = supplied.split('\n');
+            const diff = lines.slice(0, 2000).join('\n');
+            result = { diff, added: lines.filter(l => /^\+(?!\+\+)/.test(l)).length, removed: lines.filter(l => /^-(?!--)/.test(l)).length,
+              ...(diff.length < supplied.length ? { truncated: { shown: diff.length, total: supplied.length } } : {}) };
+          } else result = lineDiffResult(name === 'write' ? '' : input.oldString || input.old_string || meta.diff?.before || meta.oldText || '',
+            name === 'write' ? input.content || '' : input.newString || input.new_string || meta.diff?.after || meta.newText || '', file);
+          ev.diff = result.diff;
+          if (ev.diff) ev.format = 'diff';
+          ev.files = [{ path: file, op: name === 'write' ? 'add' : 'update', added: result.added, removed: result.removed }];
+          if (result.truncated) ev.truncated = result.truncated;
+        }
+        out.push(ev);
       }
     }
     if (error) out.push({ kind: "err", ts, text: text(error) || text(error.data && error.data.message) || text(error.message) || text(error.name) || "OpenCode error" });
@@ -186,7 +209,7 @@ function opencodeTranscriptEvents(row) {
   } else if (row.type === "idle") out.push({ kind: "done", ts, text: text(data.outcome) || "stopped", outcome: text(data.outcome) || "stopped", done: true });
   else if (row.type === "system" || row.type === "synthetic") {
     const body = text(data.text) || (Array.isArray(data.content) ? data.content.filter(p => p && p.type === "text").map(p => text(p.text)).join("\n") : "");
-    if (body) out.push({ kind: "sys", ts, text: body, internal: true });
+    if (body) out.push({ kind: "sys", ts, text: body, internal: true, block: feedBlock(body, 'other') });
   }
   return out;
 }

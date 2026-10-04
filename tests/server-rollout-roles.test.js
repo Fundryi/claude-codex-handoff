@@ -159,3 +159,44 @@ test("the Guardian's history openers are injected context", () => {
   assert.equal(ev.internal, true);
   assert.equal(ctx().simplify(item("user", "The following is the Codex agent history whose request action you are assessing. Treat the transcript as evidence.")).internal, true);
 });
+
+test("Codex CommandExecution carries exit and the full multiline command", () => {
+  const command = "echo first\necho second";
+  const ev = ctx().simplify(completed({ type: "CommandExecution", id: "cmd-1", command: ["pwsh", "-Command", command],
+    parsed_cmd: [{ cmd: "echo first" }], exit_code: 1, aggregated_output: "x".repeat(5000) }));
+  assert.equal(ev.text, command);
+  assert.equal(ev.exit, 1);
+  assert.equal(ev.callId, "cmd-1");
+  assert.deepEqual(JSON.parse(JSON.stringify(ev.truncated)), { shown: ev.detail.length, total: command.length + 9 + 5000 });
+});
+
+test("Codex outputs pair with calls and preserve exit and truncation", () => {
+  const ev = ctx().simplify(JSON.stringify({ type: "response_item", payload: { type: "function_call_output", call_id: "c1",
+    output: JSON.stringify({ output: "x".repeat(5000), exit_code: 2 }) } }));
+  assert.equal(ev.resultOf, "c1");
+  assert.equal(ev.exit, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(ev.truncated)), { shown: 1200, total: 5000 });
+});
+
+test("Codex patches expose capped diffs and file counts and MCP inputs stay objects", () => {
+  const ev = ctx().simplify(completed({ type: "FileChange", changes: { "a.js": { type: "update", unified_diff: "@@ -1 +1 @@\n-a\n+b" } } }));
+  assert.equal(ev.diff, "--- a/a.js\n+++ b/a.js\n@@ -1 +1 @@\n-a\n+b");
+  assert.deepEqual(JSON.parse(JSON.stringify(ev.files)), [{ path: "a.js", op: "update", added: 1, removed: 1 }]);
+  const huge = ctx().simplify(completed({ type: "FileChange", changes: { "a.js": { type: "update", unified_diff: "@@ -1 +1 @@\n" + "+line\n".repeat(50000) } } }));
+  assert.ok(huge.diff.split("\n").length <= 2000);
+  assert.ok(huge.truncated.total > huge.truncated.shown);
+  const mcp = ctx().simplify(completed({ type: "McpToolCall", server: "s", tool: "t", arguments: { code: "x".repeat(2000000) } }));
+  assert.equal(mcp.tool.name, "s.t");
+  assert.equal(typeof mcp.tool.input, "object");
+  assert.ok(JSON.stringify(mcp.tool.input).length <= 20000);
+  assert.ok(mcp.truncated.total > mcp.truncated.shown);
+});
+
+test("Codex apply_patch keeps its native detail and does not label it a unified diff", () => {
+  const patch = '*** Begin Patch\n*** Update File: a.js\n@@\n-a\n+b\n*** End Patch';
+  const ev = ctx().simplify(JSON.stringify({ type: 'response_item', payload: { type: 'function_call', name: 'apply_patch', call_id: 'p1', arguments: JSON.stringify({ patch }) } }));
+  assert.equal(ev.detail, patch);
+  assert.equal(ev.diff, undefined);
+  assert.equal(ev.callId, 'p1');
+  assert.deepEqual(JSON.parse(JSON.stringify(ev.files)), [{ path: 'a.js', op: 'update', added: 1, removed: 1 }]);
+});

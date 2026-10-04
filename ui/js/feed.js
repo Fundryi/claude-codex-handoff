@@ -76,7 +76,7 @@
         more.className = 'msg-more';
         more.dataset.key = key + '|full';
         var moreSummary = document.createElement('summary');
-        moreSummary.textContent = firstLine(body, 200) + '  ·  show full message (' + body.split('\n').length + ' lines)';
+        moreSummary.textContent = stripMarkdown(body) + '  ·  show full message (' + body.split('\n').length + ' lines)';
         more.append(moreSummary, markdownBody(markdown));
         card.appendChild(more);
       } else if (body.trim()) {

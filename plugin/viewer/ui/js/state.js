@@ -170,7 +170,7 @@
       catch (_) { return ''; }
     }
     function firstLine(text, limit) {
-      var value = String(text || '').replace(/\s+/g, ' ').trim();
+      // Legacy view-model checks also extract this helper on its own.
+      var value = typeof stripMarkdown === 'function' ? stripMarkdown(text) : String(text || '').replace(/\s+/g, ' ').trim();
       return value.length > limit ? value.slice(0, limit - 1) + '\u2026' : value;
     }
-

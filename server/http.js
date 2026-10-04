@@ -14,6 +14,7 @@ const { claudeDiscover } = require("./discovery");
 const { claudeAgentLiveState, claudeChatState, claudeChatsTick } = require("./claude-chats");
 const { opencodeChatsTick, opencodeTranscriptPage } = require("./opencode");
 const { refreshCodexLimits } = require("./usage");
+const { readMedia } = require("./media");
 
 function readJsonBody(req, cb) {
   let body = "";
@@ -47,6 +48,8 @@ const UI_ASSET_FILES = new Map([
   ["/ui/responsive.css", ["ui/responsive.css", "text/css; charset=utf-8"]],
   ["/ui/js/state.js", ["ui/js/state.js", "text/javascript; charset=utf-8"]],
   ["/ui/js/markdown.js", ["ui/js/markdown.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/highlight.js", ["ui/js/highlight.js", "text/javascript; charset=utf-8"]],
+  ["/ui/js/content.js", ["ui/js/content.js", "text/javascript; charset=utf-8"]],
   ["/ui/js/feed-model.js", ["ui/js/feed-model.js", "text/javascript; charset=utf-8"]],
   ["/ui/js/rows.js", ["ui/js/rows.js", "text/javascript; charset=utf-8"]],
   ["/ui/js/workflow-model.js", ["ui/js/workflow-model.js", "text/javascript; charset=utf-8"]],
@@ -104,6 +107,14 @@ function handleRequest(req, res) {
       version: APP_VERSION,
       notificationListener: notificationClients.size > 0,
     }));
+  } else if (req.url === '/media' || req.url.startsWith('/media?')) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); return res.end('GET or HEAD only'); }
+    if (!trustedControlOrigin(req)) return refuseUntrusted(req, res);
+    const ref = new URL(req.url, 'http://localhost').searchParams.get('ref');
+    const media = readMedia(ref);
+    if (!media) { res.writeHead(404, { 'Cache-Control': 'no-store' }); return res.end(); }
+    res.writeHead(200, { 'Content-Type': media.mime, 'Content-Length': media.bytes.length, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
+    res.end(req.method === 'HEAD' ? undefined : media.bytes);
   } else if (asset) {
     if (req.method !== "GET" && req.method !== "HEAD") {
       res.writeHead(405, { Allow: "GET, HEAD" });

@@ -82,7 +82,7 @@ test("splitReturnFormat splits the plugin footer off a handoff prompt", () => {
 test("promptMarkdown turns tag-only lines into section headings, but not inside code or mid-line", () => {
   const { promptMarkdown, parseMarkdown } = lib();
   const blocks = parseMarkdown(promptMarkdown("<goal>\nPick a name\n</goal>\n<done_when>\nTests pass\n</done_when>"));
-  assert.deepEqual(plain(blocks.map((b) => [b.type, b.inline[0].text])), [["heading", "Goal"], ["paragraph", "Pick a name"], ["heading", "Done when"], ["paragraph", "Tests pass"]]);
+  assert.deepEqual(plain(blocks.map((b) => [b.type, b.inline[0].text])), [["heading", "Goal"], ["p", "Pick a name"], ["heading", "Done when"], ["p", "Tests pass"]]);
   assert.equal(promptMarkdown("```xml\n<goal>\n```"), "```xml\n<goal>\n```");
   assert.equal(promptMarkdown("Keep <goal> as written"), "Keep <goal> as written");
 });

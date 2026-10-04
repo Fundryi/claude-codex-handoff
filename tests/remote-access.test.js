@@ -7,6 +7,37 @@ const crypto = require("node:crypto");
 
 const source = require("./helpers/source.js").serverSource();
 
+test("media tokens reread only registered line parts, enforce limits and expire oldest", () => {
+  const mediaPath = path.join(__dirname, "../server/media.js");
+  assert.ok(fs.existsSync(mediaPath), "server/media.js exists");
+  const { registerMedia, readMedia } = require(mediaPath);
+  const os = require("node:os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clv-media-"));
+  try {
+    const file = path.join(dir, "transcript.jsonl");
+    const prefix = JSON.stringify({ text: "é😀" }) + "\n";
+    const image = (mime, data) => ({ type: "image", source: { type: "base64", media_type: mime, data } });
+    const bytes = Buffer.from("iVBORw0KGgo=", "base64");
+    const write = part => fs.writeFileSync(file, prefix + JSON.stringify({ message: { content: [part] } }) + "\n");
+    write(image("image/png", bytes.toString("base64")));
+    const location = { file, offset: Buffer.byteLength(prefix), part: ["message", "content", 0], mime: "image/png" };
+    const first = registerMedia(location);
+    assert.match(first, /^[0-9a-f]{24}$/);
+    assert.equal(registerMedia(location), first, "stable across transcript refreshes");
+    assert.deepEqual(readMedia(first), { mime: "image/png", bytes });
+    for (const bad of ["../transcript.jsonl", file, "0".repeat(24), null]) assert.equal(readMedia(bad), null);
+    write(image("text/html", bytes.toString("base64")));
+    assert.equal(readMedia(first), null);
+    write(image("image/png", Buffer.alloc(10 * 1024 * 1024 + 1).toString("base64")));
+    assert.equal(readMedia(first), null);
+    write(image("image/png", "not base64!"));
+    assert.equal(readMedia(first), null);
+    write(image("image/png", bytes.toString("base64")));
+    for (let i = 0; i < 500; i++) registerMedia({ ...location, part: ["message", "content", i + 1] });
+    assert.equal(readMedia(first), null, "oldest entry expires at 500 entries");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 function extract(name, context = {}) {
   const src = source.match(new RegExp("function " + name + "[\\s\\S]*?\\n}"))[0];
   vm.runInNewContext(src, context);
@@ -185,19 +216,17 @@ test("serve: fixed UI assets and guarded control routes, with no side effects", 
   const http = require("node:http");
   const net = require("node:net");
   const os = require("node:os");
-  const { spawn } = require("node:child_process");
+  const { spawn, spawnSync } = require("node:child_process");
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "clv-guard-"));
   const codexHome = path.join(home, "codex");
   fs.mkdirSync(path.join(codexHome, "sessions"), { recursive: true });
   const stateRoot = path.join(home, "state");
   const opencodeDb = path.join(home, "opencode", "opencode.db");
   fs.mkdirSync(path.dirname(opencodeDb)); // absent DB, never the owner's OpenCode data
-  const port = await new Promise((resolve) => {
-    const probe = net.createServer().listen(0, "127.0.0.1", () => {
-      const p = probe.address().port;
-      probe.close(() => resolve(p));
-    });
-  });
+  const port = 8399;
+  const status = spawnSync(process.execPath, [path.join(__dirname, "..", "ai-live-viewer.js"), "status"],
+    { env: { ...process.env, CODEX_VIEWER_PORT: String(port) }, encoding: "utf8" });
+  assert.match(status.stdout, /not running/i, "8399 status must say not running before start");
   // One fake Claude workflow run (real 2.1.284 line shapes), written before the viewer starts.
   const runDir = path.join(home, "claude", "projects", "p", "s1", "subagents", "workflows", "wf_test-001");
   fs.mkdirSync(runDir, { recursive: true });
@@ -335,6 +364,37 @@ test("serve: fixed UI assets and guarded control routes, with no side effects", 
     assert.equal(await call("GET", "/claude/transcript?chat=../../x"), 404);
     assert.equal(await call("GET", "/claude/transcript?chat=" + chatId + "&agent=../../x"), 404);
     assert.equal(await call("GET", "/claude/transcript?chat=" + chatId + "&agent=a0123456789abcdee"), 404, "agent file missing");
+
+    // Image pointers must carry byte offsets, including non-ASCII preceding lines.
+    const imageBytes = Buffer.from("iVBORw0KGgo=", "base64");
+    fs.appendFileSync(path.join(home, "claude", "projects", "p", chatId + ".jsonl"),
+      cline({ type: "user", message: { content: "é😀" } }) +
+      cline({ type: "user", message: { content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: imageBytes.toString("base64") } }] } }) +
+      cline({ type: "assistant", message: { content: [{ type: "tool_use", name: "Edit", input: { file_path: "a.js", old_string: "a", new_string: "b" } }] } }));
+    const imagePage = await getJson("/claude/transcript?chat=" + chatId);
+    const mediaEvent = imagePage.body.events.find(e => e.media);
+    assert.ok(mediaEvent, "transcript exposes media without base64");
+    assert.match(imagePage.body.events.find(e => e.diff).diff, /-a\n\+b/);
+    const mediaUrl = "/media?ref=" + mediaEvent.media[0].ref;
+    assert.equal(await call("GET", mediaUrl, evil), 403);
+    assert.equal(await call("GET", mediaUrl, { Host: "rebind.attacker.com" }), 403);
+    assert.equal(await call("POST", mediaUrl, trusted), 405);
+    for (const ref of ["unknown", "../a.js", "D:/x/a.js"]) assert.equal(await call("GET", "/media?ref=" + ref), 404);
+    for (const method of ["GET", "HEAD"]) {
+      const response = await assetRequest(method, mediaUrl);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers["content-type"], "image/png");
+      assert.equal(response.headers["x-content-type-options"], "nosniff");
+      assert.equal(response.headers["cache-control"], "no-store");
+      assert.deepEqual(response.body, method === "HEAD" ? Buffer.alloc(0) : imageBytes);
+    }
+    const chatFile = path.join(home, 'claude', 'projects', 'p', chatId + '.jsonl');
+    const goodTranscript = fs.readFileSync(chatFile, 'utf8');
+    fs.writeFileSync(chatFile, goodTranscript.replace('"media_type":"image/png"', '"media_type":"text/html"'));
+    assert.equal(await call('GET', mediaUrl), 404, 'registered token cannot serve a changed MIME');
+    fs.writeFileSync(chatFile, goodTranscript.replace(imageBytes.toString('base64'), Buffer.alloc(10 * 1024 * 1024 + 1).toString('base64')));
+    assert.equal(await call('GET', mediaUrl), 404, 'registered token cannot serve more than 10 MB');
+    fs.writeFileSync(chatFile, goodTranscript);
 
     // /notify: only the companion's own request (loopback, no Origin, no proxy headers).
     const job = JSON.stringify({ jobId: "j" });

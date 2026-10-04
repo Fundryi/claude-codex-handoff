@@ -7,6 +7,139 @@ const vm = require("node:vm");
 const src = serverSource();
 const simplifySrc = src.match(/function simplify\(line\) \{[\s\S]*?\n\}/)[0];
 
+const plain = value => JSON.parse(JSON.stringify(value));
+function adapterContext() {
+  const c = { fs: require("node:fs"), Buffer };
+  const mediaFile = path.join(__dirname, "../server/media.js");
+  if (c.fs.existsSync(mediaFile)) Object.assign(c, require(mediaFile));
+  for (const name of ["feedToolFields", "feedBlock", "lineDiffResult", "lineDiff", "claudeTranscriptEvents", "claudeTranscriptPage", "opencodeTranscriptEvents"]) {
+    const match = src.match(new RegExp("function " + name + "\\([\\s\\S]*?\\n\\}"));
+    if (match) vm.runInNewContext(match[0], c);
+  }
+  return c;
+}
+
+test("Claude Edit becomes a patch with a unified diff and file counts", () => {
+  const ev = adapterContext().claudeTranscriptEvents(JSON.stringify({ type: "assistant", message: { content: [
+    { type: "tool_use", id: "t1", name: "Edit", input: { file_path: "D:/x/a.js", old_string: "let a = 1;\n", new_string: "let a = 2;\n" } }] } }))[0];
+  assert.match(ev.diff, /^--- a\/D:\/x\/a\.js\n\+\+\+ b\/D:\/x\/a\.js\n@@ -1 \+1 @@\n-let a = 1;\n\+let a = 2;/);
+  assert.deepEqual(plain(ev.files), [{ path: "D:/x/a.js", op: "update", added: 1, removed: 1 }]);
+});
+
+test("Claude tools carry parsed capped input and targets while Bash keeps its command", () => {
+  const c = adapterContext();
+  const events = c.claudeTranscriptEvents(JSON.stringify({ type: "assistant", message: { content: [
+    { type: "tool_use", id: "t2", name: "Grep", input: { pattern: "foo", path: "D:/x" } },
+    { type: "tool_use", id: "t3", name: "Bash", input: { command: "npm test\necho done" } },
+    { type: "tool_use", name: "Agent", input: { name: "scout", prompt: "x".repeat(2000000) } }] } }));
+  assert.deepEqual(plain(events[0].tool), { name: "Grep", target: "foo", input: { pattern: "foo", path: "D:/x" } });
+  assert.equal(events[1].text, "npm test\necho done");
+  assert.equal(events[1].callId, "t3");
+  assert.equal(events[2].tool.target, "scout");
+  assert.ok(JSON.stringify(events[2].tool.input).length <= 20000);
+  assert.ok(events[2].truncated.total > events[2].truncated.shown);
+});
+
+test("Claude results register images and explain truncation without sending base64", () => {
+  const events = adapterContext().claudeTranscriptEvents(JSON.stringify({ type: "user", message: { content: [
+    { type: "tool_result", tool_use_id: "t1", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } }] },
+    { type: "tool_result", tool_use_id: "t2", content: "x".repeat(5000) }] } }), { file: "F", offset: 0 });
+  assert.equal(events[0].media[0].mime, "image/png");
+  assert.match(events[0].media[0].ref, /^[0-9a-f]{24}$/);
+  assert.ok(!JSON.stringify(events).includes("iVBOR"));
+  assert.deepEqual(plain(events[1].truncated), { shown: events[1].text.length, total: 5000 });
+});
+
+test("injected Claude and Codex blocks are typed and handoff sections stay speech", () => {
+  const c = adapterContext();
+  const event = text => c.claudeTranscriptEvents(JSON.stringify({ type: "user", message: { content: text } }))[0];
+  const note = event("<task-notification>\n<status>completed</status>\n<summary>Done</summary>\n</task-notification>");
+  assert.equal(note.block.type, "task-notification");
+  assert.equal(note.block.title, "Done");
+  for (const [body, type] of [["[Workflow harness] scout", "harness"], ["# AGENTS.md instructions\nx", "agents-md"], ["<system-reminder>x</system-reminder>", "system-reminder"], ["<context_window_protection>x</context_window_protection>", "context"]]) {
+    assert.equal(event(body).block.type, type);
+    assert.equal(event(body).block.chars, body.length);
+  }
+  assert.equal(event("<goal>Do work</goal>").block, undefined);
+  const codex = ctx().simplify(JSON.stringify({ type: "response_item", payload: { type: "message", role: "developer", content: [{ text: "Rules" }] } }));
+  assert.deepEqual(plain(codex.block), { type: "developer", title: "Developer", chars: 5 });
+});
+
+test("lineDiff uses three context lines, correct hunk ranges and bounded output", () => {
+  const c = adapterContext();
+  const old = Array.from({ length: 20 }, (_, i) => "line" + i).join("\n");
+  const diff = c.lineDiff(old, old.replace("line8", "changed"), "a.js");
+  assert.match(diff, /@@ -6,7 \+6,7 @@\n line5\n line6\n line7\n-line8\n\+changed\n line9\n line10\n line11/);
+  assert.equal(c.lineDiff("same", "same", "a.js"), "");
+  assert.match(c.lineDiff("", "a\nb\n", "a.js"), /@@ -0,0 \+1,2 @@\n\+a\n\+b/);
+  const result = c.lineDiffResult("", "x\n".repeat(50000), "a.js");
+  assert.ok(result.diff.split("\n").length <= 2000);
+  assert.equal(result.added, 50000);
+  assert.ok(result.truncated.total > result.truncated.shown);
+});
+
+test("Claude Write and MultiEdit expose all-added and per-edit changes", () => {
+  const events = adapterContext().claudeTranscriptEvents(JSON.stringify({ type: "assistant", message: { content: [
+    { type: "tool_use", name: "Write", input: { file_path: "a.js", content: "a\nb\n" } },
+    { type: "tool_use", name: "MultiEdit", input: { file_path: "a.js", edits: [{ old_string: "a", new_string: "b" }, { old_string: "c", new_string: "d" }] } }] } }));
+  assert.deepEqual(plain(events[0].files), [{ path: "a.js", op: "add", added: 2, removed: 0 }]);
+  assert.match(events[1].diff, /-a\n\+b/);
+  assert.match(events[1].diff, /-c\n\+d/);
+  assert.equal(events[1].files[0].removed, 2);
+});
+
+test("OpenCode tools expose targets, diffs, exit and capped inputs", () => {
+  const events = adapterContext().opencodeTranscriptEvents({ type: "assistant", data: { content: [
+    { type: "tool", name: "read", state: { input: { filePath: "a.js" } } },
+    { type: "tool", name: "edit", state: { input: { filePath: "a.js", oldString: "a", newString: "b" } } },
+    { type: "tool", name: "bash", state: { input: { command: "false\necho done" }, metadata: { exit: 1 }, output: "failed" } },
+    { type: "tool", name: "agent", state: { input: { name: "scout", prompt: "x".repeat(2000000) } } }] } });
+  assert.equal(events[0].tool.target, "a.js");
+  assert.equal(events[1].kind, "patch");
+  assert.match(events[1].diff, /-a\n\+b/);
+  assert.equal(events[2].kind, "cmd");
+  assert.equal(events[2].exit, 1);
+  assert.equal(events[2].text, "false\necho done");
+  assert.ok(JSON.stringify(events[3].tool.input).length <= 20000);
+  assert.ok(events[3].truncated.total > events[3].truncated.shown);
+});
+
+test("capped tool inputs retain nested object and array types on every adapter", () => {
+  const input = { queries: [{ pattern: 'foo', context: 'x'.repeat(2000000) }], later: 1 };
+  const c = adapterContext();
+  const claude = c.claudeTranscriptEvents(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Search', input }] } }))[0];
+  const codex = ctx().simplify(JSON.stringify({ type: 'response_item', payload: { type: 'function_call', name: 'search', arguments: JSON.stringify(input) } }));
+  const opencode = c.opencodeTranscriptEvents({ type: 'assistant', data: { content: [{ type: 'tool', name: 'search', state: { input } }] } })[0];
+  for (const ev of [claude, codex, opencode]) {
+    assert.ok(Array.isArray(ev.tool.input.queries));
+    assert.equal(ev.tool.input.queries[0].pattern, 'foo');
+    assert.equal(typeof ev.tool.input.queries[0].context, 'string');
+    assert.ok(JSON.stringify(ev.tool.input).length <= 20000);
+    assert.ok(ev.truncated.total > ev.truncated.shown);
+  }
+});
+
+test("OpenCode edits accept metadata before/after and supplied patch shapes", () => {
+  const ev = adapterContext().opencodeTranscriptEvents({ type: 'assistant', data: { content: [{ type: 'tool', name: 'edit',
+    state: { input: { filePath: 'a.js' }, metadata: { diff: { before: 'a\n', after: 'b\n', file: 'a.js' } } } }] } })[0];
+  assert.match(ev.diff, /-a\n\+b/);
+});
+
+test("adapter preview cuts carry character counts even below the tool input and diff caps", () => {
+  const c = adapterContext();
+  const claude = c.claudeTranscriptEvents(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Search', input: { query: 'x'.repeat(1000) } }] } }))[0];
+  const codex = ctx().simplify(JSON.stringify({ type: 'response_item', payload: { type: 'function_call', name: 'search', arguments: JSON.stringify({ query: 'x'.repeat(1000) }) } }));
+  for (const ev of [claude, codex]) {
+    assert.ok(ev.truncated);
+    assert.equal(ev.truncated.shown, ev.text.length);
+    assert.ok(ev.truncated.total > ev.text.length);
+  }
+  const patch = ctx().simplify(JSON.stringify({ type: 'event_msg', payload: { type: 'item_completed', item: {
+    type: 'FileChange', changes: { 'a.js': { type: 'update', unified_diff: '@@ -1 +1 @@\n-a\n+' + 'x'.repeat(5000) } } } } }));
+  assert.equal(patch.truncated.shown, patch.detail.length);
+  assert.ok(patch.truncated.total > patch.detail.length);
+});
+
 test("Codex patch previews keep file basenames before the preview length limit", () => {
   const c = { path, Date, LIVE_WINDOW_MS: 20000, ARCHIVED_DIR: "Z:\\archived" };
   vm.runInNewContext(src.match(/function sessionSummary[\s\S]*?\n\}/)[0], c);
@@ -34,7 +167,7 @@ test("OpenCode running step uses only the newest tool and a short safe input sum
 test("OpenCode rows preserve messages, tool output and finish while ignoring unknown data", () => {
   const parser = src.match(/function opencodeTranscriptEvents\(row\) \{[\s\S]*?\n\}/);
   assert.ok(parser, "OpenCode row parser exists");
-  const c = {};
+  const c = adapterContext();
   vm.runInNewContext(parser[0], c);
   const row = (type, data) => ({ type, seq: 3, time_created: 1700000000000, data: JSON.stringify(data) });
   const events = c.opencodeTranscriptEvents;
@@ -120,7 +253,7 @@ test("token_count events surface running token totals", () => {
 
 // Claude workflow parsers. Fixtures are trimmed real lines from ~/.claude/projects run files
 // (Claude Code 2.1.284 and 2.1.210), with prompts, paths and signatures redacted.
-function fn(name) { const c = {}; vm.runInNewContext(src.match(new RegExp("\\nfunction " + name + "\\([\\s\\S]*?\\n\\}"))[0], c); return c[name]; }
+function fn(name) { const c = adapterContext(); vm.runInNewContext(src.match(new RegExp("\\nfunction " + name + "\\([\\s\\S]*?\\n\\}"))[0], c); return c[name]; }
 
 test("Claude journal: 2.1.284 and 2.1.210 lines, unknown types skipped, result text never kept", () => {
   const entry = fn("claudeJournalEntry");
@@ -179,13 +312,15 @@ test("Claude script meta: name, description and phase titles read as text, never
 });
 
 test("Claude transcript lines become feed events", () => {
-  const events = (o) => Array.from(fn("claudeTranscriptEvents")(typeof o === "string" ? o : JSON.stringify(o)), (e) => ({ ...e }));
+  const events = (o) => plain(fn("claudeTranscriptEvents")(typeof o === "string" ? o : JSON.stringify(o)));
   const base = { isSidechain: true, agentId: "a7beb7a64a116bddb", timestamp: "2026-09-30T17:42:08.361Z", cwd: "D:/redacted", sessionId: "354f362e" };
   const user = (content, extra = {}) => ({ ...base, type: "user", message: { role: "user", content }, ...extra });
   const usage = { input_tokens: 2, cache_creation_input_tokens: 59403, cache_read_input_tokens: 21837, output_tokens: 8 };
   const asst = (block) => ({ ...base, type: "assistant", message: { model: "claude-opus-5-5", role: "assistant", content: [block], usage } });
 
-  assert.deepEqual(events(user("[Workflow harness — user request] redacted")), [{ kind: "user", ts: base.timestamp, text: "[Workflow harness — user request] redacted" }]);
+  const harness = "[Workflow harness — user request] redacted";
+  assert.deepEqual(events(user(harness)), [{ kind: "user", ts: base.timestamp, text: harness,
+    block: { type: "harness", title: "Workflow harness", chars: harness.length } }]);
   assert.equal(events(user("<system-reminder>\nredacted\n</system-reminder>"))[0].internal, true);
   assert.equal(events(user("plain", { isMeta: true }))[0].internal, true);
   assert.equal(events(user("<command-name>/x</command-name>"))[0].internal, true);

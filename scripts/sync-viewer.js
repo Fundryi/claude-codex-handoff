@@ -11,7 +11,7 @@ const requiredUi = [
   'index.html',
   'theme.css', 'layout.css', 'marks.css', 'surfaces.css', 'feed.css', 'responsive.css',
   ...[
-    'state.js', 'markdown.js', 'feed-model.js', 'rows.js', 'workflow-model.js',
+    'state.js', 'markdown.js', 'highlight.js', 'content.js', 'feed-model.js', 'rows.js', 'workflow-model.js',
     'tree-model.js', 'navigation.js', 'tree.js', 'header.js', 'marks.js',
     'plans.js', 'node-header.js', 'feed.js', 'overview.js', 'pages.js',
     'workflows.js', 'jobs.js', 'controls.js', 'boot.js',
@@ -79,7 +79,7 @@ const serverFiles = treeFiles(serverRoot);
 for (const name of [
   'runtime.js', 'access.js', 'jobs.js', 'readers.js', 'events.js', 'usage.js',
   'sessions.js', 'claude-workflows.js', 'opencode.js', 'claude-chats.js',
-  'discovery.js', 'http.js',
+  'discovery.js', 'media.js', 'http.js',
 ]) regularFile(path.join(serverRoot, name));
 sources.push(...serverFiles.map(file => path.relative(root, file)));
 
