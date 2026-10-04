@@ -93,9 +93,10 @@
       if (row) row.focus({ preventScroll: true });
     }
 
-    // Two transcript slots, each polled from /claude/transcript (never on /events): 'main' for the open
-    // chat, 'panel' for the open agent. Each poll waits for the one before; a reply for a transcript no
-    // longer open is dropped. New lines come by byte offset, so a quiet transcript costs one stat per poll.
+    // Two transcript slots (never on /events): 'main' for an open Claude or OpenCode chat, 'panel' for an open
+    // Claude agent. Claude polls /claude/transcript by byte offset, so a quiet transcript costs one stat per poll;
+    // OpenCode polls /opencode/transcript by seq and re-reads its last row. Each poll waits for the one before;
+    // a reply for a transcript no longer open is dropped.
     var transcripts = { main: newClaudeFeed(''), panel: newClaudeFeed('') };
     var transcriptTimers = { main: 0, panel: 0 };
     function transcriptUrl(slot) {
@@ -216,9 +217,9 @@
         blocks.forEach(function (block, index) {
           // The block being worked on right now starts open; older ones start collapsed.
           if (block.work) fragment.appendChild(createWorkBlock(block, target.running && index === blocks.length - 1, block.actor, renderKey));
-          else if (block.actor === 'system') fragment.appendChild(createSystemGroup(block.event, block.key));
+          else if (block.actor === 'system') fragment.appendChild(createSystemGroup(block.event, renderKey + '|' + block.key));
           else if (block.actor === 'status') fragment.appendChild(createMarker(block.event));
-          else fragment.appendChild(createMessage(block.event, block.actor, block.key, session));
+          else fragment.appendChild(createMessage(block.event, block.actor, renderKey + '|' + block.key, session));
         });
         if (target.running) {
           var working = document.createElement('div');

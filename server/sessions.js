@@ -188,8 +188,17 @@ function simplify(line) {
   if (media.length) event.media = media;
   const tool = (name, input) => {
     input = input && typeof input === 'object' ? input : { input: String(input || '') };
-    const raw = JSON.stringify(input);
-    let bounded = input;
+    // Bound nesting before stringify enters it; parsed JSON can exceed its stack limit.
+    const depths = new WeakMap();
+    let depthCut = false;
+    const raw = JSON.stringify(input, function (key, value) {
+      if (!value || typeof value !== 'object') return value;
+      const depth = (depths.get(this) ?? -1) + 1;
+      if (depth > 64) { depthCut = true; return Array.isArray(value) ? [] : {}; }
+      depths.set(value, depth);
+      return value;
+    });
+    let bounded = depthCut ? JSON.parse(raw) : input;
     if (raw.length > 20000) {
       const shrink = (value, budget, depth) => {
         if (typeof value === 'string') {
@@ -212,7 +221,7 @@ function simplify(line) {
         }
         return result;
       };
-      bounded = shrink(input, 20000, 0);
+      bounded = shrink(bounded, 20000, 0);
       event.truncated = { shown: JSON.stringify(bounded).length, total: raw.length };
     }
     const target = /grep|glob/i.test(name) ? input.pattern : /agent|task/i.test(name) ? input.name || input.subagent_type || input.description
@@ -236,7 +245,16 @@ function simplify(line) {
         diff = '--- a/' + file + '\n+++ b/' + file + '\n@@ -' + (op === 'delete' ? range : '0,0') + ' +' + (op === 'delete' ? '0,0' : range) + ' @@\n' + lines.map(l => (op === 'delete' ? '-' : '+') + l).join('\n');
       }
       const lines = diff.split('\n');
-      files.push({ path: file, op, added: lines.filter(l => /^\+(?!\+\+)/.test(l)).length, removed: lines.filter(l => /^-(?!--)/.test(l)).length });
+      let added = 0, removed = 0, oldLeft = 0, newLeft = 0;
+      for (const line of lines) {
+        const hunk = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(line);
+        if (hunk) { oldLeft = hunk[1] === undefined ? 1 : +hunk[1]; newLeft = hunk[2] === undefined ? 1 : +hunk[2]; }
+        else if (line.startsWith('diff --git ')) { oldLeft = 0; newLeft = 0; }
+        else if (line[0] === '+' && newLeft > 0) { added++; newLeft--; }
+        else if (line[0] === '-' && oldLeft > 0) { removed++; oldLeft--; }
+        else if (line[0] === ' ' && (oldLeft > 0 || newLeft > 0)) { oldLeft--; newLeft--; }
+      }
+      files.push({ path: file, op, added, removed });
       if (diff) diffs.push(diff.replace(/\n$/, ''));
     }
     const raw = diffs.join('\n');
@@ -416,7 +434,8 @@ function ingest(file) {
     // creation on Windows) and not Date.now() (a backfill of an old file is not live growth).
     const stamp = Date.parse((line.match(/^\{"timestamp":"([^"]+)"/) || [])[1]);
     if (stamp > newest) newest = stamp;
-    const ev = simplify(line, location);
+    let ev;
+    try { ev = simplify(line, location); } catch { continue; } // one malformed event cannot discard the rest of this read
     if (!ev) continue;
     // rollouts log each message twice (event_msg + response_item) - drop consecutive duplicates.
     // Messages only: the same command twice in a row is a real re-run.

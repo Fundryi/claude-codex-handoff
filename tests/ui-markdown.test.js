@@ -61,6 +61,19 @@ function inlineText(tokens) {
   return tokens.map((token) => token.type === "br" ? " " : token.children ? inlineText(token.children) : token.text).join("");
 }
 
+test("deep JSON and Markdown nesting render as complete plain text", () => {
+  const doc = fakeDoc();
+  for (const [text, render] of [
+    ['['.repeat(4000) + '0' + ']'.repeat(4000), text => lib.renderContent(text, undefined, {}, doc)],
+    ['>'.repeat(3000) + ' x', text => lib.renderMarkdown(text, doc, {})],
+  ]) {
+    let node;
+    assert.doesNotThrow(() => { node = render(text); });
+    assert.equal(flatten(node), text);
+    assert.ok(collectNodes(node).some(n => n.tag === 'pre'));
+  }
+});
+
 test("GFM table with alignment parses to a table block", () => {
   const blocks = plain(lib.parseMarkdown("| File | Lines |\n|---|---:|\n| ui/index.html | 159 |\n| ui/theme.css | 62 |"));
   assert.equal(blocks.length, 1);

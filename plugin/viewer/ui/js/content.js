@@ -36,23 +36,41 @@
       if (hint) return hint;
       text = String(text || '');
       if (text.indexOf('\u001b[') !== -1 || text.indexOf('\u009b') !== -1) return 'ansi';
-      var lines = /[^\r\n]+/g, match, count = 0, diffLines = 0, hasDiff = false;
+      var lines = /[^\r\n]+/g, match, count = 0, diffLines = 0, hasDiff = false, markdown = false, previous = '';
       while ((match = lines.exec(text))) {
         var line = match[0];
         if (!line.trim()) continue;
         count++;
         if (/^(?:diff --git |@@|---|\+\+\+|[+\- ])/.test(line)) diffLines++;
         if (/^(?:diff --git |@@)/.test(line)) hasDiff = true;
+        if (/^ {0,3}(?:#{1,6}(?:\s|$)|[-*+]\s|\d+[.)]\s|>+|`{3,}|~{3,}|(?:[-*_]\s*){3,}$)/.test(line) ||
+            (previous.indexOf('|') !== -1 && /^\|?[ \t]*:?-{3,}/.test(line.trimStart()))) markdown = true;
+        previous = line;
       }
       if (hasDiff && diffLines > count / 2) return 'diff';
+      // ANSI and diff recognition are cheap scans; bound parsing and prose classification.
+      if (!contentWithinLimit(text, 64 * 1024)) return 'plain';
       if (contentWithinLimit(text, 200 * 1024 - 1) && /^\s*[\[{]/.test(text)) {
         try { JSON.parse(text); return 'json'; } catch (_) {}
       }
       if (parseSections(text)) return 'sections';
-      if (/(?:^|\n) {0,3}(?:#{1,6}(?:\s|$)|[-*+]\s|\d+[.)]\s|>{1,}\s?|`{3,}|~{3,}|(?:[-*_]\s*){3,}$)/m.test(text) ||
-          /\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`|\[[^\]\n]+\]\([^\n]*\)|(?:^|\n)[^\n]*\|[^\n]*\n\s*\|?\s*:?-{3,}/.test(text) ||
-          /<\/?[a-z][\w-]*>/.test(text)) return 'markdown';
+      if (markdown || contentInlineMarkdown(text) || /<\/?[a-z][\w-]*>/.test(text)) return 'markdown';
       return 'plain';
+    }
+
+    function contentInlineMarkdown(text) {
+      var markers = {}, bracket = -1, link = false;
+      for (var i = 0; i < text.length; i++) {
+        var ch = text[i];
+        if (ch === '\n' || ch === '\r') { markers = {}; bracket = -1; link = false; continue; }
+        if (ch === '*' || ch === '_' || ch === '`') {
+          if (markers[ch] !== undefined && i > markers[ch] + 1) return true;
+          markers[ch] = i;
+        } else if (ch === '[') bracket = i;
+        else if (ch === ']' && bracket >= 0 && i > bracket + 1 && text[i + 1] === '(') link = true;
+        else if (ch === ')' && link) return true;
+      }
+      return false;
     }
 
     // Palette names, not arbitrary CSS: the renderer owns the actual theme colors.
@@ -234,6 +252,17 @@
     function prettyJson(text) {
       text = String(text || '');
       if (!contentWithinLimit(text, 200 * 1024 - 1)) return null;
+      var depth = 0, quoted = false, escaped = false;
+      for (var i = 0; i < text.length; i++) {
+        var ch = text[i];
+        if (quoted) {
+          if (escaped) escaped = false;
+          else if (ch === '\\') escaped = true;
+          else if (ch === '"') quoted = false;
+        } else if (ch === '"') quoted = true;
+        else if (ch === '{' || ch === '[') { if (++depth > 64) return null; }
+        else if (ch === '}' || ch === ']') depth--;
+      }
       try { return JSON.stringify(JSON.parse(text), null, 2); } catch (_) { return null; }
     }
 
@@ -259,9 +288,9 @@
     }
 
 
-    // ---- Render part. Every function takes `doc` (tests hand in a tiny shim: createElement, createTextNode,
-    // createDocumentFragment, appendChild, className, textContent, style only), so construction uses nothing else;
-    // classList, dataset and listeners run only inside click handlers or on feed-only rows.
+    // ---- Render part. Every function takes `doc`. Construction uses a small DOM interface (createElement,
+    // createTextNode, createDocumentFragment, appendChild, className, textContent, style). Restoring an active
+    // "Copied" state also needs classList; injected and details rows also need dataset and addEventListener.
     // Block state (Wrap, an opened fold, "Copied") lives in contentState by key, so a live re-render restores it.
     var contentState = {};
     function blockState(opts) {
@@ -324,10 +353,21 @@
     function cutNote(doc, truncated, unit) {
       return cel(doc, 'div', 'code-cut', 'cut off: ' + Number(truncated.shown).toLocaleString() + ' of ' + Number(truncated.total).toLocaleString() + ' ' + (unit || 'characters'));
     }
-    function appendTokens(parent, code, lang, doc) {
-      highlight(code, lang).forEach(function (t) {
+    function appendTokens(parent, code, lang, doc, tokens) {
+      (tokens || highlight(code, lang)).forEach(function (t) {
         parent.appendChild(t.type === 'plain' ? doc.createTextNode(t.text) : cel(doc, 'span', 'tk-' + t.type, t.text));
       });
+    }
+    // Colors a whole text at once, then splits the tokens per line, so a string or comment over many lines keeps its color.
+    function tokenLines(code, lang) {
+      var lines = [[]];
+      highlight(code, lang).forEach(function (t) {
+        t.text.split('\n').forEach(function (part, i) {
+          if (i) lines.push([]);
+          if (part) lines[lines.length - 1].push({ text: part, type: t.type });
+        });
+      });
+      return lines;
     }
     function diffLineKind(line) {
       if (/^@@ /.test(line)) return 'hunk';
@@ -397,7 +437,7 @@
         head.appendChild(copyButton(doc, function () {
           return f.hunks.map(function (h) { return h.lines.filter(function (l) { return l.kind === 'add' || l.kind === 'ctx'; }).map(function (l) { return l.text; }).join('\n'); }).join('\n');
         }, 'Copy', st));
-        head.appendChild(copyButton(doc, function () { return text; }, 'Copy diff'));
+        head.appendChild(copyButton(doc, function () { return text; }, 'Copy diff', st.diffCopy || (st.diffCopy = {})));
         box.appendChild(head);
         var lines = cel(doc, 'div', 'diff-lines');
         var lang = languageOf(f.path || f.oldPath);
@@ -406,12 +446,22 @@
           hl.appendChild(cel(doc, 'span', 'diff-no')); hl.appendChild(cel(doc, 'span', 'diff-no')); hl.appendChild(cel(doc, 'span', 'diff-sign'));
           hl.appendChild(cel(doc, 'span', 'diff-text', h.header));
           lines.appendChild(hl);
+          // Each side of the hunk (old: ctx + del, new: ctx + add) is colored as one text.
+          var side = { old: [], new: [] }, at = { old: 0, new: 0 };
+          if (lang) {
+            h.lines.forEach(function (l) { if (l.kind !== 'meta' && l.kind !== 'add') side.old.push(l.text); if (l.kind !== 'meta' && l.kind !== 'del') side.new.push(l.text); });
+            side.old = tokenLines(side.old.join('\n'), lang); side.new = tokenLines(side.new.join('\n'), lang);
+          }
           h.lines.forEach(function (l) {
             var row = cel(doc, 'div', 'diff-line ' + l.kind), t = cel(doc, 'span', 'diff-text');
             row.appendChild(cel(doc, 'span', 'diff-no', l.oldNo == null ? '' : String(l.oldNo)));
             row.appendChild(cel(doc, 'span', 'diff-no', l.newNo == null ? '' : String(l.newNo)));
             row.appendChild(cel(doc, 'span', 'diff-sign', l.kind === 'add' ? '+' : l.kind === 'del' ? '-' : ''));
-            if (lang && l.kind !== 'meta') appendTokens(t, l.text, lang, doc); else t.textContent = l.text;
+            if (lang && l.kind !== 'meta') {
+              if (l.kind !== 'add') at.old++;
+              if (l.kind !== 'del') at.new++;
+              appendTokens(t, l.text, lang, doc, l.kind === 'del' ? side.old[at.old - 1] : side.new[at.new - 1]);
+            } else t.textContent = l.text;
             row.appendChild(t);
             lines.appendChild(row);
           });
@@ -435,7 +485,7 @@
       });
     }
     // Command view: the full command, a badge when it failed, the output below (ANSI as colors, capped at 30 lines;
-    // a failed command shows its last 10 lines when folded, so the error is never hidden).
+    // a failed command shows its last 10 lines when folded; Show all reveals the rest).
     function renderCommand(o, opts, doc) {
       opts = opts || {}; doc = doc || document;
       var st = blockState(opts);
@@ -489,6 +539,15 @@
     }
     function renderJson(value, opts, doc) {
       opts = opts || {}; doc = doc || document;
+      var depths = new WeakMap(), depthCut = false;
+      var raw = JSON.stringify(value, function (key, child) {
+        if (!child || typeof child !== 'object') return child;
+        var depth = (depths.get(this) == null ? -1 : depths.get(this)) + 1;
+        if (depth > 64) { depthCut = true; return Array.isArray(child) ? [] : {}; }
+        depths.set(child, depth);
+        return child;
+      });
+      if (depthCut) return cel(doc, 'pre', 'raw', raw);
       var st = blockState(opts);
       var pretty = JSON.stringify(value, null, 2) || '';
       var n = lineCount(pretty), fold = n > 25 && opts.fold !== false;
@@ -649,7 +708,8 @@
       if (opts && opts.truncated) { var frag = doc.createDocumentFragment(); frag.appendChild(pre); frag.appendChild(cutNote(doc, opts.truncated)); return frag; }
       return pre;
     }
-    // One renderer for every surface: renderContent(text, format, { key, lang, path, truncated, quiet, pre }) -> Node.
+    // Shared format renderer for tool bodies, result cards and injected rows (message and thinking bodies call
+    // renderMarkdown directly): renderContent(text, format, { key, lang, path, truncated, quiet, pre }) -> Node.
     // `format` is a hint (section 3.1); without it the page detects. `pre` draws plain text as an output box
     // (a tool result), else plain text reads as prose.
     function renderContent(text, format, opts, doc) {
@@ -662,6 +722,7 @@
       if (format === 'json') {
         var pretty = prettyJson(text);
         if (pretty !== null) return renderJson(JSON.parse(text), opts, doc);
+        return cel(doc, 'pre', 'raw', text);
       }
       if (format === 'sections') {
         var sections = parseSections(text);

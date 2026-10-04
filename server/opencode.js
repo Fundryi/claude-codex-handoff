@@ -186,7 +186,16 @@ function opencodeTranscriptEvents(row) {
           if (supplied) {
             const lines = supplied.split('\n');
             const diff = lines.slice(0, 2000).join('\n');
-            result = { diff, added: lines.filter(l => /^\+(?!\+\+)/.test(l)).length, removed: lines.filter(l => /^-(?!--)/.test(l)).length,
+            let added = 0, removed = 0, oldLeft = 0, newLeft = 0;
+            for (const line of lines) {
+              const hunk = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(line);
+              if (hunk) { oldLeft = hunk[1] === undefined ? 1 : +hunk[1]; newLeft = hunk[2] === undefined ? 1 : +hunk[2]; }
+              else if (line.startsWith('diff --git ')) { oldLeft = 0; newLeft = 0; }
+              else if (line[0] === '+' && newLeft > 0) { added++; newLeft--; }
+              else if (line[0] === '-' && oldLeft > 0) { removed++; oldLeft--; }
+              else if (line[0] === ' ' && (oldLeft > 0 || newLeft > 0)) { oldLeft--; newLeft--; }
+            }
+            result = { diff, added, removed,
               ...(diff.length < supplied.length ? { truncated: { shown: diff.length, total: supplied.length } } : {}) };
           } else result = lineDiffResult(name === 'write' ? '' : input.oldString || input.old_string || meta.diff?.before || meta.oldText || '',
             name === 'write' ? input.content || '' : input.newString || input.new_string || meta.diff?.after || meta.newText || '', file);

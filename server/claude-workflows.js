@@ -80,8 +80,16 @@ function lineDiff(oldText, newText, path) {
 function feedToolFields(name, input) {
   const target = /grep|glob/i.test(name) ? input.pattern : /agent|task/i.test(name) ? input.name || input.subagent_type || input.description
     : input.command || input.file_path || input.filePath || input.notebook_path || input.path || input.url || input.description;
-  const raw = JSON.stringify(input);
-  let bounded = input;
+  const depths = new WeakMap();
+  let depthCut = false;
+  const raw = JSON.stringify(input, function (key, value) {
+    if (!value || typeof value !== 'object') return value;
+    const depth = (depths.get(this) ?? -1) + 1;
+    if (depth > 64) { depthCut = true; return Array.isArray(value) ? [] : {}; }
+    depths.set(value, depth);
+    return value;
+  });
+  let bounded = depthCut ? JSON.parse(raw) : input;
   if (raw.length > 20000) {
     const shrink = (value, budget, depth) => {
       if (typeof value === 'string') {
@@ -104,7 +112,7 @@ function feedToolFields(name, input) {
       }
       return result;
     };
-    bounded = shrink(input, 20000, 0);
+    bounded = shrink(bounded, 20000, 0);
   }
   return { tool: { name, target: String(target || '').slice(0, 20000), input: bounded },
     ...(raw.length > 20000 ? { truncated: { shown: JSON.stringify(bounded).length, total: raw.length } } : {}) };

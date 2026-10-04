@@ -304,19 +304,19 @@
       if (event.kind === 'patch') {
         if (event.diff) body.appendChild(renderDiff(event.diff, { key: opts.key, truncated: event.truncated }, document));
         else body.appendChild(renderContent(event.detail || event.text || '', event.format, { key: opts.key, pre: true, truncated: event.truncated }, document));
-        outputs.forEach(function (o) { outputSection(body, o, opts, 'Result'); });
+        outputs.forEach(function (o, index) { outputSection(body, o, { key: opts.key + '|output|' + index }, 'Result'); });
         return body;
       }
       if (event.kind === 'tool') {
         if (event.tool && event.tool.input && typeof event.tool.input === 'object' && Object.keys(event.tool.input).length) {
-          body.appendChild(renderJson(event.tool.input, { key: opts.key, title: event.tool.name || 'Input', truncated: event.truncated }, document));
+          body.appendChild(renderJson(event.tool.input, { key: opts.key + '|input', title: event.tool.name || 'Input', truncated: event.truncated }, document));
         } else if (event.detail || event.text) {
-          body.appendChild(renderContent(event.detail || event.text, event.format, { key: opts.key, pre: true, truncated: event.truncated }, document));
+          body.appendChild(renderContent(event.detail || event.text, event.format, { key: opts.key + '|detail', pre: true, truncated: event.truncated }, document));
         }
         if (event.detail && event.tool && event.tool.input && Object.keys(event.tool.input).length && event.detail !== event.text) {
-          outputSection(body, { text: event.detail, format: event.format, truncated: event.truncated }, opts, 'Output');
+          outputSection(body, { text: event.detail, format: event.format, truncated: event.truncated }, { key: opts.key + '|detail' }, 'Output');
         }
-        outputs.forEach(function (o) { outputSection(body, o, opts); });
+        outputs.forEach(function (o, index) { outputSection(body, o, { key: opts.key + '|output|' + index }); });
         return body;
       }
       // An output on its own (no call to sit under), or any other step.
@@ -330,7 +330,7 @@
     function createEvent(row, renderKey) {
       if (!row.item) row = { item: row, key: renderKey, outputs: [], waits: 0, waitIds: {}, waitOutputs: [], exit: row.exit };
       var event = row.item;
-      if (event.kind === 'thinkgroup') return createThinkGroupEvent(event, row.key);
+      if (event.kind === 'thinkgroup') return createThinkGroupEvent(event, (renderKey ? renderKey + '|' : '') + row.key);
       var details = document.createElement('details');
       details.className = 'event technical ' + event.kind + (stepFailed(row.exit) ? ' failed' : '');
       details.dataset.key = row.key || technicalEventKey(event);

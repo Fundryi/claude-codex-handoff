@@ -14,7 +14,7 @@
       --border-soft: #1f2431;      /* dividers between rows */
       --fg: #f3f4f6;
       --muted: #9aa0bd;
-      --faint: #646984;            /* decoration only, never a fact */
+      --faint: #646984;            /* decoration, repeated facts, prompt-section captions, tool-output labels */
       /* structure (violet family) */
       --accent: #7c5cff;           /* active tab, focus ring, unread dot, primary button border, Jump pill */
       --accent-fill: #342f60;      /* primary button fill */
@@ -22,7 +22,7 @@
       --tree-text: #b693f4;        /* structure text: fold row, brand mark */
       /* project colors. Only captions, group tint and rails. Never a node. */
       --p1: #c792ea; --p2: #82aaff; --p3: #4ade80; --p4: #7ac4e2; --p5: #ff6fe1;
-      /* status (status only) */
+      /* status colors; green and red also color diff operation labels */
       --blue: #82aaff;             /* Running */
       --green: #4ade80;            /* Finished */
       --yellow: #fcd14a;           /* Waiting */
@@ -47,7 +47,7 @@
       --syn-number: #f78c6c;       /* numbers, JSON true/false/null */
       --syn-comment: #8d93b3;      /* comments (5.4:1 on --panel-2) */
       --syn-function: #85d7f9;     /* function names, JSON braces */
-      --syn-type: #ffcb6b;         /* types, tags, PowerShell cmdlets */
+      --syn-type: #ffcb6b;         /* capitalized identifiers classified as types */
       --syn-punct: #9aa0bd;        /* punctuation (= --muted) */
       --code-fg: #e5e7eb;          /* plain code text, a step under --fg so colors read as color */
       --code-size: 12px;           /* block code; inline chips stay 11px */
@@ -57,7 +57,7 @@
       --diff-del-bg: #2c2327;      /* --red 13% into --bg */
       --diff-hunk-bg: #1d1a35;     /* --accent 14% into --bg: a hunk header is structure */
       --fail-bg: #40353f;          /* --red 16% into --panel-2: the failed badge fill */
-      --fail-border: #6b4a50;      /* --red 40% into --panel-2 */
+      --fail-border: #6b4a50;      /* failed badge border */
       --term-black: #8087a8; --term-red: #fca5a5; --term-green: #4ade80; --term-yellow: #f9b141;
       --term-blue: #82aaff; --term-magenta: #ff6fe1; --term-cyan: #85d7f9; --term-white: #f3f4f6; /* ANSI 30-37 and 90-97 */
       /* geometry */

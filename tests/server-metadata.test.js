@@ -8,6 +8,44 @@ const src = serverSource();
 const simplifySrc = src.match(/function simplify\(line\) \{[\s\S]*?\n\}/)[0];
 
 const plain = value => JSON.parse(JSON.stringify(value));
+
+test("deep tool input cannot discard the following transcript event", () => {
+  const args = '{"command":"echo ok","extra":' + '{"a":'.repeat(8000) + '0' + '}'.repeat(8000) + '}';
+  const bad = JSON.stringify({ type: "response_item", payload: { type: "function_call", name: "shell", call_id: "c1", arguments: args } });
+  const good = JSON.stringify({ type: "event_msg", payload: { type: "agent_message", message: "Finished" } });
+  const data = Buffer.from(bad + "\n" + good + "\n");
+  const c = { Buffer, Date, Map, Set, MAX_EVENTS_KEPT: 100, sessions: new Map(), path, broadcast() {},
+    fs: { statSync: () => ({ size: data.length, mtimeMs: 1 }), openSync: () => 1,
+      readSync: (_, buf, off, len, pos) => data.copy(buf, off, pos, pos + len), closeSync() {} } };
+  for (const name of ["simplify", "promptTitle", "ingest"]) {
+    vm.runInNewContext(src.match(new RegExp("function " + name + "\\([\\s\\S]*?\\n\\}"))[0], c);
+  }
+  assert.doesNotThrow(() => c.ingest("fixture.jsonl"));
+  assert.deepEqual(plain(c.sessions.get("fixture.jsonl").events.map(e => e.text)), ["echo ok", "Finished"]);
+  const adapters = adapterContext();
+  const claude = adapters.claudeTranscriptEvents('{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":' + args + '}]}}')[0];
+  const opencode = adapters.opencodeTranscriptEvents({ type: "assistant", data: { content: [
+    { type: "tool", name: "bash", state: { input: JSON.parse(args) } }] } })[0];
+  for (const event of [c.sessions.get("fixture.jsonl").events[0], claude, opencode]) {
+    assert.equal(event.tool.input.command, "echo ok");
+    assert.ok(JSON.stringify(event.tool.input).length <= 20000);
+    let depth = 0, value = event.tool.input.extra;
+    while (value && value.a) { depth++; value = value.a; }
+    assert.ok(depth <= 64);
+  }
+});
+
+test("diff counts include header-looking additions and deletions inside hunks", () => {
+  const diff = '@@ -1 +1 @@\n---counter;\n+++counter;';
+  const codex = ctx().simplify(JSON.stringify({ type: 'event_msg', payload: { type: 'item_completed', item: {
+    type: 'FileChange', changes: { 'a.js': { type: 'update', unified_diff: diff } } } } }));
+  const opencode = adapterContext().opencodeTranscriptEvents({ type: 'assistant', data: { content: [{ type: 'tool', name: 'edit',
+    state: { input: { filePath: 'a.js' }, metadata: { patch: '--- a/a.js\n+++ b/a.js\n' + diff } } }] } })[0];
+  for (const event of [codex, opencode]) {
+    assert.deepEqual(plain(event.files), [{ path: 'a.js', op: 'update', added: 1, removed: 1 }]);
+    assert.match(event.diff, /---counter;\n\+\+\+counter;/);
+  }
+});
 function adapterContext() {
   const c = { fs: require("node:fs"), Buffer };
   const mediaFile = path.join(__dirname, "../server/media.js");

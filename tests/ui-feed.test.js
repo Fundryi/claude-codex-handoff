@@ -10,6 +10,83 @@ const pureHelpers = script.match(/function firstLine[\s\S]*?(?=\n    function se
 function lib() { const c = {}; vm.runInNewContext(pureHelpers, c); return c; }
 function plain(value) { return JSON.parse(JSON.stringify(value)); }
 
+test("prototype-named result IDs remain safe orphan outputs and count real failures", () => {
+  const c = lib();
+  for (const id of ["toString", "__proto__"]) {
+    const output = { kind: "out", resultOf: id, text: "hello", exit: 1 };
+    const orphan = c.pairWorkItems([output]);
+    assert.equal(orphan.length, 1);
+    assert.equal(orphan[0].item, output);
+    const call = { kind: "cmd", callId: id, text: "false", exit: 1 };
+    const rows = c.pairWorkItems([call, output]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].outputs[0], output);
+    assert.match(c.workSummary([call, output]), /1 failed/);
+  }
+});
+
+test("outputs preceding their calls retain pairing, order and a single failure", () => {
+  const c = lib();
+  const items = [
+    { kind: "out", resultOf: "c1", text: "failed", exit: 1 },
+    { kind: "cmd", callId: "c1", text: "npm test" },
+    { kind: "out", resultOf: "c1", text: "finished", exit: 1 },
+  ];
+  const rows = c.pairWorkItems(items, ["output", "call", "later"]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].key, "call");
+  assert.equal(rows[0].exit, 1);
+  assert.deepEqual(plain(rows[0].outputs.map(o => o.text)), ["failed", "finished"]);
+  assert.match(c.workSummary(items), /1 failed/);
+});
+
+test("transcript messages and tool input, detail and outputs keep independent content state", () => {
+  const c = lib(), fs = require("node:fs"), path = require("node:path");
+  function node(tag) {
+    const n = { tag, children: [], dataset: {}, style: {}, className: "", value: "",
+      appendChild(child) { this.children.push(child); return child; },
+      append(...children) { this.children.push(...children); },
+      contains() { return false; }, querySelectorAll() { return []; }, setAttribute() {}, addEventListener() {} };
+    Object.defineProperty(n, "textContent", { get() { return this.value + this.children.map(x => x.textContent).join(""); },
+      set(text) { this.value = String(text); this.children = []; } });
+    n.classList = { toggle(cls, on) { const classes = n.className.split(" ").filter(x => x && x !== cls); if (on) classes.push(cls); n.className = classes.join(" "); } };
+    return n;
+  }
+  const doc = { activeElement: null, createElement: node, createDocumentFragment: () => node("fragment"),
+    createTextNode: text => { const n = node("text"); n.textContent = text; return n; } };
+  Object.assign(c, { document: doc, renderLimits: {}, feedOpenChoices: {}, LONG_MESSAGE: 10000,
+    ACTORS: { codex: { name: "Codex" }, you: { name: "You" } }, actorAvatar: () => node("span"), eventTime: () => "",
+    setTimeout() {}, navigator: { clipboard: { writeText() {} } } });
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../ui/js/feed.js"), "utf8"), c);
+  const pages = fs.readFileSync(path.join(__dirname, "../ui/js/pages.js"), "utf8");
+  vm.runInNewContext(pages.match(/function drawTranscript\([\s\S]*?\n    }/)[0], c);
+  const all = n => [n, ...n.children.flatMap(all)];
+  const inner = node("div");
+  const target = { inner, renderKey: "chat:A", session: CLI, rawEvents: [{ kind: "agent", ts: 123, text: "```js\nx\n```" }] };
+  c.drawTranscript(target, true);
+  all(inner).find(n => n.tag === "button" && n.textContent === "Wrap").onclick();
+  all(inner).find(n => n.tag === "button" && n.textContent === "Copy").onclick();
+  c.drawTranscript(target, true);
+  assert.ok(all(inner).some(n => n.className === "code wrap"));
+  assert.ok(all(inner).some(n => n.textContent === "Copied"));
+  c.drawTranscript({ ...target, renderKey: "chat:B" }, true);
+  assert.ok(all(inner).some(n => n.className === "code"));
+  assert.ok(!all(inner).some(n => n.className === "code wrap" || n.textContent === "Copied"));
+  const json = JSON.stringify(Array(30).fill(1));
+  const row = { key: "call", item: { kind: "tool", text: "Read", detail: json,
+    tool: { name: "Read", input: Array(30).fill(0) } }, outputs: [{ text: json }, { text: json }], waitOutputs: [] };
+  let body = c.stepBody(row, "chat:A");
+  const blocks = body.children.filter(n => n.className === "json folded");
+  assert.equal(blocks.length, 4);
+  blocks[0].children.at(-1).onclick();
+  blocks[0].children[0].children.find(n => n.textContent === "Copy").onclick();
+  body = c.stepBody(row, "chat:A");
+  const rebuilt = body.children.filter(n => /^json/.test(n.className));
+  assert.deepEqual(rebuilt.map(n => n.className), ["json", "json folded", "json folded", "json folded"]);
+  assert.equal(rebuilt[0].children[0].children.at(-1).textContent, "Copied");
+  assert.ok(rebuilt.slice(1).every(n => n.children[0].children.at(-1).textContent === "Copy"));
+});
+
 const HANDOFF = { originator: "Claude Code" };
 const CLI = { originator: "codex_cli_rs" };
 const UNKNOWN = { originator: "" };

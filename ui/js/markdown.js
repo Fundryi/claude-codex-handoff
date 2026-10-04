@@ -190,12 +190,14 @@
       return /^ {0,3}(#{1,6}\s|>)/.test(lines[i]) || markdownFence(lines[i]) ||
         markdownRule(lines[i]) || markdownListMarker(lines[i]) || markdownTableAt(lines, i);
     }
-    function markdownBlocks(lines) {
+    function markdownBlocks(lines, maxDepth) {
       var root = [];
+      var original = lines.join('\n');
       // Explicit frames allow deep containers without consuming the call stack.
-      var frames = [{ lines: lines, i: 0, blocks: root }];
+      var frames = [{ lines: lines, i: 0, blocks: root, depth: 0 }];
       while (frames.length) {
         var frame = frames[frames.length - 1];
+        if (maxDepth != null && frame.depth > maxDepth) return [{ type: 'plain', text: original }];
         lines = frame.lines;
         var i = frame.i;
         var blocks = frame.blocks;
@@ -225,7 +227,7 @@
           var quote = { type: 'quote', blocks: [] };
           blocks.push(quote);
           frame.i = i;
-          frames.push({ lines: quoteLines, i: 0, blocks: quote.blocks });
+          frames.push({ lines: quoteLines, i: 0, blocks: quote.blocks, depth: frame.depth + 1 });
           continue;
         }
         var marker = markdownListMarker(line);
@@ -253,7 +255,7 @@
             }
             var listItem = { blocks: [], checked: task ? task[1].toLowerCase() === 'x' : undefined };
             list.items.push(listItem);
-            children.push({ lines: itemLines, i: 0, blocks: listItem.blocks });
+            children.push({ lines: itemLines, i: 0, blocks: listItem.blocks, depth: frame.depth + 1 });
             if (i < lines.length && !lines[i].trim()) break;
           }
           blocks.push(list);
@@ -279,8 +281,8 @@
       }
       return root;
     }
-    function parseMarkdown(text) {
-      return markdownBlocks(String(text == null ? '' : text).replace(/\r\n/g, '\n').split('\n'));
+    function parseMarkdown(text, maxDepth) {
+      return markdownBlocks(String(text == null ? '' : text).replace(/\r\n/g, '\n').split('\n'), maxDepth);
     }
     // A bold label that is exactly Passed / Failed / OK / Error gets a status color (Checks run lists).
     var STATUS_WORD = /^(Passed|Failed|FAILED|OK|Error)\b:?$/;
@@ -305,6 +307,9 @@
     }
     // opts (optional) reaches the code blocks: { key, quiet, n } (see renderCodeBlock in content.js).
     function renderMarkdownBlock(block, doc, opts) {
+      if (block.type === 'plain') {
+        var raw = doc.createElement('pre'); raw.className = 'raw'; raw.textContent = block.text; return raw;
+      }
       if (block.type === 'heading') {
         var heading = doc.createElement('div');
         heading.className = 'md-h' + block.level;
@@ -368,10 +373,10 @@
       appendInline(p, block.inline, doc);
       return p;
     }
-    // Pure but for `doc`, passed in so tests can hand it a minimal DOM shim.
+    // Builds DOM with `doc` (tests hand in a minimal DOM). Keyed code blocks use the shared contentState and advance opts.n.
     function renderMarkdown(text, doc, opts) {
       var fragment = doc.createDocumentFragment();
-      parseMarkdown(text).forEach(function (block) {
+      parseMarkdown(text, 64).forEach(function (block) {
         fragment.appendChild(renderMarkdownBlock(block, doc, opts));
       });
       return fragment;

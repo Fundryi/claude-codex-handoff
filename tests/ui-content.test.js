@@ -13,6 +13,37 @@ for (const name of ['highlight', 'content']) {
 const plain = value => JSON.parse(JSON.stringify(value));
 const types = new Set(['keyword', 'string', 'number', 'comment', 'function', 'type', 'punct', 'plain']);
 
+test('format detection handles unterminated links linearly and bounds classification', () => {
+  const result = require('node:child_process').spawnSync(process.execPath, ['-e', `
+    const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+    const c = {};
+    vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), c);
+    for (const n of [32000, 64000, 200000]) assert.equal(c.detectFormat('['.repeat(n)), 'plain');
+    assert.equal(c.detectFormat(('a]('.repeat(10000))), 'plain');
+    assert.equal(c.detectFormat('[Read](https://example.com)'), 'markdown');
+    assert.equal(c.detectFormat('*bold*' + 'x'.repeat(210000)), 'plain');
+    assert.equal(c.detectFormat('x'.repeat(210000), 'markdown'), 'markdown');
+  `, path.join(root, 'ui/js/content.js')], { encoding: 'utf8', timeout: 2500 });
+  assert.equal(result.status, 0, result.error ? String(result.error) : result.stderr);
+});
+
+test('Copy diff preserves Copied through a rebuild independently of Copy', () => {
+  const c = { setTimeout() {}, navigator: { clipboard: { writeText() {} } } };
+  for (const name of ['highlight', 'content']) vm.runInNewContext(fs.readFileSync(path.join(root, 'ui/js/' + name + '.js'), 'utf8'), c);
+  const doc = { createElement(tag) {
+    const n = { tag, children: [], style: {}, className: '', appendChild(child) { this.children.push(child); return child; } };
+    n.classList = { toggle(cls, on) { const names = n.className.split(' ').filter(x => x && x !== cls); if (on) names.push(cls); n.className = names.join(' '); } };
+    return n;
+  }, createTextNode: text => ({ textContent: text }), createDocumentFragment() { return this.createElement('fragment'); } };
+  const diff = '--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-old\n+new';
+  let result = c.renderDiff(diff, { key: 'scope|patch' }, doc);
+  let buttons = result.children[0].children[0].children.filter(n => n.tag === 'button');
+  buttons.find(n => n.textContent === 'Copy diff').onclick();
+  result = c.renderDiff(diff, { key: 'scope|patch' }, doc);
+  buttons = result.children[0].children[0].children.filter(n => n.tag === 'button');
+  assert.deepEqual(buttons.map(n => n.textContent), ['Wrap', 'Copy', 'Copied']);
+});
+
 test('highlight keeps every character and tags keywords, strings, calls, types and numbers', () => {
   const code = "const a = 'x'; // note\nfunction f() { return new Widget(42); }\r\n\t🙂";
   const tokens = plain(lib.highlight(code, 'js'));
