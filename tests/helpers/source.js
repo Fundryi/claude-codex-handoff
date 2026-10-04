@@ -38,7 +38,7 @@ const SERVER_SOURCES = [
   ...[
     "runtime.js", "access.js", "jobs.js", "readers.js", "events.js", "usage.js",
     "sessions.js", "claude-workflows.js", "opencode.js", "claude-chats.js",
-    "discovery.js", "http.js", "os-notify.js",
+    "discovery.js", "http.js",
   ].map((file) => "server/" + file),
 ];
 

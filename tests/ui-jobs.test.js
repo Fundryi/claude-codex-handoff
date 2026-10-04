@@ -7,7 +7,11 @@ const html = uiSource();
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const slice = script.match(/function formatDuration[\s\S]*?function jobDetailLine[\s\S]*?\n    \}/)[0];
 
-function ctx() { const c = {}; vm.runInNewContext(slice, c); return c; }
+function ctx() {
+  const c = {};
+  vm.runInNewContext(script.match(/function workflowQuestionOwned[\s\S]*?(?=\n    \/\/ The session wrote)/)[0] + slice, c);
+  return c;
+}
 
 test("jobStatusLabel maps liveness to one title-case status vocabulary", () => {
   const { jobStatusLabel } = ctx();

@@ -20,7 +20,7 @@ The same tree shows Claude chats and OpenCode TUI, CLI and child sessions. Claud
 
 - `server/runtime.js`: startup config, paths and shared state; `parseFlags`.
 - `server/access.js`: tunnel, process inspection and origin guards; `startTunnel`, `codexProcs`, `trustedControlOrigin`.
-- `server/events.js`: SSE and plain-run notices; `broadcast`, `plainRunNotification`.
+- `server/events.js`: SSE delivery; `broadcast`.
 - `server/sessions.js`: Codex rollouts, search and polling; `ingest`, `sessionSummary`, `buildSearchIndex`, `tick`.
 - `server/jobs.js`: companion jobs and liveness; `listCompanionJobs`, `classifyJobLiveness`, `buildCompanionTaskArgs`, `runCompanion`.
 - `server/readers.js`: bounded file readers; `readAppended`, `claudeCursor`, `claudeReadHead`, `claudeReadTail`.
@@ -30,7 +30,6 @@ The same tree shows Claude chats and OpenCode TUI, CLI and child sessions. Claud
 - `server/opencode.js`: read-only SQLite sessions and transcripts; `opencodeConnection`, `opencodeChatsTick`, `opencodeTranscriptPage`.
 - `server/usage.js`: Claude usage and Codex limits; `claudeUsageCheck`, `refreshCodexLimits`.
 - `server/http.js`: assets, routes and server creation; `handleRequest`, `handleLaunch`, `createViewerServer`.
-- `server/os-notify.js`: desktop pop-ups; `notifyDesktop`.
 
 `runtime.js` owns stable shared maps and sets, including `claudeWfReaders`. Never reassign these containers. Read and write replaceable frames, arrays and flags through the `shared` object; do not destructure its properties. Keep private state in its owning module. Startup stays in `ai-live-viewer.js`; requiring a module must not bind a port or start a timer.
 
@@ -76,7 +75,7 @@ JavaScript:
 - The UI lives in `ui/` as ordered classic `<script src>` files and CSS files: no ES modules, no bundler, no build step. The scripts share globals, as one page script did before. Only `ui/js/boot.js` runs code at load (bindings, SSE, timers, first render); every other script only declares functions, constants and state. Keep regex-extracted functions as top-level named declarations. A new UI file goes into `ui/index.html`, `UI_ASSET_FILES` in `server/http.js`, `tests/helpers/source.js` and `scripts/sync-viewer.js`.
 - A complete viewer install needs the entry, `server/`, `ui/` and `assets/logo.svg`. Required UI assets load before the server listens. A missing asset fails startup; there is no embedded fallback page.
 - Setup changes user config only with consent, by writing or removing our one OpenCode viewer plugin file. It never edits Codex config or hook files, or `opencode.json`. Codex viewer hooks ship in `plugin/codex-hooks/hooks.json`; Claude hooks in `plugin/hooks/hooks.json` must never run inside Codex.
-- Codex turn toasts use fresh rollout done/err events and need no setup or trust. The Codex hook is only for optional approval notices, when approval policy is not `never`. Companion sessions use only their job frame. Keep one toast per event and suppress startup backfill.
+- The viewer shows no desktop pop-ups. The optional Codex PermissionRequest hook and OpenCode viewer plugin only request earlier refreshes. The Codex hook runs only when approval policy is not `never` and the user trusts it. Keep `/notify` and its guards, the job broadcasts to `/notifications`, and both integrations' refresh effects.
 - The viewer's OpenCode source is read only. Use a lazy, guarded `node:sqlite` load and `DatabaseSync` with `readOnly: true`. Query only `session_v2` and `session_message`, with explicit columns. The same DB holds OAuth tokens and credentials in other tables. Do not query those tables or send their data to a browser or log. Reuse the handle until the file identity changes or a query fails. Poll on the Claude cadence, including its no-browser slow mode. Pull bounded transcript pages by `seq` behind `trustedControlOrigin`. Do not write, checkpoint, or run write PRAGMAs. A read-only WAL connection can touch the `-shm` file; this is accepted.
 - The viewer never *edits* Codex session files or anything under `~/.codex`. `~/.claude` is read-only the same way: the viewer polls the chat, subagent and workflow run files under `~/.claude/projects` (no `fs.watch`, never runs a workflow script, never reads a whole chat file on a timer) and serves their transcripts only behind `trustedControlOrigin`, the gate of `/jobs`. From Claude Code's state file (`~/.claude.json`, or `.claude.json` in `CLAUDE_CONFIG_DIR`) it reads only `cachedUsageUtilization`; the file also holds OAuth and MCP settings, so nothing else from it ever reaches the browser or a log. The newer source for the 5-hour and 7-day windows is `~/.codex-companion/claude-limits.json`, written by the plugin's status line script (`plugin/scripts/claude-statusline.mjs`, only the two documented `rate_limits` windows); the session hook keeps a copy of that script at `~/.codex-companion/claude-statusline.mjs`, and the user's own `statusLine` setting points there (a plugin cannot set it). It DOES spawn codex via `plugin/scripts/codex-companion.mjs` (resume/cancel, and the read-only `limits` read: every 5 min only while a browser is connected, and when a job ends) and shares plugin job state at `~/.codex-companion/state`. All state-changing endpoints are POST, origin-guarded (`trustedControlOrigin`), and confirmed in-app — never `window.confirm`/`alert`.
 - Recovery is flag-only: the classifier marks jobs working / possibly-stuck / dead; the user clicks Resume. No auto-resume, no auto-kill. The one permitted automatic state write is liveness bookkeeping — a `queued`/`running` record whose pid is gone is reconciled to `failed` on read (`reconcileDeadJobs`), because nothing else will ever correct it and a frozen record permanently jams `/codex:result`.
@@ -95,8 +94,6 @@ JavaScript:
 | `CODEX_PLUGIN_UPDATE_CHECK` | `1` | Set `0` to disable the daily session-start update check. |
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state root (plugin CLI + viewer) |
 | `CODEX_VIEWER_PORT` | `8377` | Viewer HTTP port; also where the companion POSTs job completions (`/notify`) |
-| `CODEX_VIEWER_NOTIFY_QUIET` | `0` | `1` limits plain-run toasts to approval/question notices, failures and turns of at least 60 seconds |
-| `CODEX_VIEWER_NOTIFICATIONS` | `1` | Set `0` to disable the server's desktop pop-ups |
 | `CODEX_VIEWER_HOST` | `127.0.0.1` | Viewer bind address (`--host` overrides; `0.0.0.0` = LAN, no token) |
 | `CODEX_VIEWER_ALLOWED_HOSTS` | (none) | Comma list of reverse-proxy names trusted by `controlHosts`; when set, the default bind becomes `0.0.0.0` |
 | `CODEX_VIEWER_AUTOSTART` | `1` | Set to `0` to disable SessionStart viewer autostart |

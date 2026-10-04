@@ -79,7 +79,7 @@ const serverFiles = treeFiles(serverRoot);
 for (const name of [
   'runtime.js', 'access.js', 'jobs.js', 'readers.js', 'events.js', 'usage.js',
   'sessions.js', 'claude-workflows.js', 'opencode.js', 'claude-chats.js',
-  'discovery.js', 'http.js', 'os-notify.js',
+  'discovery.js', 'http.js',
 ]) regularFile(path.join(serverRoot, name));
 sources.push(...serverFiles.map(file => path.relative(root, file)));
 

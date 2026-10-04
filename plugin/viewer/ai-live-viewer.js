@@ -16,9 +16,9 @@ const http = require("http");
 const fs = require("fs");
 const os = require("os");
 const { execFile, spawn } = require("child_process");
-const { APP_ID, APP_VERSION, PORT, PID_FILE, FLAGS, HOST, CLAUDE_PROJECTS, SESSIONS_DIR, POLL_MS, sseClients, notificationClients, rolloutNotificationOffsets, rolloutStats, CLAUDE_SCAN_MS } = require("./server/runtime");
+const { APP_ID, APP_VERSION, PORT, PID_FILE, FLAGS, HOST, CLAUDE_PROJECTS, SESSIONS_DIR, POLL_MS, sseClients, notificationClients, CLAUDE_SCAN_MS } = require("./server/runtime");
 const { TOKEN, startTunnel, stopTunnel } = require("./server/access");
-const { collectRolloutFiles, buildSearchIndex, tick, watchSessions } = require("./server/sessions");
+const { buildSearchIndex, tick, watchSessions } = require("./server/sessions");
 const { pidAlive } = require("./server/jobs");
 const { claudeTick } = require("./server/claude-workflows");
 const { claudeDiscover } = require("./server/discovery");
@@ -56,9 +56,6 @@ function serve() {
     process.on("exit", () => { try { if (fs.readFileSync(PID_FILE, "utf8").trim() === String(process.pid)) fs.unlinkSync(PID_FILE); } catch {} });
     console.log("[OK] Watching: " + SESSIONS_DIR);
     if (fs.existsSync(CLAUDE_PROJECTS)) console.log("[OK] Claude workflows: " + CLAUDE_PROJECTS);
-    // Seed every existing rollout, including files outside the newest 40 and large
-    // backfills read over several ticks. Appended bytes and new files can notify.
-    for (const file of collectRolloutFiles(true)) rolloutNotificationOffsets.set(file, rolloutStats.get(file)?.size || 0);
     tick(); // reschedules itself (adaptive, see tickGap)
     watchSessions();
     // Own timers, so a Claude error never stalls Codex updates.

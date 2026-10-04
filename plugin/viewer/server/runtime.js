@@ -50,7 +50,6 @@ const MAX_EVENTS_KEPT = 500;   // per-session event ring buffer
 const sessions = new Map();
 const sseClients = new Set();
 const notificationClients = new Set();
-const rolloutNotificationOffsets = new Map(); // startup bytes and last complete read; never replay a toast
 const searchIndex = new Map(); // file -> { file, id, threadId, title, cwd, mtimeMs, archived }
 const pinnedFiles = new Map(); // file -> last-open timestamp (LRU, max 10)
 const MAX_PINNED = 10;
@@ -99,4 +98,4 @@ const shared = {
 };
 
 
-module.exports = { PORT, FLAGS, HOST, TOKEN_FILE, LEGACY_TOKEN_FILE, sessions, sseClients, shared, SESSIONS_DIR, ARCHIVED_DIR, POLL_MS, LIVE_WINDOW_MS, MAX_SESSIONS, MAX_EVENTS_KEPT, notificationClients, rolloutNotificationOffsets, searchIndex, pinnedFiles, rolloutStats, resumedFiles, IDLE_POLL_MS, ROOT, COMPANION_STATE_ROOT, jobStateCache, CLAUDE_TOOL_GRACE_MS, CLAUDE_MAX_AGENTS_SENT, CLAUDE_AGENT_ID, claudeRuns, claudeWfReaders, CLAUDE_PROJECTS, CLAUDE_MAX_RUNS, CLAUDE_KEEP_MS, CLAUDE_RUN_ID, CLAUDE_CHAT_ID, CLAUDE_SWEEP_MS, claudeChatFiles, claudeChats, claudeLinks, CLAUDE_ROOT_MS, CLAUDE_MAX_ROOTS, CLAUDE_MAX_CHILDREN_SENT, CLAUDE_SCAN_CAP, CLAUDE_SLICE_MS, CLAUDE_SESSIONS_DIR, OPENCODE_DB, CLAUDE_STATE_FILE, CLAUDE_LIMITS_FILE, CODEX_LIMITS_MS, APP_ID, APP_VERSION, MAX_PINNED, PID_FILE, CLAUDE_SCAN_MS };
+module.exports = { PORT, FLAGS, HOST, TOKEN_FILE, LEGACY_TOKEN_FILE, sessions, sseClients, shared, SESSIONS_DIR, ARCHIVED_DIR, POLL_MS, LIVE_WINDOW_MS, MAX_SESSIONS, MAX_EVENTS_KEPT, notificationClients, searchIndex, pinnedFiles, rolloutStats, resumedFiles, IDLE_POLL_MS, ROOT, COMPANION_STATE_ROOT, jobStateCache, CLAUDE_TOOL_GRACE_MS, CLAUDE_MAX_AGENTS_SENT, CLAUDE_AGENT_ID, claudeRuns, claudeWfReaders, CLAUDE_PROJECTS, CLAUDE_MAX_RUNS, CLAUDE_KEEP_MS, CLAUDE_RUN_ID, CLAUDE_CHAT_ID, CLAUDE_SWEEP_MS, claudeChatFiles, claudeChats, claudeLinks, CLAUDE_ROOT_MS, CLAUDE_MAX_ROOTS, CLAUDE_MAX_CHILDREN_SENT, CLAUDE_SCAN_CAP, CLAUDE_SLICE_MS, CLAUDE_SESSIONS_DIR, OPENCODE_DB, CLAUDE_STATE_FILE, CLAUDE_LIMITS_FILE, CODEX_LIMITS_MS, APP_ID, APP_VERSION, MAX_PINNED, PID_FILE, CLAUDE_SCAN_MS };

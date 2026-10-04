@@ -25,6 +25,45 @@ const ids = (items) => plain(items.map((entry) => entry.id));
 const T0 = Date.parse("2026-09-22T10:00:00Z");
 const iso = (offsetMs) => new Date(T0 + offsetMs).toISOString();
 
+test("workflow agents own their questions after finishing; plain handoffs still need an answer", () => {
+  const c = ctx();
+  const parentId = "wfagent:chat/run/agent";
+  c.claudeChats = { chats: [{ id: "chat:chat", sessionId: "chat", state: "done", children: [
+    { kind: "workflow", id: "workflow:chat/run", runId: "run", parentId: "chat:chat" },
+    { kind: "handoff", id: "handoff:t", parentId, threadId: "t", jobIds: ["j"] }
+  ] }] };
+  const agent = { id: "agent", state: "running" };
+  c.claudeRuns = [{ sessionId: "chat", id: "run", agents: [agent] }];
+  for (const engine of ["codex", "opencode"]) {
+    const job = { id: "j", threadId: "t", engine, status: "completed", needsDecision: "Which option?", updatedAt: iso(0) };
+    const session = { id: "s", threadId: "t", status: "DONE", lastGrow: T0 };
+    const row = () => c.buildRows([session], [job])[0];
+    agent.state = "running";
+    assert.equal(row().status, "ANSWER", "a running workflow agent keeps today's behavior");
+    for (const state of ["done", "failed", "ended"]) {
+      agent.state = state;
+      assert.equal(row().status, "FINISHED", engine + " / " + state);
+      assert.equal(row().needsAnswer, false);
+      assert.equal(c.answerTarget(row(), [job]), null);
+      assert.equal(c.jobStatusLabel(job), "Finished");
+      assert.equal(c.viewCounts([row()], []).NOW.ANSWER, 0);
+      const model = c.buildNodes(c.claudeChats, c.claudeRuns, [row()], [job], T0);
+      const node = model.nodes["handoff:t"];
+      assert.equal(node.state, "FINISHED");
+      assert.equal(model.nodes["chat:chat"].states.ANSWER, undefined, "the tree roll-up excludes the question");
+      assert.equal(c.nodeSelfMatch(node, "ANSWER", {}), false, "Needs you chip excludes it");
+      assert.equal(c.nodeSelfMatch(node, "RUNNING", {}), false, "Running chip excludes it");
+    }
+    assert.equal(c.rowStatus({ ...session, status: "LIVE" }, job), "RUNNING", "resumed threads still run");
+    const plainJob = { ...job, id: "plain", threadId: "plain-thread" };
+    assert.equal(c.rowStatus(null, plainJob), "ANSWER", "normal chat questions remain open");
+    assert.ok(c.answerTarget({ job: plainJob }, [plainJob]));
+    c.claudeRuns = [];
+    assert.equal(row().status, "ANSWER", "missing workflow state cannot silently claim the question");
+    c.claudeRuns = [{ sessionId: "chat", id: "run", agents: [agent] }];
+  }
+});
+
 test("one session with three jobs on its thread is one row with the newest job", () => {
   const { buildRows } = ctx();
   const session = { id: "s6", threadId: "t6", status: "DONE", cwd: "D:\\work\\proj", lastGrow: T0 + 100 };

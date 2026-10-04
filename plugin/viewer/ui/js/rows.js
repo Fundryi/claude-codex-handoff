@@ -22,7 +22,7 @@
       return parts.join('   |   ');
     }
     function jobStatusLabel(job) {
-      if (job.live === 'completed' && job.needsDecision) return 'Needs answer';
+      if (job.live === 'completed' && job.needsDecision && !workflowQuestionOwned(job)) return 'Needs answer';
       var map = {
         working: 'Running',
         'possibly-stuck': 'Needs attention',
@@ -134,6 +134,25 @@
     // Row status ids: RUNNING, WAITING, ATTENTION, ANSWER, STOPPED, FINISHED, ARCHIVED.
     // CLAUDE lists Claude Code workflows only (claudeRuns, not rows): no Codex row is ever in it.
     var TABS = { NOW: ['ALL', 'RUNNING', 'WAITING', 'ATTENTION', 'ANSWER'], HANDOFFS: ['ALL', 'RUNNING', 'ATTENTION', 'ANSWER', 'FINISHED', 'STOPPED'], HISTORY: ['FINISHED', 'STOPPED', 'ARCHIVED', 'DISMISSED', 'EVERYTHING'], CLAUDE: ['ALL', 'RUNNING', 'ATTENTION', 'FINISHED'] };
+    // A finished workflow agent returned its handoff result to the workflow, which owns the question.
+    // Missing links or frames leave normal handoff behavior intact; never infer this from the chat state.
+    function workflowQuestionOwned(job) {
+      if (!job) return false;
+      var frame = typeof claudeChats === 'undefined' ? null : claudeChats;
+      var runs = typeof claudeRuns === 'undefined' ? [] : claudeRuns;
+      return !!(frame && (frame.chats || []).some(function (chat) {
+        return (chat.children || []).some(function (kid) {
+          if (kid.kind !== 'handoff' || String(kid.parentId || '').indexOf('wfagent:') !== 0) return false;
+          if ((kid.jobIds || []).indexOf(job.id) === -1) return false;
+          return runs.some(function (run) {
+            return (run.agents || []).some(function (agent) {
+              return kid.parentId === 'wfagent:' + run.sessionId + '/' + run.id + '/' + agent.id
+                && ['done', 'failed', 'ended'].indexOf(agent.state) !== -1;
+            });
+          });
+        });
+      }));
+    }
     // The session wrote more than 5 s after the run finished asking: answered outside the viewer.
     function answeredElsewhere(session, job) {
       var asked = job ? Date.parse(job.updatedAt || '') : NaN;
@@ -148,7 +167,7 @@
       if (session && session.status === 'LIVE' && !session.archived) return 'RUNNING';
       if (state === 'possibly-stuck' || state === 'dead' || state === 'failed') return 'ATTENTION';
       if (session && session.archived) return 'ARCHIVED';
-      if (state === 'completed') return String(job.needsDecision || '').trim() && !answeredElsewhere(session, job) ? 'ANSWER' : 'FINISHED';
+      if (state === 'completed') return String(job.needsDecision || '').trim() && !workflowQuestionOwned(job) && !answeredElsewhere(session, job) ? 'ANSWER' : 'FINISHED';
       if (state === 'cancelled') return 'STOPPED';
       var map = { LIVE: 'RUNNING', IDLE: 'WAITING', STALE: 'ATTENTION', STOPPED: 'STOPPED', DONE: 'FINISHED' };
       return (session && map[session.status]) || 'WAITING';
@@ -375,6 +394,7 @@
     function answerTarget(row, jobs) {
       var job = row.job;
       if (!job || !job.threadId || job.status !== 'completed') return null;
+      if (workflowQuestionOwned(job)) return null;
       if (row.session && (row.session.status === 'LIVE' || answeredElsewhere(row.session, job))) return null;
       var busy = threadRuns(jobs, job).some(function (run) {
         var live = run.live || run.status;

@@ -109,7 +109,7 @@
       }
       var target = answerTarget(row, jobs);
       var runs = threadRuns(jobs, job).length;
-      var key = JSON.stringify([row.id, job.id, stamp, !!entry.detail, entry.error, target, runs, row.title]);
+      var key = JSON.stringify([row.id, job.id, stamp, !!entry.detail, entry.error, target, runs, row.title, workflowQuestionOwned(job)]);
       if (key === resultCardKey) return;
       resultCardKey = key;
       var old = resultCard.querySelector('.answer-box textarea');
@@ -211,8 +211,16 @@
         body.appendChild(empty);
       }
       if (!model.question) return;
-      var question = resultSection('Needs decision: a question for you', model.question, 'question');
+      var workflowOwned = workflowQuestionOwned(job);
+      var question = resultSection(workflowOwned ? 'Needs decision' : 'Needs decision: a question for you', model.question, 'question');
       body.appendChild(question);
+      if (workflowOwned) {
+        var note = document.createElement('div');
+        note.className = 'result-card-note';
+        note.textContent = 'Asked inside a workflow. The workflow went on.';
+        question.appendChild(note);
+        return;
+      }
       if (!target) {
         // Answered outside the viewer (rowStatus made it Finished): the question stays, no box.
         if (row.status === 'FINISHED') return;
@@ -288,4 +296,3 @@
         jobModalResult.textContent = 'Could not load job result: ' + error.message;
       }
     }
-

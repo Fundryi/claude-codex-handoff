@@ -6,7 +6,7 @@ const path = require("path");
 const { execFile } = require("child_process");
 const { ROOT, APP_ID, APP_VERSION, FLAGS, POLL_MS, sessions, sseClients, notificationClients, searchIndex, pinnedFiles, MAX_PINNED, jobStateCache, CLAUDE_AGENT_ID, claudeRuns, CLAUDE_CHAT_ID, claudeChatFiles, claudeChats, shared } = require("./runtime");
 const { TOKEN, tunnelAuthDecision, codexProcs, refuseUntrusted, trustedControlOrigin, loopbackDirect } = require("./access");
-const { broadcast, plainRunNotification } = require("./events");
+const { broadcast } = require("./events");
 const { searchMatch, ingest, sessionSummary, tick, threadJobStatuses, scheduleTick, kick } = require("./sessions");
 const { classifyJobLiveness, pidAlive, listCompanionJobs, companionJobFile, DEFAULT_RESUME_PROMPT, buildCompanionTaskArgs, runCompanion, isUsableDir } = require("./jobs");
 const { claudeAgentState, claudeTick, claudeTranscriptPage } = require("./claude-workflows");
@@ -267,8 +267,6 @@ function handleRequest(req, res) {
       } else if (body && ((body.source === "codex" && body.event === "PermissionRequest") || body.source === "opencode")) {
         if (body.source === "codex") kick(true);
         else { shared.opencodeWatermark = ""; opencodeChatsTick(); }
-        const notification = plainRunNotification(body);
-        if (notification) broadcast(notification, notificationClients);
       }
       jsonReply(res, 200, { ok: true });
     });

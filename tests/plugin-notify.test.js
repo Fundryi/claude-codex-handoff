@@ -8,6 +8,21 @@ const { pathToFileURL } = require("node:url");
 
 const trackedUrl = pathToFileURL(path.join(__dirname, "..", "plugin", "scripts", "lib", "tracked-jobs.mjs")).href;
 
+// Retain the job SSE coverage from the removed desktop helper suite.
+test("job broadcasts reach every notification client", () => {
+  const { broadcast } = require("../server/events");
+  const clients = new Set();
+  const event = { type: "job", jobId: "job-1", status: "completed", title: "Two browsers" };
+  assert.doesNotThrow(() => broadcast(event, clients));
+  const writes = [[], []];
+  for (const messages of writes) clients.add({ write(line) { messages.push(line); } });
+  broadcast(event, clients);
+  for (const messages of writes) assert.equal(messages[0], "data: " + JSON.stringify(event) + "\n\n");
+  clients.add({ write() { throw new Error("disconnected client"); } });
+  assert.doesNotThrow(() => broadcast(event, clients));
+  for (const messages of writes) assert.equal(messages.length, 2);
+});
+
 test("notifyViewer posts job completion to the viewer port", async () => {
   const { notifyViewer } = await import(trackedUrl);
   const received = new Promise((resolve) => {

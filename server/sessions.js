@@ -2,8 +2,8 @@
 
 const fs = require("fs");
 const path = require("path");
-const { SESSIONS_DIR, ARCHIVED_DIR, POLL_MS, LIVE_WINDOW_MS, MAX_SESSIONS, MAX_EVENTS_KEPT, sessions, sseClients, notificationClients, rolloutNotificationOffsets, searchIndex, pinnedFiles, rolloutStats, resumedFiles, IDLE_POLL_MS, shared } = require("./runtime");
-const { broadcast, plainRunNotification } = require("./events");
+const { SESSIONS_DIR, ARCHIVED_DIR, POLL_MS, LIVE_WINDOW_MS, MAX_SESSIONS, MAX_EVENTS_KEPT, sessions, sseClients, notificationClients, searchIndex, pinnedFiles, rolloutStats, resumedFiles, IDLE_POLL_MS, shared } = require("./runtime");
+const { broadcast } = require("./events");
 const { classifyJobLiveness, pidAlive, listCompanionJobs } = require("./jobs");
 
 // full: restat every file (the 30 s index rebuild). Otherwise (the 1 s tick) stat only new
@@ -237,7 +237,6 @@ function buildSearchIndex() {
   const live = new Set(files);
   for (const f of files) indexEntry(f, rolloutStats.get(f));
   for (const key of searchIndex.keys()) if (!live.has(key)) searchIndex.delete(key);
-  for (const key of rolloutNotificationOffsets.keys()) if (!live.has(key)) rolloutNotificationOffsets.delete(key);
   shared.searchIndexReady = true;
 }
 
@@ -253,11 +252,10 @@ function ingest(file) {
   try { st = fs.statSync(file); } catch { return; }
   let s = sessions.get(file);
   if (!s) {
-    const seen = rolloutNotificationOffsets.get(file) || 0;
-    s = { id: path.basename(file, ".jsonl"), file, offset: 0, partial: Buffer.alloc(0), meta: {}, events: [], callIds: new Set(), lastGrow: st.mtimeMs, size: 0, notifyAfter: st.size < seen ? 0 : seen };
+    s = { id: path.basename(file, ".jsonl"), file, offset: 0, partial: Buffer.alloc(0), meta: {}, events: [], callIds: new Set(), lastGrow: st.mtimeMs, size: 0 };
     sessions.set(file, s);
   }
-  if (st.size < s.size) { s.offset = 0; s.partial = Buffer.alloc(0); s.events = []; s.callIds.clear(); s.notifyAfter = 0; } // truncated/rotated
+  if (st.size < s.size) { s.offset = 0; s.partial = Buffer.alloc(0); s.events = []; s.callIds.clear(); } // truncated/rotated
   s.size = st.size;
   if (st.size <= s.offset) return;
 
@@ -274,11 +272,9 @@ function ingest(file) {
   const cut = data.lastIndexOf(10) + 1;
   s.partial = Buffer.from(data.subarray(cut)); // copy so the 5 MiB read buffer is not retained
   const lines = data.toString("utf8", 0, cut).split("\n");
-  const fresh = [], notifications = [];
-  let lineOffset = s.offset - data.length;
+  const fresh = [];
   let newest = 0;
   for (const line of lines) {
-    lineOffset += Buffer.byteLength(line) + 1;
     if (!line.trim()) continue;
     // lastGrow is the newest record time, not the file mtime (Codex 0.146+ pins that at
     // creation on Windows) and not Date.now() (a backfill of an old file is not live growth).
@@ -319,18 +315,11 @@ function ingest(file) {
     if (ev.kind === "user" && !ev.internal && !s.meta.title && !s.meta.parentThreadId) s.meta.title = promptTitle(ev.text);
     s.events.push(ev);
     fresh.push(ev);
-    if (lineOffset > s.notifyAfter && (ev.kind === "done" || ev.kind === "err")) {
-      const notification = plainRunNotification({ source: "codex", event: ev.kind, sessionId: s.meta.threadId || s.id, cwd: s.meta.cwd }, s);
-      if (notification) notifications.push(notification);
-    }
     if (s.events.length > MAX_EVENTS_KEPT) s.events.splice(0, s.events.length - MAX_EVENTS_KEPT);
   }
   s.lastGrow = Math.max(s.lastGrow, newest || st.mtimeMs); // mtime only for files without timestamps
-  s.notifyAfter = Math.max(s.notifyAfter, s.offset - s.partial.length);
-  rolloutNotificationOffsets.set(file, s.notifyAfter);
   if (fresh.length) {
     broadcast({ type: "events", session: s.id, events: fresh });
-    for (const notification of notifications) broadcast(notification, notificationClients);
   }
 }
 
@@ -433,7 +422,7 @@ function threadJobStatuses(jobs) {
 
 // Adaptive refresh. A file change (fs.watch) or a job notice pulls the next tick in, but never
 // closer than tickGap after the last one: the more tasks run at once, the longer the gap.
-// Without changes the poll runs every 1 s (or the gap, if longer); with no browser or tray every 5 s.
+// Without changes the poll runs every 1 s (or the gap, if longer); with no browser every 5 s.
 let tickTimer = null, tickDue = 0, lastTickAt = 0, sessionsSig = "", codexActive = 0;
 function tickGap(active) {
   return Math.min(2000, 250 + 75 * (active || 0));

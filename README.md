@@ -185,19 +185,19 @@ node ai-live-viewer.js kill     # force-quit, also a hung viewer
 
 **Port and address.** The viewer listens on `127.0.0.1:8377`. The port is fixed on purpose: the plugin finds the viewer by it to report finished jobs. If another program already uses 8377, the viewer does not start and says so; set `CODEX_VIEWER_PORT` to a free port where Claude and Codex run. Under WSL, `localhost:8377` on Windows reaches a viewer running inside WSL, and it shows the Codex runs from the WSL side. In a Docker container, set `CODEX_VIEWER_HOST=0.0.0.0` and publish the port to the host only, for example `-p 127.0.0.1:8377:8377`.
 
-The Node server shows desktop pop-ups itself on Windows, Linux with `notify-send`, and macOS. Use the Node CLI or the plugin's autostart to run it. Releases have no zip assets. The plugin installs from the marketplace.
+The viewer shows no desktop pop-ups. Use the Node CLI or the plugin's autostart to run it. Releases have no zip assets. The plugin installs from the marketplace.
 
 ### Integrations
 
-The viewer reads Codex rollouts and sends a turn toast with no setup, plugin or hook trust. It ignores old lines read at startup. Companion sessions use the job's own toast, so each event gets one toast. The integrations use the same files on Windows, macOS and Linux.
+The viewer reads Codex rollouts without setup, a plugin or hook trust. It shows no desktop pop-ups. The optional Codex hook and OpenCode plugin only make the viewer refresh sooner. The integrations use the same files on Windows, macOS and Linux.
 
-Run `/codex:setup` for optional Codex approval notices and the OpenCode viewer plugin. The Codex PermissionRequest hook ships inside `codex@fundryi`, separate from the Claude hooks. It runs synchronously with a 3-second hook timeout and a 1.5-second HTTP timeout. Codex substitutes the plugin path before it runs the command, so the command does not depend on shell variables or plugin versions.
+Run `/codex:setup` to check the optional Codex hook and manage the OpenCode viewer plugin. The Codex PermissionRequest hook ships inside `codex@fundryi`, separate from the Claude hooks. It requests an earlier refresh when Codex asks for approval. It runs synchronously with a 3-second hook timeout and a 1.5-second HTTP timeout. Codex substitutes the plugin path before it runs the command, so the command does not depend on shell variables or plugin versions.
 
-For approval notices, install the plugin in Codex and do this once: **open codex, run /hooks, trust the codex@fundryi hooks**. Approval requests occur only when Codex's approval policy is not `never`. This trust step enables only approval notices. Setup reports trusted or needs trust. It reads the saved trust but never edits Codex config.
+For earlier refreshes on approval requests, install the plugin in Codex and do this once: **open codex, run /hooks, trust the codex@fundryi hooks**. Approval requests occur only when Codex's approval policy is not `never`. Setup reports trusted or needs trust. It reads the saved trust but never edits Codex config.
 
-For OpenCode 2, setup asks before it copies `ai-live-viewer-notify.js` into the global `opencode/plugins/` config folder. It respects `XDG_CONFIG_HOME` and `OPENCODE_CONFIG_DIR`. Restart OpenCode after installation. Use `/codex:setup --remove-opencode-plugin` to remove the file. Setup removes only a file with our plugin id marker. It never edits `opencode.json`.
+For OpenCode 2, setup asks before it copies `ai-live-viewer-notify.js` into the global `opencode/plugins/` config folder. The plugin requests an earlier refresh when a turn ends or OpenCode asks for approval or an answer. It respects `XDG_CONFIG_HOME` and `OPENCODE_CONFIG_DIR`. Restart OpenCode after installation. Use `/codex:setup --remove-opencode-plugin` to remove the file. Setup removes only a file with our plugin id marker. It never edits `opencode.json`.
 
-The default policy sends a toast for every turn end, approval and question. Set `CODEX_VIEWER_NOTIFY_QUIET=1` for quiet mode: approval and question notices, failed turns, and turns of at least 60 seconds only. Duration starts at the newest user message the viewer knows. Set `CODEX_VIEWER_NOTIFICATIONS=0` to disable toasts. Companion jobs keep their own toast and get no second toast from these integrations.
+Companion job reports refresh the job list through the viewer's event stream.
 
 Old Windows `.bat` installs are left as they are. Setup reports a legacy `notify.ps1` setting and does not change it.
 
@@ -219,14 +219,12 @@ Claude transcripts (chats, subagents and workflow agents) can hold text from eve
 | `CODEX_PLUGIN_UPDATE_CHECK` | `1` | `0` disables the daily update check |
 | `CODEX_VIEWER_AUTOSTART` | `1` | `0` disables the session-start dashboard autostart |
 | `CODEX_VIEWER_PORT` | `8377` | Dashboard port (also receives job-completion pushes) |
-| `CODEX_VIEWER_NOTIFY_QUIET` | `0` | `1` limits plain-run toasts to approval/question notices, failures and turns of at least 60 seconds |
 | `CODEX_VIEWER_HOST` | `127.0.0.1` | Bind address; `0.0.0.0` opens it to your LAN |
 | `CODEX_VIEWER_ALLOWED_HOSTS` | (none) | Comma list of names a reverse proxy serves the dashboard under; when set, the default bind becomes `0.0.0.0` |
 | `CODEX_COMPANION_STATE_ROOT` | `~/.codex-companion/state` | Shared job state (CLI + dashboard) |
 | `CODEX_HOME` | `~/.codex` | Where Codex session files are read from |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Where Claude workflow runs are read from (its `projects` folder) |
 | `OPENCODE_DB` | `$XDG_DATA_HOME/opencode/opencode.db` or `~/.local/share/opencode/opencode.db` | OpenCode database, read only |
-| `CODEX_VIEWER_NOTIFICATIONS` | `1` | `0` disables the server's desktop pop-ups |
 
 </details>
 
@@ -234,7 +232,7 @@ Claude transcripts (chats, subagents and workflow agents) can hold text from eve
 <summary><b>Project layout</b></summary>
 
 - `ai-live-viewer.js`: CLI and server startup
-- `server/`: CommonJS modules for sessions, jobs, transcripts, access, HTTP, usage and desktop pop-ups. See the server file map in [AGENTS.md](AGENTS.md). Node standard library only, no build step
+- `server/`: CommonJS modules for sessions, jobs, transcripts, access, HTTP and usage. See the server file map in [AGENTS.md](AGENTS.md). Node standard library only, no build step
 - `ui/`: markup in `index.html`, six CSS files and 19 classic scripts in `js/`. Keep the fixed load order. No ES modules, bundler or build step. See the UI file map in [AGENTS.md](AGENTS.md)
 - `plugin/`: the Claude Code plugin, forked from [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (keeps OpenAI's Apache-2.0 `LICENSE` and `NOTICE`; the changes fall under the root [LICENSE](LICENSE))
 - `plugin/.codex-plugin/plugin.json`: the manifest Codex reads when the plugin is installed there. It points at `codex-hooks/hooks.json` for optional approval notices and keeps the Claude hooks out of Codex. Keep its version equal to `plugin/.claude-plugin/plugin.json`

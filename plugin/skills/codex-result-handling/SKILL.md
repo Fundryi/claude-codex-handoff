@@ -34,3 +34,11 @@ These steps also apply to OpenCode. For an OpenCode result or `ses_` session id,
 5. Each time you answer by yourself, tell the user the question and your answer in one or two lines.
 
 This is a new handoff you choose to make, not recovery. Never resume a dead or stuck job this way; that stays the user's click.
+
+## Inside a Workflow script
+
+When a Workflow script calls the `codex:codex-rescue` agent, the Codex result goes back to the script, not to you. The viewer then treats an open question as the workflow's, not the user's. So the script must handle it:
+
+- Look for a "Needs decision" section that is not "None".
+- Answer it on the same thread. The next `agent()` call for that task starts with `--resume-thread <thread-id>` (from the result's last line), then the answer, as in step 1. This also applies to a fix round after a review. A fresh handoff loses Codex's context and leaves the old question open.
+- If the script cannot decide (the limits of steps 2 and 3), put the question in the workflow's return value. Then the main thread asks the user.
