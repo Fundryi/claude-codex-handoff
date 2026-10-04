@@ -215,7 +215,7 @@
         });
         blocks.forEach(function (block, index) {
           // The block being worked on right now starts open; older ones start collapsed.
-          if (block.work) fragment.appendChild(createWorkBlock(block, target.running && index === blocks.length - 1, block.actor));
+          if (block.work) fragment.appendChild(createWorkBlock(block, target.running && index === blocks.length - 1, block.actor, renderKey));
           else if (block.actor === 'system') fragment.appendChild(createSystemGroup(block.event, block.key));
           else if (block.actor === 'status') fragment.appendChild(createMarker(block.event));
           else fragment.appendChild(createMessage(block.event, block.actor, block.key, session));
@@ -233,6 +233,9 @@
       inner.querySelectorAll('details[data-key]').forEach(function (d) {
         var choice = feedOpenChoices[renderKey + '|' + d.dataset.key];
         if (choice !== undefined) d.open = choice;
+        // A lazy body (work step, System row, long message) is built now, so the restored row keeps its height
+        // before the scroll position is read; the toggle event would build it a frame later.
+        if (d.open && d._build) d._build();
         if (d.dataset.key === focusKey) d.querySelector('summary').focus({ preventScroll: true });
       });
       if (!preservePosition) requestAnimationFrame(function () { target.scroller.scrollTop = target.scroller.scrollHeight; if (target.pill) target.pill.hidden = true; });

@@ -257,3 +257,418 @@
       var sentence = text.match(/^.*?[.!?](?=\s|$)/);
       return (sentence ? sentence[0] : text).slice(0, 200);
     }
+
+
+    // ---- Render part. Every function takes `doc` (tests hand in a tiny shim: createElement, createTextNode,
+    // createDocumentFragment, appendChild, className, textContent, style only), so construction uses nothing else;
+    // classList, dataset and listeners run only inside click handlers or on feed-only rows.
+    // Block state (Wrap, an opened fold, "Copied") lives in contentState by key, so a live re-render restores it.
+    var contentState = {};
+    function blockState(opts) {
+      if (!opts || !opts.key) return {};
+      opts.n = (opts.n || 0) + 1;
+      var key = opts.key + '#' + opts.n;
+      return contentState[key] || (contentState[key] = {});
+    }
+    function cel(doc, tag, cls, text) {
+      var e = doc.createElement(tag);
+      if (cls) e.className = cls;
+      if (text != null) e.textContent = text;
+      return e;
+    }
+    function setFlag(el, cls, on) { el.classList.toggle(cls, !!on); }
+    var LANG_NAMES = { js: 'JavaScript', ts: 'TypeScript', json: 'JSON', py: 'Python', sh: 'Shell', ps1: 'PowerShell', php: 'PHP', rust: 'Rust',
+      css: 'CSS', html: 'HTML', sql: 'SQL', yaml: 'YAML', toml: 'TOML', md: 'Markdown', diff: 'diff', text: 'text', txt: 'text' };
+    function langName(lang) {
+      var raw = String(lang || '').trim();
+      if (!raw) return 'code';
+      var id = languageOf(raw);
+      return LANG_NAMES[id] || LANG_NAMES[raw.toLowerCase()] || raw.toLowerCase();
+    }
+    function lineCount(text) {
+      var n = 1;
+      for (var i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) n++;
+      return n;
+    }
+    function codeButton(doc, label, onClick, on) {
+      var b = cel(doc, 'button', 'code-btn' + (on ? ' on' : ''), label);
+      b.type = 'button';
+      b.onclick = onClick;
+      return b;
+    }
+    // Copies the raw text; shows "Copied" for 1.5 s, and keeps showing it across a re-render inside that window.
+    function copyButton(doc, getText, label, st) {
+      label = label || 'Copy';
+      var b = codeButton(doc, label, function () {
+        try { navigator.clipboard.writeText(getText()); } catch (_) {}
+        if (st) st.copiedUntil = Date.now() + 1500;
+        showCopied(b, label, 1500);
+      });
+      var left = st && st.copiedUntil ? st.copiedUntil - Date.now() : 0;
+      if (left > 0) { b.textContent = 'Copied'; b.className += ' copied'; showCopied(b, label, left); }
+      return b;
+    }
+    function showCopied(b, label, ms) {
+      b.textContent = 'Copied'; setFlag(b, 'copied', true);
+      setTimeout(function () { b.textContent = label; setFlag(b, 'copied', false); }, ms);
+    }
+    function wrapButton(doc, box, st) {
+      return codeButton(doc, 'Wrap', function () { st.wrap = !st.wrap; setFlag(box, 'wrap', st.wrap); setFlag(this, 'on', st.wrap); }, st.wrap);
+    }
+    function foldButton(doc, box, n, keep, st) {
+      var more = cel(doc, 'button', 'code-more', st.open ? 'Show first ' + keep + ' lines' : 'Show all ' + n + ' lines');
+      more.type = 'button';
+      more.onclick = function () { st.open = !st.open; setFlag(box, 'folded', !st.open); more.textContent = st.open ? 'Show first ' + keep + ' lines' : 'Show all ' + n + ' lines'; };
+      return more;
+    }
+    function cutNote(doc, truncated, unit) {
+      return cel(doc, 'div', 'code-cut', 'cut off: ' + Number(truncated.shown).toLocaleString() + ' of ' + Number(truncated.total).toLocaleString() + ' ' + (unit || 'characters'));
+    }
+    function appendTokens(parent, code, lang, doc) {
+      highlight(code, lang).forEach(function (t) {
+        parent.appendChild(t.type === 'plain' ? doc.createTextNode(t.text) : cel(doc, 'span', 'tk-' + t.type, t.text));
+      });
+    }
+    function diffLineKind(line) {
+      if (/^@@ /.test(line)) return 'hunk';
+      if (/^(diff |index |--- |\+\+\+ |rename |new file|deleted file|similarity)/.test(line)) return 'meta';
+      if (line[0] === '+') return 'add';
+      if (line[0] === '-') return 'del';
+      return 'ctx';
+    }
+    // A code block: header (language, Wrap, Copy), no wrapping by default, 4-wide tabs, folded above 25 lines to 15.
+    // opts.quiet (a thinking step) draws it without syntax colors.
+    function renderCodeBlock(text, lang, opts, doc) {
+      opts = opts || {}; doc = doc || document;
+      text = String(text == null ? '' : text);
+      var st = blockState(opts);
+      var n = lineCount(text);
+      var fold = n > 25 && opts.fold !== false;
+      var box = cel(doc, 'div', 'code' + (st.wrap ? ' wrap' : '') + (fold && !st.open ? ' folded' : '') + (opts.quiet ? ' quiet' : ''));
+      var head = cel(doc, 'div', 'code-head');
+      head.appendChild(cel(doc, 'span', 'code-lang', langName(lang)));
+      head.appendChild(cel(doc, 'span', 'spacer'));
+      head.appendChild(wrapButton(doc, box, st));
+      head.appendChild(copyButton(doc, function () { return text; }, 'Copy', st));
+      var pre = cel(doc, 'pre'), code = cel(doc, 'code');
+      var id = languageOf(lang);
+      if (opts.quiet || !id) code.textContent = text;
+      else if (id === 'diff') {
+        var path = (text.match(/^diff --git a\/\S+ b\/(\S+)/m) || text.match(/^\+\+\+ (?:b\/)?(\S+)/m) || [])[1] || '';
+        text.split('\n').forEach(function (line) {
+          var kind = diffLineKind(line), span = cel(doc, 'span', 'dl-' + kind);
+          var body = kind === 'add' || kind === 'del' || kind === 'ctx' ? line.slice(1) : line;
+          if (kind === 'hunk' || kind === 'meta' || !languageOf(path)) span.textContent = body; else appendTokens(span, body, path, doc);
+          code.appendChild(span);
+        });
+      } else appendTokens(code, text, lang, doc);
+      pre.appendChild(code);
+      box.appendChild(head);
+      box.appendChild(pre);
+      if (fold) box.appendChild(foldButton(doc, box, n, 15, st));
+      if (opts.truncated) box.appendChild(cutNote(doc, opts.truncated));
+      return box;
+    }
+    function pathSpan(doc, cls, path) {
+      var s = cel(doc, 'span', cls), m = String(path).match(/^(.*[\\/])([^\\/]+)$/);
+      if (m) { s.appendChild(cel(doc, 'span', 'dir', m[1])); s.appendChild(doc.createTextNode(m[2])); } else s.textContent = path;
+      return s;
+    }
+    // Diff view: one block per file, +/- counts, hunk headers, a two-number gutter, syntax colors by extension.
+    function renderDiff(text, opts, doc) {
+      opts = opts || {}; doc = doc || document;
+      text = String(text == null ? '' : text);
+      var frag = doc.createDocumentFragment();
+      var files = parseDiff(text);
+      files.forEach(function (f) {
+        var st = blockState(opts);
+        var n = f.hunks.reduce(function (sum, h) { return sum + 1 + h.lines.length; }, 0);
+        var fold = n > 25 && opts.fold !== false;
+        var box = cel(doc, 'div', 'diff' + (st.wrap ? ' wrap' : '') + (fold && !st.open ? ' folded' : ''));
+        var head = cel(doc, 'div', 'diff-head');
+        head.appendChild(pathSpan(doc, 'diff-path', f.path || f.oldPath || '(file)'));
+        if (f.op !== 'update') head.appendChild(cel(doc, 'span', 'diff-op ' + f.op, f.op === 'add' ? 'new file' : 'deleted'));
+        var counts = cel(doc, 'span', 'diff-counts');
+        counts.appendChild(cel(doc, 'span', 'add', '+' + f.added));
+        counts.appendChild(cel(doc, 'span', 'del', '−' + f.removed));
+        head.appendChild(counts);
+        head.appendChild(cel(doc, 'span', 'spacer'));
+        head.appendChild(wrapButton(doc, box, st));
+        head.appendChild(copyButton(doc, function () {
+          return f.hunks.map(function (h) { return h.lines.filter(function (l) { return l.kind === 'add' || l.kind === 'ctx'; }).map(function (l) { return l.text; }).join('\n'); }).join('\n');
+        }, 'Copy', st));
+        head.appendChild(copyButton(doc, function () { return text; }, 'Copy diff'));
+        box.appendChild(head);
+        var lines = cel(doc, 'div', 'diff-lines');
+        var lang = languageOf(f.path || f.oldPath);
+        f.hunks.forEach(function (h) {
+          var hl = cel(doc, 'div', 'diff-line hunk');
+          hl.appendChild(cel(doc, 'span', 'diff-no')); hl.appendChild(cel(doc, 'span', 'diff-no')); hl.appendChild(cel(doc, 'span', 'diff-sign'));
+          hl.appendChild(cel(doc, 'span', 'diff-text', h.header));
+          lines.appendChild(hl);
+          h.lines.forEach(function (l) {
+            var row = cel(doc, 'div', 'diff-line ' + l.kind), t = cel(doc, 'span', 'diff-text');
+            row.appendChild(cel(doc, 'span', 'diff-no', l.oldNo == null ? '' : String(l.oldNo)));
+            row.appendChild(cel(doc, 'span', 'diff-no', l.newNo == null ? '' : String(l.newNo)));
+            row.appendChild(cel(doc, 'span', 'diff-sign', l.kind === 'add' ? '+' : l.kind === 'del' ? '-' : ''));
+            if (lang && l.kind !== 'meta') appendTokens(t, l.text, lang, doc); else t.textContent = l.text;
+            row.appendChild(t);
+            lines.appendChild(row);
+          });
+        });
+        box.appendChild(lines);
+        if (fold) box.appendChild(foldButton(doc, box, n, 15, st));
+        frag.appendChild(box);
+      });
+      if (!files.length) frag.appendChild(renderCodeBlock(text, 'diff', opts, doc));
+      if (opts.truncated && frag.lastChild) frag.lastChild.appendChild(cutNote(doc, opts.truncated));
+      return frag;
+    }
+    function exitBadge(doc, exit) {
+      if (exit == null || exit === 0 || exit === '') return null;
+      return cel(doc, 'span', 'exit-badge fail', 'exit ' + exit);
+    }
+    function renderAnsiInto(parent, text, doc) {
+      parseAnsi(text).forEach(function (s) {
+        var cls = [s.fg ? 'a-' + s.fg : '', s.bg ? 'a-bg-' + s.bg : '', s.bold ? 'a-bold' : ''].filter(Boolean).join(' ');
+        parent.appendChild(cls ? cel(doc, 'span', cls, s.text) : doc.createTextNode(s.text));
+      });
+    }
+    // Command view: the full command, a badge when it failed, the output below (ANSI as colors, capped at 30 lines;
+    // a failed command shows its last 10 lines when folded, so the error is never hidden).
+    function renderCommand(o, opts, doc) {
+      opts = opts || {}; doc = doc || document;
+      var st = blockState(opts);
+      var failed = o.exit != null && o.exit !== 0;
+      var box = cel(doc, 'div', 'cmd' + (failed ? ' failed' : ''));
+      var head = cel(doc, 'div', 'cmd-head');
+      var cmdText = String(o.command || '');
+      head.appendChild(cel(doc, 'span', 'cmd-prompt', o.prompt || '$'));
+      head.appendChild(cel(doc, 'pre', 'cmd-text', cmdText));
+      var meta = cel(doc, 'span', 'cmd-meta');
+      if (o.duration) meta.appendChild(cel(doc, 'span', 'cmd-dur', o.duration));
+      var badge = exitBadge(doc, o.exit); if (badge) meta.appendChild(badge);
+      meta.appendChild(copyButton(doc, function () { return cmdText; }, 'Copy', st));
+      head.appendChild(meta);
+      box.appendChild(head);
+      var out = String(o.output == null ? '' : o.output).replace(/\r\n|\r/g, '\n').replace(/\n+$/, '');
+      if (!out) { if (o.output != null) box.appendChild(cel(doc, 'pre', 'cmd-out empty', o.pending ? '(running)' : '(no output)')); return box; }
+      var n = lineCount(out), cap = failed ? 10 : 30, pre = cel(doc, 'pre', 'cmd-out');
+      if (n > cap && !st.open) {
+        var parts = out.split('\n');
+        renderAnsiInto(pre, (failed ? parts.slice(-cap) : parts.slice(0, cap)).join('\n'), doc);
+        var more = cel(doc, 'button', 'code-more', (failed ? 'Last ' + cap + ' of ' + n + ' lines' : 'First ' + cap + ' of ' + n + ' lines') + ' · Show all');
+        more.type = 'button';
+        more.onclick = function () { st.open = true; pre.textContent = ''; renderAnsiInto(pre, out, doc); more.remove(); };
+        if (failed) { box.appendChild(more); box.appendChild(pre); } else { box.appendChild(pre); box.appendChild(more); }
+      } else { renderAnsiInto(pre, out, doc); box.appendChild(pre); }
+      if (o.truncated) box.appendChild(cutNote(doc, o.truncated));
+      return box;
+    }
+    // JSON view: pretty printed, keys and values colored, folded above 25 lines.
+    function jsonInto(parent, v, indent, doc) {
+      var pad = '  '.repeat(indent);
+      if (v === null || typeof v === 'boolean') parent.appendChild(cel(doc, 'span', 'jb', String(v)));
+      else if (typeof v === 'number') parent.appendChild(cel(doc, 'span', 'jn', String(v)));
+      else if (typeof v === 'string') parent.appendChild(cel(doc, 'span', 'js', JSON.stringify(v)));
+      else if (Array.isArray(v)) {
+        if (!v.length) { parent.appendChild(cel(doc, 'span', 'jp', '[]')); return; }
+        parent.appendChild(cel(doc, 'span', 'jp', '['));
+        v.forEach(function (x, i) { parent.appendChild(doc.createTextNode('\n' + pad + '  ')); jsonInto(parent, x, indent + 1, doc); if (i < v.length - 1) parent.appendChild(cel(doc, 'span', 'jp', ',')); });
+        parent.appendChild(doc.createTextNode('\n' + pad)); parent.appendChild(cel(doc, 'span', 'jp', ']'));
+      } else if (v && typeof v === 'object') {
+        var keys = Object.keys(v);
+        if (!keys.length) { parent.appendChild(cel(doc, 'span', 'jp', '{}')); return; }
+        parent.appendChild(cel(doc, 'span', 'jp', '{'));
+        keys.forEach(function (k, i) {
+          parent.appendChild(doc.createTextNode('\n' + pad + '  ')); parent.appendChild(cel(doc, 'span', 'jk', JSON.stringify(k))); parent.appendChild(cel(doc, 'span', 'jp', ': '));
+          jsonInto(parent, v[k], indent + 1, doc); if (i < keys.length - 1) parent.appendChild(cel(doc, 'span', 'jp', ','));
+        });
+        parent.appendChild(doc.createTextNode('\n' + pad)); parent.appendChild(cel(doc, 'span', 'jp', '}'));
+      } else parent.appendChild(doc.createTextNode(String(v)));
+    }
+    function renderJson(value, opts, doc) {
+      opts = opts || {}; doc = doc || document;
+      var st = blockState(opts);
+      var pretty = JSON.stringify(value, null, 2) || '';
+      var n = lineCount(pretty), fold = n > 25 && opts.fold !== false;
+      var box = cel(doc, 'div', 'json' + (fold && !st.open ? ' folded' : ''));
+      var head = cel(doc, 'div', 'code-head');
+      head.appendChild(cel(doc, 'span', 'code-lang', opts.title || 'JSON'));
+      head.appendChild(cel(doc, 'span', 'spacer'));
+      head.appendChild(copyButton(doc, function () { return pretty; }, 'Copy', st));
+      var pre = cel(doc, 'pre');
+      jsonInto(pre, value, 0, doc);
+      box.appendChild(head);
+      box.appendChild(pre);
+      if (fold) box.appendChild(foldButton(doc, box, n, 15, st));
+      if (opts.truncated) box.appendChild(cutNote(doc, opts.truncated));
+      return box;
+    }
+    // Sections view: <goal>, <rules>, <done_when> as labeled sections with Markdown bodies.
+    function renderSections(sections, opts, doc) {
+      doc = doc || document;
+      var frag = doc.createDocumentFragment();
+      sections.forEach(function (s) {
+        var sec = cel(doc, 'div', 'sec');
+        if (s.label) sec.appendChild(cel(doc, 'div', 'sec-label', s.label));
+        var body = cel(doc, 'div', 'sec-body');
+        body.appendChild(renderMarkdown(s.body, doc, opts));
+        sec.appendChild(body);
+        frag.appendChild(sec);
+      });
+      return frag;
+    }
+    function sizeText(chars) { return chars >= 1000 ? (chars / 1000).toFixed(chars >= 10000 ? 0 : 1) + 'k chars' : chars + ' chars'; }
+    var BLOCK_KINDS = { 'agents-md': 'Instructions', 'claude-md': 'Instructions', skill: 'Skill', developer: 'Developer', 'system-reminder': 'Reminder',
+      'task-notification': 'Task finished', harness: 'Harness', context: 'Context', other: 'Injected' };
+    // Injected block rows: one line each (kind, title, size); the body opens on its own, rendered by its format, capped.
+    // b = { type, title, body, status?, format? }. opts.key gives the row its data-key, so its open state survives re-renders.
+    function renderInjectedRow(b, opts, doc) {
+      opts = opts || {}; doc = doc || document;
+      var d = cel(doc, 'details', 'inj'), s = cel(doc, 'summary');
+      if (opts.key) d.dataset.key = opts.key;
+      s.appendChild(cel(doc, 'span', 'inj-kind', BLOCK_KINDS[b.type] || b.type || 'Injected'));
+      if (b.status) s.appendChild(cel(doc, 'span', 'inj-status ' + b.status));
+      s.appendChild(cel(doc, 'span', 'inj-title', b.title || 'Injected content'));
+      s.appendChild(cel(doc, 'span', 'inj-size', sizeText(String(b.body || '').length)));
+      d.appendChild(s);
+      lazyDetails(d, function () {
+        var body = cel(doc, 'div', 'inj-body');
+        var text = String(b.body || '');
+        var format = b.format || detectFormat(text);
+        if (format === 'markdown' || format === 'sections' || format === 'json' || format === 'diff') body.appendChild(renderContent(text, format, { key: opts.key }, doc));
+        else body.appendChild(cel(doc, 'pre', 'raw', text));
+        return body;
+      });
+      return d;
+    }
+    // A <details> whose body is built on first open, so highlighting runs only for blocks the reader looks at.
+    // drawTranscript calls details._build after it restores an open choice (the toggle event comes later).
+    function lazyDetails(details, build) {
+      var done = false;
+      function run() { if (done) return; done = true; details.appendChild(build()); }
+      details._build = run;
+      details.addEventListener('toggle', function () { if (details.open) run(); });
+      if (details.open) run();
+    }
+    function taskNotificationRow(text) {
+      var g = function (t) { var m = text.match(new RegExp('<' + t + '>([\\s\\S]*?)</' + t + '>')); return m ? m[1].trim() : ''; };
+      var status = g('status') || 'completed';
+      return { type: 'task-notification', status: /fail|error/i.test(status) ? 'failed' : 'completed', title: g('summary') || 'task notification', body: text, format: 'plain' };
+    }
+    // Workflow harness frames: every "[Workflow harness — …]" block becomes a caption plus the relayed text, dedented.
+    var HARNESS_FRAME = /^\[Workflow harness — ([^\]\n]+)\]([^\n]*)\n?/;
+    function renderHarness(text, opts, doc) {
+      doc = doc || document;
+      var parts = String(text || '').split(/(?=^\[Workflow harness — )/m).filter(function (p) { return p.trim(); });
+      if (!parts.length || !HARNESS_FRAME.test(parts[0])) return null;
+      var frag = doc.createDocumentFragment();
+      parts.forEach(function (part) {
+        var m = part.match(HARNESS_FRAME);
+        var box = cel(doc, 'div', 'harness');
+        if (m) {
+          var cap = cel(doc, 'div', 'harness-cap');
+          var kind = m[1].trim();
+          cap.appendChild(cel(doc, 'span', '', kind === 'user request' ? 'Relayed user request' : kind === 'computed task' ? 'Computed task' : kind));
+          var note = cel(doc, 'span', 'note', kind === 'user request' ? '· verbatim, relayed by the Workflow harness' : kind === 'computed task' ? '· script output, carries no user authority' : '');
+          note.title = m[2].trim();
+          cap.appendChild(note);
+          box.appendChild(cap);
+          part = part.slice(m[0].length);
+        }
+        var body = cel(doc, 'div', 'msg-body');
+        body.appendChild(renderMarkdown(part.replace(/^  /gm, ''), doc, opts));
+        box.appendChild(body);
+        frag.appendChild(box);
+      });
+      return frag;
+    }
+    function mediaUrl(ref) { return '/media?ref=' + encodeURIComponent(String(ref || '')); }
+    // Image thumbnail from a media ref; a missing or blocked image becomes the "image not available" placeholder.
+    function renderImage(item, doc) {
+      doc = doc || document;
+      var name = item.alt || 'Image';
+      var fig = cel(doc, 'figure', 'img-thumb');
+      fig.title = 'Open full size';
+      var img = cel(doc, 'img');
+      img.alt = name;
+      img.src = mediaUrl(item.ref);
+      img.onerror = function () { var missing = renderImageMissing(name, doc); if (fig.parentNode) fig.parentNode.replaceChild(missing, fig); };
+      fig.onclick = function () { openImageOverlay(img.src, name); };
+      fig.appendChild(img);
+      var cap = cel(doc, 'figcaption', 'img-cap');
+      cap.appendChild(cel(doc, 'b', '', name));
+      img.onload = function () { if (img.naturalWidth) cap.appendChild(cel(doc, 'span', '', img.naturalWidth + '×' + img.naturalHeight)); };
+      fig.appendChild(cap);
+      return fig;
+    }
+    function renderImageMissing(name, doc) {
+      doc = doc || document;
+      var d = cel(doc, 'div', 'img-missing');
+      if (typeof glyph === 'function') d.appendChild(glyph('ghost'));
+      d.appendChild(cel(doc, 'span', '', 'image not available' + (name && name !== 'Image' ? ' · ' + name : '')));
+      return d;
+    }
+    // Full-size view: one overlay element, made on first use and appended to body (no load-time code).
+    function openImageOverlay(src, name) {
+      var overlay = document.getElementById('image-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'image-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-label', 'Image');
+        overlay.tabIndex = -1;
+        overlay.onclick = function () { overlay.hidden = true; overlay.textContent = ''; };
+        overlay.onkeydown = function (e) { if (e.key === 'Escape') overlay.onclick(); };
+        document.body.appendChild(overlay);
+      }
+      overlay.textContent = '';
+      var img = document.createElement('img');
+      img.src = src; img.alt = name || 'image';
+      overlay.appendChild(img);
+      overlay.hidden = false;
+      overlay.focus();
+    }
+    // A client attachment note becomes a chip with the file name; the path stays in the tooltip, never loaded.
+    var ATTACHMENT_NOTE = /^[ \t]*\[Attached (?:image|file) "([^"\n]+)" is saved at: ([^\]\n]+)\][ \t]*$/gm;
+    function renderAttachmentChip(name, path, doc) {
+      doc = doc || document;
+      var chip = cel(doc, 'span', 'chip-file');
+      chip.title = path;
+      var ext = String(name).match(/\.[^.]+$/);
+      if (typeof glyph === 'function') chip.appendChild(glyph('plugin'));
+      chip.appendChild(cel(doc, 'span', '', ext ? name.slice(0, -ext[0].length) : name));
+      chip.appendChild(cel(doc, 'span', 'ext', ext ? ext[0] : ''));
+      return chip;
+    }
+    // Plain or ANSI text as an output box.
+    function renderOutputPre(text, opts, doc) {
+      var pre = cel(doc, 'pre', 'out');
+      renderAnsiInto(pre, String(text == null ? '' : text), doc);
+      if (opts && opts.truncated) { var frag = doc.createDocumentFragment(); frag.appendChild(pre); frag.appendChild(cutNote(doc, opts.truncated)); return frag; }
+      return pre;
+    }
+    // One renderer for every surface: renderContent(text, format, { key, lang, path, truncated, quiet, pre }) -> Node.
+    // `format` is a hint (section 3.1); without it the page detects. `pre` draws plain text as an output box
+    // (a tool result), else plain text reads as prose.
+    function renderContent(text, format, opts, doc) {
+      opts = opts || {}; doc = doc || document;
+      text = String(text == null ? '' : text);
+      format = detectFormat(text, format);
+      if (format === 'ansi') return renderOutputPre(text, opts, doc);
+      if (format === 'diff') return renderDiff(text, opts, doc);
+      if (format === 'code') return renderCodeBlock(text, opts.lang || opts.path, opts, doc);
+      if (format === 'json') {
+        var pretty = prettyJson(text);
+        if (pretty !== null) return renderJson(JSON.parse(text), opts, doc);
+      }
+      if (format === 'sections') {
+        var sections = parseSections(text);
+        if (sections) return renderSections(sections, opts, doc);
+      }
+      if (format === 'plain' && opts.pre) return renderOutputPre(text, opts, doc);
+      var md = renderMarkdown(text, doc, opts);
+      if (opts.truncated) md.appendChild(cutNote(doc, opts.truncated));
+      return md;
+    }

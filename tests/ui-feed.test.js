@@ -183,6 +183,48 @@ test("a reply's question moves whole into the callout and nothing is lost or res
   assert.equal(removeResultSection("**Needs decision:**\nA or B?", "Needs decision"), "");
 });
 
+test("pairWorkItems puts an output under its call by resultOf, even when parallel calls finished out of order", () => {
+  const { pairWorkItems } = lib();
+  const items = [
+    { kind: "cmd", ts: 1, callId: "a", text: "npm test" },
+    { kind: "tool", ts: 1, callId: "b", text: "Grep foo", tool: { name: "Grep", target: "foo", input: {} } },
+    { kind: "out", ts: 2, resultOf: "b", text: "3 hits" },
+    { kind: "out", ts: 3, resultOf: "a", text: "1 failing", exit: 1 },
+    { kind: "out", ts: 4, text: "orphan" },
+  ];
+  const rows = pairWorkItems(items, ["k0", "k1", "k2", "k3", "k4"]);
+  assert.deepEqual(plain(rows.map((r) => [r.item.kind, r.key, r.outputs.map((o) => o.text), r.exit])), [
+    ["cmd", "k0", ["1 failing"], 1],
+    ["tool", "k1", ["3 hits"], null],
+    ["out", "k4", [], null],
+  ]);
+  // Codex wait polling folds into the step it waits for; the store events are untouched.
+  const polled = [
+    { kind: "cmd", ts: 1, callId: "x", text: "python run.py" },
+    { kind: "tool", ts: 2, callId: "w1", text: "wait {\"cell_id\":\"2\"}", tool: { name: "wait", target: "", input: {} } },
+    { kind: "out", ts: 3, resultOf: "w1", text: "Script running with cell ID 2" },
+    { kind: "tool", ts: 4, callId: "w2", text: "wait {\"cell_id\":\"2\"}", tool: { name: "wait", target: "", input: {} } },
+    { kind: "out", ts: 5, resultOf: "w2", text: "done" },
+  ];
+  const folded = pairWorkItems(polled);
+  assert.equal(folded.length, 1);
+  assert.equal(folded[0].waits, 2);
+  assert.deepEqual(plain(folded[0].waitOutputs.map((o) => o.text)), ["Script running with cell ID 2", "done"]);
+  assert.equal("outputs" in polled[0], false);
+});
+
+test("workSummary counts failures once per call, from the call or its output", () => {
+  const { workSummary } = lib();
+  assert.equal(workSummary([
+    { kind: "cmd", callId: "a", exit: 0 },
+    { kind: "cmd", callId: "b" }, { kind: "out", resultOf: "b", exit: 1 },
+    { kind: "cmd", callId: "c", exit: 2 }, { kind: "out", resultOf: "c", exit: 2 },
+    { kind: "patch" },
+  ]), "3 commands, 2 failed · 2 outputs · 1 patch");
+  assert.equal(workSummary([{ kind: "tool", exit: 1 }, { kind: "tool" }]), "2 tool calls, 1 failed");
+  assert.equal(workSummary([{ kind: "cmd", exit: 0 }]), "1 command");
+});
+
 test("the UI and the server flag the same injected blocks", () => {
   const server = serverSource();
   const list = (src) => src.match(/INJECTED_BLOCK = (\/.*\/);/)[1];

@@ -257,15 +257,56 @@
       }
       return 'starting';
     }
-    // "2 commands · 1 patch" for a collapsed Codex work block.
+    // A failed step: a non-zero exit on the call, or on its output (Claude puts the exit on the tool_result).
+    function stepFailed(exit) { return typeof exit === 'number' && exit !== 0; }
+    // "2 commands, 1 failed · 1 patch" for a collapsed work block. A call and its output count one failure.
     function workSummary(items) {
       var names = { cmd: ['command', 'commands'], out: ['output', 'outputs'], patch: ['patch', 'patches'], tool: ['tool call', 'tool calls'], thinkgroup: ['thinking step', 'thinking steps'] };
-      var counts = {};
+      var counts = {}, failed = 0, failedIds = {};
       (items || []).forEach(function (item) {
         var kind = item.kind === 'think' ? 'thinkgroup' : item.kind;
         counts[kind] = (counts[kind] || 0) + (item.steps ? item.steps.length : 1);
+        if (!stepFailed(item.exit)) return;
+        var id = item.callId || item.resultOf;
+        if (id) { if (failedIds[id]) return; failedIds[id] = true; }
+        failed++;
       });
-      return Object.keys(names).filter(function (kind) { return counts[kind]; }).map(function (kind) {
+      var parts = Object.keys(names).filter(function (kind) { return counts[kind]; }).map(function (kind) {
         return counts[kind] + ' ' + names[kind][counts[kind] === 1 ? 0 : 1];
-      }).join(' · ');
+      });
+      if (failed) {
+        var at = counts.cmd ? 0 : parts.length ? 0 : -1;
+        if (at >= 0) parts[at] += ', ' + failed + ' failed'; else parts.push(failed + ' failed');
+      }
+      return parts.join(' · ');
+    }
+    // Work rows: an output sits under its call (resultOf), whatever order the parallel calls finished in, and
+    // Codex code-mode wait polling (a `wait` tool call plus its "Script running" output) folds into the step it
+    // waits for. Returns one wrapper per visible row: { item, key, outputs, waits, exit }. The store events stay as they are.
+    function pairWorkItems(items, keys) {
+      var rows = [], byCall = {};
+      (items || []).forEach(function (item, index) {
+        var key = keys ? keys[index] : undefined;
+        if (item.kind === 'out' && item.resultOf && byCall[item.resultOf]) {
+          var owner = byCall[item.resultOf];
+          if (owner.waitIds && owner.waitIds[item.resultOf]) owner.waitOutputs.push(item); else owner.outputs.push(item);
+          return;
+        }
+        var isWait = item.kind === 'tool' && ((item.tool && item.tool.name === 'wait') || /^wait(\s|$)/.test(String(item.text || '')));
+        if (isWait && rows.length) {
+          var previous = rows[rows.length - 1];
+          previous.waits++;
+          if (item.callId) { previous.waitIds[item.callId] = true; byCall[item.callId] = previous; }
+          return;
+        }
+        var row = { item: item, key: key, outputs: [], waits: 0, waitIds: {}, waitOutputs: [], exit: undefined };
+        if (item.callId) byCall[item.callId] = row;
+        rows.push(row);
+      });
+      rows.forEach(function (row) {
+        var exits = [row.item.exit].concat(row.outputs.map(function (o) { return o.exit; })).filter(function (e) { return typeof e === 'number'; });
+        row.exit = exits.find(function (e) { return e !== 0; });
+        if (row.exit === undefined && exits.length) row.exit = exits[exits.length - 1];
+      });
+      return rows;
     }

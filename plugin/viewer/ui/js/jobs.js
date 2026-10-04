@@ -119,7 +119,8 @@
       if (focus && fresh) { fresh.focus(); fresh.setSelectionRange(focus[0], focus[1]); }
     }
 
-    function resultSection(heading, markdown, extraClass) {
+    // `key` keeps the Wrap / fold / Copied state of the section's code blocks across card rebuilds.
+    function resultSection(heading, markdown, extraClass, key) {
       var section = document.createElement('div');
       section.className = 'result-section' + (extraClass ? ' ' + extraClass : '');
       var title = document.createElement('h3');
@@ -127,7 +128,7 @@
       title.textContent = heading;
       var body = document.createElement('div');
       body.className = 'result-section-body';
-      body.appendChild(renderMarkdown(markdown, document));
+      body.appendChild(renderContent(markdown, 'markdown', { key: key ? key + '|' + heading : '' }, document));
       section.append(title, body);
       return section;
     }
@@ -202,8 +203,9 @@
       }
       var result = entry.detail.result || {};
       var model = resultCardModel(result.rawOutput, result.touchedFiles);
-      if (model.plain) body.appendChild(resultSection('Answer', model.plain));
-      model.sections.forEach(function (section) { body.appendChild(resultSection(section.heading, section.body)); });
+      var cardKey = 'result|' + job.id;
+      if (model.plain) body.appendChild(resultSection('Answer', model.plain, '', cardKey));
+      model.sections.forEach(function (section) { body.appendChild(resultSection(section.heading, section.body, '', cardKey)); });
       if (!model.plain && !model.sections.length && !model.question) {
         var empty = document.createElement('div');
         empty.className = 'result-card-note';
@@ -212,7 +214,7 @@
       }
       if (!model.question) return;
       var workflowOwned = workflowQuestionOwned(job);
-      var question = resultSection(workflowOwned ? 'Needs decision' : 'Needs decision: a question for you', model.question, 'question');
+      var question = resultSection(workflowOwned ? 'Needs decision' : 'Needs decision: a question for you', model.question, 'question', cardKey);
       body.appendChild(question);
       if (workflowOwned) {
         var note = document.createElement('div');
@@ -290,7 +292,7 @@
           || [detail.errorMessage, detail.stderrTail].filter(Boolean).join('\n\n')
           || 'No rendered result is available.';
         jobModalResult.textContent = '';
-        jobModalResult.appendChild(renderMarkdown(resultText, document));
+        jobModalResult.appendChild(renderContent(resultText, 'markdown', { key: 'modal|' + job.id }, document));
       } catch (error) {
         if (token !== jobModalToken) return;
         jobModalResult.textContent = 'Could not load job result: ' + error.message;

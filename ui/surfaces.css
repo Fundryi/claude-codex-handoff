@@ -533,7 +533,7 @@
     .result-card-caret { color: var(--muted); font-size: 10px; width: 10px; }
     .result-card-runs { color: var(--muted); font-size: 11px; font-weight: 400; }
     .result-card-head .spacer { flex: 1; }
-    .result-card-body { max-height: 38vh; overflow: auto; padding: 2px 14px 12px; border-top: 1px solid var(--border); }
+    .result-card-body { max-height: min(32vh, 420px); overflow: auto; padding: 2px 14px 12px; border-top: 1px solid var(--border); } /* D12: the card never eats the feed */
     .result-section { margin-top: 10px; min-width: 0; }
     .result-section-title { margin: 0 0 4px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
     .result-section.question { margin-top: 12px; padding: 8px 12px 10px; border: 1px solid var(--you); border-radius: var(--r-btn); background: color-mix(in srgb, var(--you) 6%, var(--panel)); }
@@ -541,7 +541,12 @@
     .result-section-body { overflow-wrap: anywhere; word-break: break-word; line-height: 1.55; font-size: 13px; }
     .result-section-body > :first-child { margin-top: 0; }
     .result-section-body > :last-child { margin-bottom: 0; }
-    .result-section-body code { font: 11px Consolas, Menlo, monospace; background: var(--panel-3); color: var(--tree-text); padding: 1px 5px; border-radius: 4px; }
+    .result-section-body .md-h2 { font-size: 14px; margin-top: 10px; } /* the section title stays above the inner headings (M11) */
+    .result-section-body .md-h3 { font-size: 13px; }
+    /* Full-size image (E3): one overlay, made on first click; click or Esc closes it */
+    #image-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .78); cursor: zoom-out; }
+    #image-overlay[hidden] { display: none; }
+    #image-overlay img { max-width: 100%; max-height: 100%; border: 1px solid var(--border-strong); border-radius: var(--r-btn); background: var(--bg); }
     .result-card-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
     .answer-box { margin-top: 10px; display: grid; gap: 7px; }
     .answer-box textarea { width: 100%; min-height: 70px; resize: vertical; border: 1px solid var(--border); border-radius: var(--r-btn); padding: 7px 9px; color: var(--fg); background: var(--bg); }

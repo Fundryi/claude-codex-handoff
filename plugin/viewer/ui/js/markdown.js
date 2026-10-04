@@ -282,14 +282,20 @@
     function parseMarkdown(text) {
       return markdownBlocks(String(text == null ? '' : text).replace(/\r\n/g, '\n').split('\n'));
     }
+    // A bold label that is exactly Passed / Failed / OK / Error gets a status color (Checks run lists).
+    var STATUS_WORD = /^(Passed|Failed|FAILED|OK|Error)\b:?$/;
     function appendInline(parent, tokens, doc) {
       tokens.forEach(function (token) {
         if (token.type === 'text') { parent.appendChild(doc.createTextNode(token.text)); return; }
         var tags = { bold: 'strong', italic: 'em', strike: 'del', code: 'code', br: 'br', link: token.href ? 'a' : 'span' };
         var node = doc.createElement(tags[token.type]);
         if (token.type === 'code') node.textContent = token.text;
+        if (token.type === 'bold' && token.children.length === 1 && token.children[0].type === 'text') {
+          var word = token.children[0].text.trim().match(STATUS_WORD);
+          if (word) node.className = /^(Passed|OK)/.test(word[1]) ? 'st-ok' : 'st-fail';
+        }
         if (token.type === 'link') {
-          node.className = 'md-link';
+          node.className = token.href ? 'md-link' : 'md-link local';
           node.title = token.title;
           if (token.href) { node.href = token.href; node.target = '_blank'; node.rel = 'noopener noreferrer'; }
         }
@@ -297,7 +303,8 @@
         parent.appendChild(node);
       });
     }
-    function renderMarkdownBlock(block, doc) {
+    // opts (optional) reaches the code blocks: { key, quiet, n } (see renderCodeBlock in content.js).
+    function renderMarkdownBlock(block, doc, opts) {
       if (block.type === 'heading') {
         var heading = doc.createElement('div');
         heading.className = 'md-h' + block.level;
@@ -305,14 +312,9 @@
         return heading;
       }
       if (block.type === 'code') {
+        if (typeof renderCodeBlock === 'function') return renderCodeBlock(block.text, block.lang, opts, doc);
         var wrap = doc.createElement('div');
-        wrap.className = 'md-code';
-        if (block.lang) {
-          var label = doc.createElement('div');
-          label.className = 'md-code-lang';
-          label.textContent = block.lang;
-          wrap.appendChild(label);
-        }
+        wrap.className = 'code';
         var pre = doc.createElement('pre');
         pre.textContent = block.text;
         wrap.appendChild(pre);
@@ -321,7 +323,7 @@
       if (block.type === 'quote') {
         var quote = doc.createElement('blockquote');
         quote.className = 'md-quote';
-        block.blocks.forEach(function (child) { quote.appendChild(renderMarkdownBlock(child, doc)); });
+        block.blocks.forEach(function (child) { quote.appendChild(renderMarkdownBlock(child, doc, opts)); });
         return quote;
       }
       if (block.type === 'ul' || block.type === 'ol') {
@@ -336,7 +338,7 @@
             check.type = 'checkbox'; check.disabled = true; check.checked = item.checked;
             li.appendChild(check);
           }
-          item.blocks.forEach(function (child) { li.appendChild(renderMarkdownBlock(child, doc)); });
+          item.blocks.forEach(function (child) { li.appendChild(renderMarkdownBlock(child, doc, opts)); });
           list.appendChild(li);
         });
         return list;
@@ -345,7 +347,8 @@
         var hr = doc.createElement('hr'); hr.className = 'md-hr'; return hr;
       }
       if (block.type === 'table') {
-        var table = doc.createElement('table'); table.className = 'md-table';
+        var tableWrap = doc.createElement('div'); tableWrap.className = 'md-table-wrap';
+        var table = doc.createElement('table'); table.className = 'md-table' + (block.head.length >= 4 ? ' wide' : '');
         var thead = doc.createElement('thead');
         var tbody = doc.createElement('tbody');
         var rows = [block.head].concat(block.rows);
@@ -353,12 +356,12 @@
           var tr = doc.createElement('tr');
           cells.forEach(function (inline, column) {
             var cell = doc.createElement(rowIndex === 0 ? 'th' : 'td');
-            if (block.align[column]) cell.style.textAlign = block.align[column];
+            if (block.align[column]) { cell.style.textAlign = block.align[column]; cell.className = 'al-' + block.align[column]; }
             appendInline(cell, inline, doc); tr.appendChild(cell);
           });
           (rowIndex === 0 ? thead : tbody).appendChild(tr);
         });
-        table.appendChild(thead); table.appendChild(tbody); return table;
+        table.appendChild(thead); table.appendChild(tbody); tableWrap.appendChild(table); return tableWrap;
       }
       var p = doc.createElement('p');
       p.className = 'md-p';
@@ -366,10 +369,10 @@
       return p;
     }
     // Pure but for `doc`, passed in so tests can hand it a minimal DOM shim.
-    function renderMarkdown(text, doc) {
+    function renderMarkdown(text, doc, opts) {
       var fragment = doc.createDocumentFragment();
       parseMarkdown(text).forEach(function (block) {
-        fragment.appendChild(renderMarkdownBlock(block, doc));
+        fragment.appendChild(renderMarkdownBlock(block, doc, opts));
       });
       return fragment;
     }

@@ -40,6 +40,26 @@
       /* meters */
       --meter-track: #2c3142;
       --meter-fill: #8087a8;       /* neutral. Status colors only on a plan meter near its limit */
+      /* content (2.27.0, feed rendering): syntax, diff, terminal and status colors. Syntax colors are a category of
+         their own (code only, never a status, actor or structure); the hues are the reference image's JSON samples. */
+      --syn-keyword: #c792ea;      /* keywords, JSON keys */
+      --syn-string: #c3e88d;       /* strings */
+      --syn-number: #f78c6c;       /* numbers, JSON true/false/null */
+      --syn-comment: #8d93b3;      /* comments (5.4:1 on --panel-2) */
+      --syn-function: #85d7f9;     /* function names, JSON braces */
+      --syn-type: #ffcb6b;         /* types, tags, PowerShell cmdlets */
+      --syn-punct: #9aa0bd;        /* punctuation (= --muted) */
+      --code-fg: #e5e7eb;          /* plain code text, a step under --fg so colors read as color */
+      --code-size: 12px;           /* block code; inline chips stay 11px */
+      --diff-add: #4ade80;         /* the + sign and the added count (= --green) */
+      --diff-del: #fca5a5;         /* the - sign and the removed count (= --red) */
+      --diff-add-bg: #142620;      /* --green 11% into --bg */
+      --diff-del-bg: #2c2327;      /* --red 13% into --bg */
+      --diff-hunk-bg: #1d1a35;     /* --accent 14% into --bg: a hunk header is structure */
+      --fail-bg: #40353f;          /* --red 16% into --panel-2: the failed badge fill */
+      --fail-border: #6b4a50;      /* --red 40% into --panel-2 */
+      --term-black: #8087a8; --term-red: #fca5a5; --term-green: #4ade80; --term-yellow: #f9b141;
+      --term-blue: #82aaff; --term-magenta: #ff6fe1; --term-cyan: #85d7f9; --term-white: #f3f4f6; /* ANSI 30-37 and 90-97 */
       /* geometry */
       --r-panel: 10px;             /* the three cards (sidebar, main, side panel), dialogs */
       --r-btn: 8px;                /* buttons, inputs, cards, code blocks */
