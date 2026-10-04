@@ -361,7 +361,18 @@
       if (node.children.length) prefs.openNodes[id] = true;
       selectNode(id, true);
     }
+    // A redraw rebuilds the list, and that stops a scroll in motion (a smooth wheel step, a flick) or sends it back.
+    // While the list moves, redraws wait; one redraw runs 150 ms after the last scroll event. A new selection draws at once.
+    var listScrollTimer = 0, listRenderWaiting = false;
+    function listScrolled() {
+      clearTimeout(listScrollTimer);
+      listScrollTimer = setTimeout(function () {
+        listScrollTimer = 0;
+        if (listRenderWaiting) { listRenderWaiting = false; renderList(); }
+      }, 150);
+    }
     function renderList() {
+      if (listScrollTimer && !treeScrollPending) { listRenderWaiting = true; return; }
       var model = currentModel();
       var view = currentView();
       var now = Date.now();

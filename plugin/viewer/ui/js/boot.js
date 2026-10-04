@@ -416,6 +416,7 @@
     taskHandoff.prepend(glyph('claude')); // the clay starter glyph: Claude started it, Codex does the work
     applyPrefs();
     list.addEventListener('scroll', listEdges, { passive: true });
+    list.addEventListener('scroll', listScrolled, { passive: true });
     chipsBar.addEventListener('scroll', chipEdges, { passive: true });
     window.addEventListener('resize', function () { listEdges(); chipEdges(); renderPanel(); });
     renderFilters();
