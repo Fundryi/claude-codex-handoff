@@ -32,8 +32,6 @@
 
 </details>
 
-The screenshots use invented demo data. To make new ones, run `node scripts/readme-shot.mjs --workflow`.
-
 ---
 
 > [!WARNING]
