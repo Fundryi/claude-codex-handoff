@@ -39,17 +39,27 @@
 
 ## Install
 
-```
-/plugin marketplace add Fundryi/claude-codex-handoff
-/plugin install codex@fundryi
-```
+Needs [Node.js](https://nodejs.org) 22.13+. Had the OpenAI-marketplace `codex` plugin? Uninstall it first; every `/codex:*` command name stays the same.
 
-Needs [Node.js](https://nodejs.org) 22.13+ and the Codex CLI (`npm install -g @openai/codex`, then `codex login`). Had the OpenAI-marketplace `codex` plugin? Uninstall it first; every `/codex:*` command name stays the same.
+1. Install the plugin in Claude Code:
 
-From your next Claude Code session on:
+   ```
+   /plugin marketplace add Fundryi/claude-codex-handoff
+   /plugin install codex@fundryi
+   ```
 
-- the **dashboard starts itself** in the background (open it with `/codex:viewer`)
-- the plugin **checks for updates** once a day and prints the update command when there is one
+2. Start a new Claude Code session and run:
+
+   ```
+   /codex:setup
+   ```
+
+   It checks that the Codex CLI is installed and logged in, and offers to install it (`npm install -g @openai/codex`, then `codex login`). It also offers the optional Codex hook and OpenCode viewer plugin, and changes nothing without your yes.
+
+3. From then on, in every Claude Code session:
+
+   - the **dashboard starts itself** in the background (open it with `/codex:viewer`)
+   - the plugin **checks for updates** once a day and prints the update command when there is one
 
 ## Who this is for
 
