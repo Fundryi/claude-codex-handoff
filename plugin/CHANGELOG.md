@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.27.1
+
+- **Code blocks in lists use the full width.** A code block, diff, table or JSON view inside a list item now uses the full width of the message, as it does outside a list. Before, it stopped at the width of the list text, about 80 characters. The text of a list item still stops at about 80 characters, so it stays easy to read.
+- **Tests:** no test was added or removed. A browser render before and after checked the change at 1920 and 700 pixels wide.
+
 ## 2.27.0
 
 - **Code, diffs and Markdown look like code, diffs and Markdown.** The feeds of Codex, Claude and OpenCode, the result card and the side panel now use one renderer. Code blocks get a header with the language, syntax colors, Wrap and Copy. They keep their indent and fold above 25 lines. Markdown gets tables, nested lists, task lists, rules, strike and soft line breaks. Text stays at a readable width of about 100 characters; tables, code and diffs use the full width.

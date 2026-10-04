@@ -5,7 +5,7 @@ const os = require("os");
 
 const ROOT = path.resolve(__dirname, "..");
 const APP_ID = "codex-live-viewer";
-const APP_VERSION = "2.27.0";
+const APP_VERSION = "2.27.1";
 const PORT = process.env.CODEX_VIEWER_PORT ? parseInt(process.env.CODEX_VIEWER_PORT, 10) : 8377;
 const PID_FILE = path.join(os.tmpdir(), "codex-live-viewer-" + PORT + ".pid");
 function parseFlags(argv) {

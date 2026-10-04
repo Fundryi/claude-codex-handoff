@@ -179,11 +179,13 @@
 
     /* ---- Content rendering (2.27.0, feed rendering spec 3.3, 3.6, 4). The same blocks draw in the feed, the side
        panel, thinking steps, the result card and the full-result window. */
-    /* prose measure (M10): paragraphs, lists and headings stop at about 80 characters; tables, code, diffs and
-       commands keep the card's full width because they need it. */
-    .msg-body > .md-p, .msg-body > .md-list, .msg-body > .md-h1, .msg-body > .md-h2, .msg-body > .md-h3, .msg-body > .md-h4, .msg-body > .md-h5, .msg-body > .md-h6, .msg-body > .md-quote,
-    .result-section-body > .md-p, .result-section-body > .md-list, .result-section-body > .md-h2, .result-section-body > .md-h3, .result-section-body > .md-quote,
-    .sec-body > .md-p, .sec-body > .md-list, #job-modal-result > .md-p, #job-modal-result > .md-list { max-width: 80ch; }
+    /* prose measure (M10): paragraphs, headings and list text stop at about 80 characters; tables, code, diffs and
+       commands keep the card's full width because they need it, also inside a list item. A list itself is full
+       width; only the paragraphs in its items are capped, so a list line ends 20 px past a paragraph per level. */
+    .msg-body > .md-p, .msg-body > .md-h1, .msg-body > .md-h2, .msg-body > .md-h3, .msg-body > .md-h4, .msg-body > .md-h5, .msg-body > .md-h6, .msg-body > .md-quote,
+    .result-section-body > .md-p, .result-section-body > .md-h2, .result-section-body > .md-h3, .result-section-body > .md-quote,
+    .sec-body > .md-p, #job-modal-result > .md-p,
+    :is(.msg-body, .result-section-body, .sec-body, #job-modal-result, .step-body .out.md) .md-list > li > :is(.md-p, .md-quote) { max-width: 80ch; }
     /* headings (M11): size and air tell a heading from a bold line; h4-h6 exist. All margins on the 4 px grid. */
     .md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6 { margin: 16px 0 4px; font-weight: 650; color: var(--fg); line-height: 1.3; }
     .md-h1 { font-size: 18px; }
@@ -381,7 +383,7 @@
     .step-body .out-label { margin: 8px 0 2px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
     .step-body .out, .inj-body .out { margin: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--bg); color: var(--code-fg); font: var(--code-size)/18px Consolas, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: calc(30 * 18px + 16px); overflow: auto; }
     .step-body .out.md { font: 12.5px/1.5 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; color: var(--fg); white-space: normal; }
-    .step-body .out.md > .md-p, .step-body .out.md > .md-list { max-width: 80ch; }
+    .step-body .out.md > .md-p { max-width: 80ch; }
     .step-body .out.md > :first-child { margin-top: 0; }
     .step-body .out.md > :last-child { margin-bottom: 0; }
     .sum-fail { color: var(--red); }
