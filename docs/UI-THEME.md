@@ -17,7 +17,7 @@ CSS files load in this order:
 
 ## Reference samples (the token source)
 
-Sampled from the image with `design-audit/sample3.js` (fills = the modal color of the region; text = the pixel farthest from that mode). Region is `x, y, w, h` in image pixels.
+Sampled from the image with a local one-off script (fills = the modal color of the region; text = the pixel farthest from that mode). Region is `x, y, w, h` in image pixels.
 
 | Name | Region sampled | Hex |
 |---|---|---|
@@ -73,7 +73,7 @@ Status pills (`.status`) exist only in the task header's title row: pastel text 
 
 ### Contrast (WCAG, computed)
 
-Text on the backgrounds it sits on. Computed with `design-audit/contrast.js`.
+Text on the backgrounds it sits on. Computed with a local one-off script.
 
 | Color | bg | panel | panel-2 | panel-3 | selected | hover |
 |---|---|---|---|---|---|---|

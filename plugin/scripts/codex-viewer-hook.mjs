@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import http from "node:http";
 
-// Notifications are advisory. A missing viewer must never affect the Codex turn.
+// The POST only asks the viewer to refresh sooner. A missing viewer must never affect the Codex turn.
 try {
   const input = JSON.parse(fs.readFileSync(0, "utf8"));
   const event = input?.hook_event_name;

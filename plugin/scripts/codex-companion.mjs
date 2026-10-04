@@ -244,8 +244,8 @@ async function buildSetupReport(cwd, actionsTaken = []) {
   const integrations = readViewerIntegrations(ROOT_DIR);
 
   const nextSteps = [];
-  if (!integrations.codexHooks.shipped) nextSteps.push("Optional: update codex@fundryi to get the approval notice hook.");
-  if (!integrations.codexHooks.trusted) nextSteps.push(`Optional Codex approval notices (only when approval policy is not never): ${integrations.codexHooks.step}.`);
+  if (!integrations.codexHooks.shipped) nextSteps.push("Optional: update codex@fundryi to get the approval refresh hook.");
+  if (!integrations.codexHooks.trusted) nextSteps.push(`Optional Codex approval refresh (only when approval policy is not never): ${integrations.codexHooks.step}.`);
   if (integrations.opencodePlugin.opencodeFound && !integrations.opencodePlugin.installed) {
     nextSteps.push("Choose Install OpenCode viewer plugin in /codex:setup.");
   } else if (!integrations.opencodePlugin.opencodeFound) {

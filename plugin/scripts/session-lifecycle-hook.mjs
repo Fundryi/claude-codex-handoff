@@ -82,8 +82,7 @@ async function stopOldViewer(port) {
 
 // Starts the bundled viewer when none runs, and replaces one an older plugin started:
 // that viewer would otherwise keep the port forever. An equal or newer viewer, one
-// with no readable version, and a foreign app are all left alone. The tray launcher
-// never restarts its viewer on its own, so the two cannot fight over the port.
+// with no readable version, and a foreign app are all left alone.
 // A failed replacement is recorded for this plugin version and not retried (under
 // CloudCLI this hook runs on every message), so "port-busy" comes back only once.
 export async function maybeStartViewer(env = process.env) {
@@ -190,7 +189,7 @@ async function handleSessionStart(input) {
   appendEnvVar(SESSION_ID_ENV, input.session_id);
   appendEnvVar(TRANSCRIPT_PATH_ENV, input.transcript_path);
   syncStatusLineScript();
-  if (firstIntegrationHint()) console.log("Run /codex:setup for optional Codex approval notices and the OpenCode viewer plugin.");
+  if (firstIntegrationHint()) console.log("Run /codex:setup for the optional Codex approval hook and the OpenCode viewer plugin.");
   const viewer = await maybeStartViewer();
   if (viewer === "port-busy") {
     console.log(`[codex plugin] An older Codex viewer on port ${viewerPort()} did not stop, so the updated viewer could not start. Run /codex:viewer restart, or /codex:viewer kill if it hangs. This is not retried for this plugin version.`);

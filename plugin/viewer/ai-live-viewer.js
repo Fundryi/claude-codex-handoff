@@ -144,7 +144,7 @@ function reportBlocked(why) {
 }
 
 // Force-quit the viewer that owns PORT, even a hung one: the pid comes from the file
-// serve writes, and the process must still be a codex-live-viewer (a recycled pid
+// serve writes, and the process must still be the viewer, by either file name (a recycled pid
 // belonging to anything else is never killed).
 function doKill() {
   let pid;
