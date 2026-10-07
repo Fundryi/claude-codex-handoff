@@ -61,7 +61,7 @@
       #claude-overview { min-width: 0; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .mark.mk-busy::after { animation: none; --mk-a: 45deg; } /* a still three-quarter arc, head at the top right */
+      .mark.mk-busy::after { animation: none; transform: rotate(45deg); } /* a still three-quarter arc, head at the top right */
       .chip-button.on::before, .chip-button[data-chip="RUNNING"].has-sessions::before, .status.LIVE::before, .working::before { animation: none; }
       #feed { scroll-behavior: auto; }
     }

@@ -28,23 +28,23 @@
     .k-codex { --k: var(--codex); }
     .k-system { --k: var(--system); }
     /* ---- working mark: the state lives on the kind mark. One halo slot (::after) around every mark, 3 px outside it.
-       mk-busy = a 1.5 px arc in the actor color travels around the mark (running). Only the gradient angle animates;
-               the box, the ring mask and the stroke never move, so it is identical at every DPR and zoom.
+       mk-busy = a 1.5 px arc in the actor color travels around the mark (running). The gradient and the ring mask are
+               static; the halo box turns with a transform, which runs on the compositor (an animated gradient angle
+               costs a style recalc and a repaint every frame on the main thread). The box, the mask and the stroke are
+               rotationally symmetric about the box centre, so the turn reads the same at every DPR and zoom.
        mk-ask = a solid amber ring (needs answer).   mk-warn = a dotted amber ring (needs attention).
-       mk-dim = the mark dims (finished, stopped, ended, archived, background). Waiting = the plain mark.
-       @property makes --mk-a interpolate; without it the arc stands still (nothing breaks). ---- */
-    @property --mk-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+       mk-dim = the mark dims (finished, stopped, ended, archived, background). Waiting = the plain mark. ---- */
     .mark.mk-busy::after, .mark.mk-ask::after, .mark.mk-warn::after {
       content: ''; position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;
       -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--bw)), #000 calc(100% - var(--bw)));
       mask: radial-gradient(farthest-side, transparent calc(100% - var(--bw)), #000 calc(100% - var(--bw)));
     }
-    .mark.mk-busy::after { background: conic-gradient(from var(--mk-a), transparent 0 30%, color-mix(in srgb, var(--k) 20%, transparent) 30%, var(--k) 100%); animation: mk-orbit 1.4s linear infinite; }
+    .mark.mk-busy::after { background: conic-gradient(transparent 0 30%, color-mix(in srgb, var(--k) 20%, transparent) 30%, var(--k) 100%); animation: mk-orbit 1.4s linear infinite; }
     .mark.mk-ask::after { background: var(--amber); }
     .mark.mk-warn::after { background: repeating-conic-gradient(var(--amber) 0 24deg, transparent 24deg 45deg); }
     .mark.mk-dim { opacity: .5; }
     .row.selected .mark.mk-dim, .ov-row.selected .mark.mk-dim, .agent-row.open .mark.mk-dim { opacity: .7; } /* the violet band lifts dim text the same way */
-    @keyframes mk-orbit { to { --mk-a: 360deg; } }
+    @keyframes mk-orbit { to { transform: rotate(360deg); } }
     @keyframes breathe { 50% { opacity: .35; } }
     /* kind word: the color is the actor who does the work. A starter glyph shows only when the starter is someone else. */
     .kind-label { font-size: 10px; font-weight: 700; color: var(--k); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; height: 18px; }
