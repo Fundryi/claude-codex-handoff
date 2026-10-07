@@ -64,7 +64,7 @@ function listCompanionJobs(fresh, all) {
     const newest = !job.threadId || !threads.has(job.threadId);
     if (job.threadId) threads.add(job.threadId);
     return i < 100 || job.status === "queued" || job.status === "running"
-      || (newest && job.status === "completed" && !!String(job.needsDecision || "").trim());
+      || (newest && job.status === "completed" && !job.announcedAt && !!String(job.needsDecision || "").trim());
   });
 }
 

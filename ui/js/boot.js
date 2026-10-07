@@ -294,6 +294,37 @@
       });
     }).observe(document.body, { childList: true, subtree: true });
 
+    // Data bursts share one paint. Hidden tabs retain dirty state until visible again.
+    var viewerRenderDirty = {}, viewerRenderFrame = 0;
+    function queueViewerRender(parts) {
+      Object.keys(parts).forEach(function (key) { if (parts[key]) viewerRenderDirty[key] = true; });
+      if (!viewerRenderFrame) viewerRenderFrame = requestAnimationFrame(flushViewerRender);
+    }
+    function flushViewerRender() {
+      if (document.hidden) { viewerRenderFrame = 0; return; }
+      if (viewerRenderDirty.selection) {
+        migrateSelection();
+        openPending();
+        if (viewerRenderDirty.follow) followRunningSession(newestRunning());
+        syncTranscripts();
+      }
+      var dirty = viewerRenderDirty;
+      viewerRenderDirty = {};
+      if (dirty.tree) { renderFilters(); renderList(); }
+      if (dirty.tree || dirty.header) renderHeader();
+      if (dirty.tree || dirty.result) renderResultCard();
+      if (dirty.panel) renderPanel();
+      if (dirty.plans) renderPlans();
+      if (dirty.feed || (dirty.overview && showOverview()) || (dirty.body && (pageKind() === 'workflow' || pageKind() === 'ghost'))) {
+        if (feedOverview()) renderFeed(); else requestFeedRender();
+      } else if (dirty.openFeed && !feedOverview()) requestFeedRender();
+      viewerRenderFrame = 0;
+      if (Object.keys(viewerRenderDirty).length) queueViewerRender(viewerRenderDirty);
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) queueViewerRender({ tree: true, panel: true, plans: true, feed: true });
+    });
+
     var events = new EventSource('/events');
     events.onopen = function () { if (!controlsBlocked) setConnection('connected', 'Live updates connected'); };
     events.onerror = function () { setConnection('disconnected', 'Reconnecting\u2026'); };
@@ -316,75 +347,49 @@
           if (kept.length !== prefs.dismissed.length) { prefs.dismissed = kept; savePrefs(); }
         }
         if (selected && !sessions.some(function (session) { return session.id === selected; })) selected = null;
-        migrateSelection();
-        openPending();
-        followRunningSession(newestRunning());
-        renderFilters();
-        renderList();
-        renderHeader();
-        renderResultCard();
-        if (showOverview()) renderFeed();
-        else if (selected === previousSelected && (selectedRow() || {}).status !== previousFeedStatus) requestFeedRender();
+        queueViewerRender({ selection: true, follow: true, tree: true, overview: true,
+          openFeed: selected === previousSelected && (selectedRow() || {}).status !== previousFeedStatus });
       }
       if (data.type === 'claudeChats') {
         claudeChats = { chats: data.chats || [], ghosts: data.ghosts || [] };
         claudeChatsLoaded = true;
         dataVersion++;
-        migrateSelection();
-        syncTranscripts();
-        renderFilters();
-        renderList();
-        renderHeader();
-        renderPanel();
-        // A workflow or ghost page can only draw once its node is in the tree.
-        if (pageKind() === 'workflow') renderClaudeBody();
-        else if (pageKind() === 'ghost' || showOverview()) renderFeed();
+        queueViewerRender({ selection: true, tree: true, panel: true, body: true, overview: true });
       }
       if (data.type === 'opencodeChats') {
         opencodeChats = { chats: data.chats || [] };
         opencodeChatsLoaded = true;
         dataVersion++;
-        migrateSelection();
-        syncTranscripts();
-        renderFilters();
-        renderList();
-        renderHeader();
-        if (pageKind() === 'opencode') requestFeedRender(); else if (showOverview()) renderFeed();
+        queueViewerRender({ selection: true, tree: true, overview: true, openFeed: pageKind() === 'opencode' });
       }
       if (data.type === 'claudeUsage') {
         claudeUsage = data.usage || null;
-        renderPlans();
+        queueViewerRender({ plans: true });
       }
       if (data.type === 'codexLimits') {
         codexLimits = data.limits || null;
-        renderPlans();
+        queueViewerRender({ plans: true });
       }
       if (data.type === 'claudeRuns') {
         claudeRuns = data.runs || [];
         claudeLoaded = true;
         dataVersion++;
-        renderFilters();
-        renderList();
-        renderHeader();
-        if (pageKind() === 'workflow') renderClaudeBody(); // the open transcript follows its own poll
-        migrateSelection();
-        syncTranscripts();
-        renderPanel();
+        queueViewerRender({ selection: true, tree: true, panel: true, body: true });
       }
       if (data.type === 'snapshot') {
         store[data.session] = data.events;
         // Through requestFeedRender, like new events: a reconnect keeps the reader's scroll and selection.
-        if (data.session === selected && !showOverview()) requestFeedRender();
+        if (data.session === selected && !showOverview()) queueViewerRender({ openFeed: true });
       }
       if (data.type === 'events') {
         var existing = store[data.session] = store[data.session] || [];
         existing.push.apply(existing, data.events);
         if (existing.length > 500) existing.splice(0, existing.length - 500);
         if (data.session === selected && !showOverview()) {
-          requestFeedRender();
+          queueViewerRender({ openFeed: true });
         } else if (data.session !== selected) {
           unread.add(data.session);
-          renderList();
+          queueViewerRender({ tree: true });
         }
       }
     };
@@ -427,6 +432,6 @@
     renderPanel();
     renderPlans();
     refreshJobs();
-    window.setInterval(function () { renderList(); renderHeader(); renderPlans(); renderPanel(); if (pageKind() === 'workflow') renderClaudeBody(); else if (feedOverview()) renderFeed(); }, 10000);
+    window.setInterval(function () { queueViewerRender({ tree: true, plans: true, panel: true, body: true, overview: true }); }, 10000);
     // Rows merge job state into every tab, so job liveness is polled everywhere.
     window.setInterval(refreshJobs, 5000);

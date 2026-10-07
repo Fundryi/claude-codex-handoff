@@ -521,7 +521,6 @@ function sessionSummary(s, threadJobStatus) {
     status,
     archived: s.file.startsWith(ARCHIVED_DIR),
     lastGrow: s.lastGrow,
-    quietMs: Math.floor(quiet / 5000) * 5000, // 5 s steps, so a quiet session does not change the list every tick
     lastKind: last ? last.kind : "",
     lastDone: !!(last && last.done), // a command that already finished
     lastText: last ? (last.kind === "patch" ? String(last.text).split(/,\s*|\r?\n/).filter(Boolean)

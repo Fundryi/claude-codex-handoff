@@ -58,6 +58,12 @@ test("workflow agents own their questions after finishing; plain handoffs still 
     const plainJob = { ...job, id: "plain", threadId: "plain-thread" };
     assert.equal(c.rowStatus(null, plainJob), "ANSWER", "normal chat questions remain open");
     assert.ok(c.answerTarget({ job: plainJob }, [plainJob]));
+    const delivered = { ...plainJob, announcedAt: iso(1000) };
+    assert.equal(c.rowStatus(null, delivered), "FINISHED", "delivered questions belong to Claude even without a tracked session");
+    assert.equal(c.jobStatusLabel(delivered), "Finished");
+    assert.equal(c.questionOpen(delivered), false);
+    assert.equal(c.answerTarget({ job: delivered }, [delivered]), null);
+    assert.equal(c.resultCardModel("## Needs decision\nWhich option?", []).question, "Which option?", "finished question text stays readable");
     c.claudeRuns = [];
     assert.equal(row().status, "ANSWER", "missing workflow state cannot silently claim the question");
     c.claudeRuns = [{ sessionId: "chat", id: "run", agents: [agent] }];
@@ -142,9 +148,9 @@ test("rowStatus: job liveness wins over session quiet time", () => {
     [{ status: "IDLE" }, { live: "completed" }, "FINISHED"],
     [idle, { live: "completed", needsDecision: "Keep the API?" }, "ANSWER"],
     [idle, { live: "completed", needsDecision: "   " }, "FINISHED"],
-    // The session wrote more than 5 s after the run asked: answered outside the viewer.
+    // Session growth cannot prove delivery: announcedAt owns the question state.
     [{ status: "IDLE", lastGrow: T0 + 5000 }, { live: "completed", needsDecision: "Q?", updatedAt: iso(0) }, "ANSWER"],
-    [{ status: "IDLE", lastGrow: T0 + 5001 }, { live: "completed", needsDecision: "Q?", updatedAt: iso(0) }, "FINISHED"],
+    [{ status: "IDLE", lastGrow: T0 + 5001 }, { live: "completed", needsDecision: "Q?", updatedAt: iso(0) }, "ANSWER"],
     [{ status: "LIVE", lastGrow: T0 + 9000 }, { live: "completed", needsDecision: "Q?", updatedAt: iso(0) }, "RUNNING"],
     [{ status: "IDLE", lastGrow: T0 + 9000 }, { live: "completed", needsDecision: "Q?" }, "ANSWER", "no updatedAt: nothing to compare"],
     [idle, { live: "cancelled" }, "STOPPED"],
@@ -155,7 +161,9 @@ test("rowStatus: job liveness wins over session quiet time", () => {
     [{ status: "STOPPED" }, null, "STOPPED"],
     [{ status: "DONE" }, null, "FINISHED"],
     [{ status: "LIVE", archived: true }, null, "ARCHIVED"],
-    [null, { live: "completed", needsDecision: "Which one?" }, "ANSWER"]
+    [null, { live: "completed", needsDecision: "Which one?" }, "ANSWER"],
+    [null, { live: "completed", needsDecision: "Which one?", announcedAt: iso(1) }, "FINISHED"],
+    [null, { status: "completed", needsDecision: "Which one?", announcedAt: iso(1) }, "FINISHED"]
   ];
   for (const [session, job, want, note] of cases) {
     assert.equal(rowStatus(session, job), want, note || JSON.stringify([session, job]));
@@ -357,7 +365,7 @@ test("row badge, meta line and tooltip", () => {
   assert.equal(rowBadge("nonsense"), "IDLE");
 
   const [merged] = buildRows(
-    [{ id: "s", threadId: "t-9", status: "IDLE", cwd: "D:\\GIT\\proj", model: "gpt-5", tokensUsed: 500, sandbox: "workspace-write", quietMs: 60000, lastKind: "cmd", lastText: "npm test", lastGrow: T0 }],
+    [{ id: "s", threadId: "t-9", status: "IDLE", cwd: "D:\\GIT\\proj", model: "gpt-5", tokensUsed: 500, sandbox: "workspace-write", lastKind: "cmd", lastText: "npm test", lastGrow: T0 }],
     [
       { id: "j2", threadId: "t-9", live: "dead", effort: "high", diedReason: "process gone, resumable", updatedAt: iso(20) },
       { id: "j1", threadId: "t-9", live: "completed", updatedAt: iso(10) }
@@ -372,9 +380,9 @@ test("row badge, meta line and tooltip", () => {
   assert.doesNotMatch(tip, /Waiting/);
   const { rowReason } = ctx();
   assert.equal(rowReason(merged), "");
-  const [idleOnly] = buildRows([{ id: "i", threadId: "ti", status: "IDLE", quietMs: 60000, lastKind: "cmd", lastText: "npm test" }], []);
-  assert.match(rowReason(idleOnly), /^Waiting 1m 0s .*npm test/);
-  assert.match(rowTooltip(idleOnly, T0), /Waiting 1m 0s/);
+  const [idleOnly] = buildRows([{ id: "i", threadId: "ti", status: "IDLE", lastGrow: T0, lastKind: "cmd", lastText: "npm test" }], []);
+  assert.match(rowReason(idleOnly, T0 + 60000), /^Waiting 1m 0s .*npm test/);
+  assert.match(rowTooltip(idleOnly, T0 + 60000), /Waiting 1m 0s/);
   const [idleWithDoneJob] = buildRows([{ id: "i", threadId: "ti", status: "DONE" }], [{ id: "j", threadId: "ti", live: "completed" }]);
   assert.equal(rowReason(idleWithDoneJob), "", "no reason for a finished row");
   const [jobOnly] = buildRows([], [{ id: "q", live: "working", workspaceRoot: "/srv/api", model: "sol", effort: "xhigh", phase: "queued", updatedAt: iso(0) }]);
@@ -411,12 +419,12 @@ test("header reason line: wait reason, died reason, stuck detail, nothing when h
   const { buildRows, headerReason } = ctx();
   const one = (session, jobs) => buildRows(session ? [session] : [], jobs || [])[0];
   const now = T0 + 5 * 60000;
-  assert.match(headerReason(one({ id: "s", status: "IDLE", quietMs: 60000, lastKind: "cmd", lastText: "npm test" }), now), /^Waiting 1m 0s .*npm test/);
+  assert.match(headerReason(one({ id: "s", status: "IDLE", lastGrow: now - 60000, lastKind: "cmd", lastText: "npm test" }), now), /^Waiting 1m 0s .*npm test/);
   assert.equal(headerReason(one({ id: "s", threadId: "t", status: "IDLE" }, [{ id: "j", threadId: "t", live: "dead", diedReason: "process-vanished" }]), now),
     "Handoff process died: process-vanished");
   assert.equal(headerReason(one(null, [{ id: "j", live: "failed" }]), now), "Handoff failed");
   // A STALE session keeps today's wait reason in front of the job detail.
-  assert.equal(headerReason(one({ id: "s", threadId: "t", status: "STALE", quietMs: 300000, lastKind: "cmd", lastText: "npm test" }, [{ id: "j", threadId: "t", live: "possibly-stuck", heartbeatAt: iso(0) }]), now),
+  assert.equal(headerReason(one({ id: "s", threadId: "t", status: "STALE", lastGrow: now - 300000, lastKind: "cmd", lastText: "npm test" }, [{ id: "j", threadId: "t", live: "possibly-stuck", heartbeatAt: iso(0) }]), now),
     "Waiting 5m 0s — last activity: running command \"npm test\" · Handoff may be stuck: no heartbeat for 5m 0s");
   assert.equal(headerReason(one({ id: "s", threadId: "t", status: "LIVE" }, [{ id: "j", threadId: "t", live: "working" }]), now), "");
   assert.equal(headerReason(one({ id: "s", status: "DONE" }), now), "");

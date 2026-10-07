@@ -22,7 +22,7 @@
       return parts.join('   |   ');
     }
     function jobStatusLabel(job) {
-      if (job.live === 'completed' && job.needsDecision && !workflowQuestionOwned(job)) return 'Needs answer';
+      if (questionOpen(job)) return 'Needs answer';
       var map = {
         working: 'Running',
         'possibly-stuck': 'Needs attention',
@@ -94,7 +94,7 @@
       var trimmed = String(text == null ? '' : text).trim();
       return trimmed ? 'Answer from the user: ' + trimmed : '';
     }
-    function waitReason(session) {
+    function waitReason(session, now) {
       if (!session || session.archived) return '';
       if (session.status === 'STOPPED') {
         return session.lastKind === 'err' ? 'Stopped — ' + firstLine(session.lastText, 80) : '';
@@ -110,7 +110,7 @@
         user: 'prompt sent, no agent response yet',
         agent: 'agent replied — may be waiting for approval or next instruction'
       })[session.lastKind] || (session.lastEvent || 'no displayable activity');
-      return 'Waiting ' + formatDuration(session.quietMs) + ' — last activity: ' + phrase;
+      return 'Waiting ' + formatDuration((now == null ? Date.now() : now) - session.lastGrow) + ' — last activity: ' + phrase;
     }
     function processWarnings(proc, sessionStartMs) {
       return {
@@ -153,10 +153,10 @@
         });
       }));
     }
-    // The session wrote more than 5 s after the run finished asking: answered outside the viewer.
-    function answeredElsewhere(session, job) {
-      var asked = job ? Date.parse(job.updatedAt || '') : NaN;
-      return !!(session && asked && session.lastGrow > asked + 5000);
+    // Delivery hands the question to Claude, even after its rollout leaves the tracked list.
+    function questionOpen(job) {
+      return !!(job && (job.live || job.status) === 'completed'
+        && String(job.needsDecision || '').trim() && !job.announcedAt && !workflowQuestionOwned(job));
     }
     function rowStatus(session, job) {
       // Job liveness wins over session quiet time; an active job even beats the archive flag.
@@ -167,7 +167,7 @@
       if (session && session.status === 'LIVE' && !session.archived) return 'RUNNING';
       if (state === 'possibly-stuck' || state === 'dead' || state === 'failed') return 'ATTENTION';
       if (session && session.archived) return 'ARCHIVED';
-      if (state === 'completed') return String(job.needsDecision || '').trim() && !workflowQuestionOwned(job) && !answeredElsewhere(session, job) ? 'ANSWER' : 'FINISHED';
+      if (state === 'completed') return questionOpen(job) ? 'ANSWER' : 'FINISHED';
       if (state === 'cancelled') return 'STOPPED';
       var map = { LIVE: 'RUNNING', IDLE: 'WAITING', STALE: 'ATTENTION', STOPPED: 'STOPPED', DONE: 'FINISHED' };
       return (session && map[session.status]) || 'WAITING';
@@ -338,7 +338,7 @@
     function headerReason(row, now) {
       var job = row.job;
       var live = job ? job.live || job.status : '';
-      var parts = [rowReason(row)];
+      var parts = [rowReason(row, now)];
       if (live === 'dead') parts.push('Handoff process died' + (job.diedReason ? ': ' + job.diedReason : ''));
       if (live === 'failed') parts.push('Handoff failed' + (job.diedReason ? ': ' + job.diedReason : ''));
       if (live === 'possibly-stuck') parts.push('Handoff may be stuck' + (job.heartbeatAt ? ': no heartbeat for ' + formatDuration(now - Date.parse(job.heartbeatAt)) : ''));
@@ -390,12 +390,11 @@
     }
     // Where an answer to a finished run resumes: the run's thread, in resumeTarget's folder.
     // Null when the newest run did not complete, has no thread, or any run on the thread still works,
-    // the session is LIVE again, or it was answered outside the viewer.
+    // the session is LIVE again, or the question is no longer open.
     function answerTarget(row, jobs) {
       var job = row.job;
-      if (!job || !job.threadId || job.status !== 'completed') return null;
-      if (workflowQuestionOwned(job)) return null;
-      if (row.session && (row.session.status === 'LIVE' || answeredElsewhere(row.session, job))) return null;
+      if (!job || !job.threadId || !questionOpen(job)) return null;
+      if (row.session && row.session.status === 'LIVE') return null;
       var busy = threadRuns(jobs, job).some(function (run) {
         var live = run.live || run.status;
         return live === 'working' || live === 'possibly-stuck' || live === 'queued' || live === 'running';
@@ -467,9 +466,9 @@
       return [projectName(row.project), session.model || job.model, job.effort || session.effort, tokens].filter(Boolean).join(' · ');
     }
     // The session's wait/stop reason, only while the session (not a job) decides the row status.
-    function rowReason(row) {
+    function rowReason(row, now) {
       if (!row.session || (row.job && rowStatus(row.session, null) !== row.status)) return '';
-      return waitReason(row.session);
+      return waitReason(row.session, now);
     }
     // Everything the 3-line row leaves out: full path, thread, sandbox, reason, handoff detail.
     function rowTooltip(row, now) {
@@ -478,7 +477,7 @@
       var lines = [row.title, row.project];
       if (row.threadId) lines.push('thread: ' + row.threadId);
       if (session && session.sandbox) lines.push('sandbox: ' + session.sandbox);
-      lines.push(rowReason(row));
+      lines.push(rowReason(row, now));
       if (job) lines.push('Handoff: ' + (jobDetailLine(job, now) || job.status || job.live || ''));
       if (row.olderJobs) lines.push(row.olderJobs + (row.olderJobs === 1 ? ' earlier run' : ' earlier runs') + ' on this thread');
       return lines.filter(Boolean).join('\n');

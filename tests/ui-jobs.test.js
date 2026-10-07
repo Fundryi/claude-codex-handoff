@@ -9,7 +9,7 @@ const slice = script.match(/function formatDuration[\s\S]*?function jobDetailLin
 
 function ctx() {
   const c = {};
-  vm.runInNewContext(script.match(/function workflowQuestionOwned[\s\S]*?(?=\n    \/\/ The session wrote)/)[0] + slice, c);
+  vm.runInNewContext(script.match(/function workflowQuestionOwned[\s\S]*?(?=\n    function rowStatus)/)[0] + slice, c);
   return c;
 }
 

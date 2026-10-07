@@ -25,6 +25,7 @@
     }
 
     var controlsBlocked = false;
+    var previousJobsBody = null;
     async function refreshJobs() {
       try {
         var response = await fetch('/jobs');
@@ -40,18 +41,16 @@
           connection.title = '';
           setConnection('connected', 'Live updates connected');
         }
-        var data = await response.json();
         if (!response.ok) return;
+        var body = await response.text();
+        if (body === previousJobsBody) return;
+        var data = JSON.parse(body);
+        previousJobsBody = body;
         var previousFeedStatus = (selectedRow() || {}).status;
         jobs = data.jobs || [];
         dataVersion++;
         jobsLoaded = true;
-        renderFilters();
-        renderList();
-        renderHeader();
-        renderResultCard();
-        if (showOverview()) renderFeed();
-        else if ((selectedRow() || {}).status !== previousFeedStatus) requestFeedRender(); // spinner/open block follow status with no new events
+        queueViewerRender({ tree: true, overview: true, openFeed: (selectedRow() || {}).status !== previousFeedStatus });
       } catch (_) {}
     }
 
@@ -84,7 +83,7 @@
     async function loadResultDetail(job, entry) {
       try { entry.detail = await fetchJobDetail(job); }
       catch (error) { entry.error = error.message || String(error); }
-      renderResultCard();
+      queueViewerRender({ result: true });
     }
 
     // The card above the feed for a task whose newest run finished. It lives outside
@@ -109,7 +108,7 @@
       }
       var target = answerTarget(row, jobs);
       var runs = threadRuns(jobs, job).length;
-      var key = JSON.stringify([row.id, job.id, stamp, !!entry.detail, entry.error, target, runs, row.title, workflowQuestionOwned(job)]);
+      var key = JSON.stringify([row.id, job.id, stamp, !!entry.detail, entry.error, target, runs, row.title, questionOpen(job), workflowQuestionOwned(job)]);
       if (key === resultCardKey) return;
       resultCardKey = key;
       var old = resultCard.querySelector('.answer-box textarea');
@@ -214,7 +213,7 @@
       }
       if (!model.question) return;
       var workflowOwned = workflowQuestionOwned(job);
-      var question = resultSection(workflowOwned ? 'Needs decision' : 'Needs decision: a question for you', model.question, 'question', cardKey);
+      var question = resultSection(questionOpen(job) ? 'Needs decision: a question for you' : 'Needs decision', model.question, 'question', cardKey);
       body.appendChild(question);
       if (workflowOwned) {
         var note = document.createElement('div');
@@ -224,7 +223,7 @@
         return;
       }
       if (!target) {
-        // Answered outside the viewer (rowStatus made it Finished): the question stays, no box.
+        // Delivered to Claude (rowStatus made it Finished): the question stays, no box.
         if (row.status === 'FINISHED') return;
         var busy = document.createElement('div');
         busy.className = 'result-card-note';

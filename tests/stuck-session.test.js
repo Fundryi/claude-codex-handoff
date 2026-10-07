@@ -26,8 +26,8 @@ test("formatDuration renders seconds, minutes, hours", () => {
 
 test("waitReason is empty unless waiting, stuck, or stopped by an aborted turn", () => {
   const ctx = helperContext();
-  assert.equal(ctx.waitReason({ status: "LIVE", quietMs: 5000 }), "");
-  assert.equal(ctx.waitReason({ status: "DONE", quietMs: 5000 }), "");
+  assert.equal(ctx.waitReason({ status: "LIVE", lastGrow: Date.now() - 5000 }), "");
+  assert.equal(ctx.waitReason({ status: "DONE", lastGrow: Date.now() - 5000 }), "");
   assert.equal(ctx.waitReason(null), "");
 });
 
@@ -44,20 +44,20 @@ test("waitReason explains a STOPPED session only when the turn was aborted", () 
 test("waitReason explains the last activity by kind", () => {
   const ctx = helperContext();
   assert.equal(
-    ctx.waitReason({ status: "IDLE", quietMs: 60000, lastKind: "cmd", lastText: "npm test" }),
+    ctx.waitReason({ status: "IDLE", lastGrow: Date.now() - 60000, lastKind: "cmd", lastText: "npm test" }),
     'Waiting 1m 0s — last activity: running command "npm test"',
   );
   assert.equal(
-    ctx.waitReason({ status: "STALE", quietMs: 60000, lastKind: "user", lastText: "do the thing" }),
+    ctx.waitReason({ status: "STALE", lastGrow: Date.now() - 60000, lastKind: "user", lastText: "do the thing" }),
     "Waiting 1m 0s — last activity: prompt sent, no agent response yet",
   );
   assert.equal(
-    ctx.waitReason({ status: "IDLE", quietMs: 60000, lastKind: "agent", lastText: "done soon" }),
+    ctx.waitReason({ status: "IDLE", lastGrow: Date.now() - 60000, lastKind: "agent", lastText: "done soon" }),
     "Waiting 1m 0s — last activity: agent replied — may be waiting for approval or next instruction",
   );
   // unknown kind falls back to the preformatted lastEvent
   assert.equal(
-    ctx.waitReason({ status: "IDLE", quietMs: 60000, lastKind: "mystery", lastEvent: "mystery: ???" }),
+    ctx.waitReason({ status: "IDLE", lastGrow: Date.now() - 60000, lastKind: "mystery", lastEvent: "mystery: ???" }),
     "Waiting 1m 0s — last activity: mystery: ???",
   );
 });
@@ -121,7 +121,7 @@ test("archived sessions only appear in History/Archived and History/Everything",
 
 test("waitReason stays silent for archived sessions", () => {
   const ctx = helperContext();
-  assert.equal(ctx.waitReason({ status: "STALE", archived: true, quietMs: 60000, lastKind: "cmd", lastText: "x" }), "");
+  assert.equal(ctx.waitReason({ status: "STALE", archived: true, lastGrow: Date.now() - 60000, lastKind: "cmd", lastText: "x" }), "");
 });
 
 test("mergeHistoryResults drops sessions already shown live", () => {

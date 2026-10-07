@@ -561,7 +561,7 @@ test("resultCardModel: no known heading shows the plain answer, empty decision i
 });
 
 test("answerTarget: newest finished run, thread idle, resume folder as resumeTarget", () => {
-  const done = { id: "j2", threadId: "t", status: "completed", live: "completed", workspaceRoot: "D:\\w", cwd: "D:\\c", updatedAt: "2026-01-02" };
+  const done = { id: "j2", threadId: "t", status: "completed", live: "completed", needsDecision: "Which option?", workspaceRoot: "D:\\w", cwd: "D:\\c", updatedAt: "2026-01-02" };
   const older = { id: "j1", threadId: "t", status: "completed", live: "completed", updatedAt: "2026-01-01" };
   const row = { job: done, project: "D:\\p" };
   assert.deepEqual(plain(lib.answerTarget(row, [done, older])), { threadId: "t", cwd: "D:\\w" });
@@ -580,10 +580,10 @@ test("answerTarget: newest finished run, thread idle, resume folder as resumeTar
   assert.equal(lib.answerTarget({ job: null, session: {} }, []), null);
   // The thread runs again (resumed in a terminal): answering here would start a second Codex.
   assert.equal(lib.answerTarget({ ...row, session: { status: "LIVE" } }, [done]), null, "LIVE session");
-  // The session wrote after the run asked: answered outside the viewer, the box goes.
+  // Delivery owns the question; later session growth alone cannot prove an answer.
   const asked = Date.parse(done.updatedAt);
-  assert.equal(lib.answerTarget({ ...row, session: { status: "IDLE", lastGrow: asked + 6000 } }, [done]), null, "answered elsewhere");
-  assert.deepEqual(plain(lib.answerTarget({ ...row, session: { status: "IDLE", lastGrow: asked + 4000 } }, [done])), { threadId: "t", cwd: "D:\\w" }, "within 5 s");
+  assert.equal(lib.answerTarget({ ...row, job: { ...done, announcedAt: "2026-01-02" }, session: { status: "IDLE", lastGrow: asked + 6000 } }, [done]), null, "delivered to Claude");
+  assert.deepEqual(plain(lib.answerTarget({ ...row, session: { status: "IDLE", lastGrow: asked + 6000 } }, [done])), { threadId: "t", cwd: "D:\\w" }, "still unannounced");
 });
 
 test("resultCardModel: recorded edits match Codex's list by whole path, not substring", () => {

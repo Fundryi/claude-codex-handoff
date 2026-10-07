@@ -226,7 +226,8 @@ function handleRequest(req, res) {
     const now = Date.now();
     const jobs = listCompanionJobs().map(j => {
       const alive = pidAlive(j.pid);
-      return { ...j, pidAlive: alive, live: classifyJobLiveness(j, alive, now) };
+      const { request, ...summary } = j; // full prompts remain available through /job
+      return { ...summary, pidAlive: alive, live: classifyJobLiveness(j, alive, now) };
     });
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(JSON.stringify({ jobs }));

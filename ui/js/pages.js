@@ -49,11 +49,7 @@
       savePrefs();
       applyPrefs();
       syncTranscripts();
-      renderFilters();
-      renderList();
-      renderHeader();
-      renderFeed();
-      renderPanel();
+      queueViewerRender({ tree: true, feed: true, panel: true });
       if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
     }
     // A Codex session id (auto-open, a loaded History session): the node that draws it.
@@ -73,10 +69,7 @@
       savePrefs();
       applyPrefs();
       syncTranscripts();
-      renderList();
-      renderHeader();
-      renderFeed();
-      renderPanel();
+      queueViewerRender({ tree: true, feed: true, panel: true });
       if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
     }
     function closePanel() {
@@ -159,8 +152,7 @@
       if (!state.stopped && state.key === transcriptUrl(slot)) {
         transcriptTimers[slot] = window.setTimeout(function () { pollTranscript(slot); }, data && data.more ? 0 : state.state === 'running' ? 1500 : 4000);
       }
-      if (slot === 'main') { requestFeedRender(); renderResultCard(); } else renderPanel();
-      renderHeader();
+      queueViewerRender({ header: true, result: slot === 'main', openFeed: slot === 'main', panel: slot === 'panel' });
     }
 
     // One transcript into one target: { inner, scroller, pill, renderKey, session, rawEvents, running,
