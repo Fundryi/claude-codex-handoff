@@ -302,7 +302,7 @@ em dash or en dash in interface copy.
 - The header counter shows running and need you (questions and stuck jobs) for every kind, from every tab; clicking it opens Live.
 - Keys: `/` focuses search; arrows move in the tree (up, down, left closes, right opens); Escape closes the top layer first: a dialog, then the `...`/context menu, then the side panel, then the drawer.
 - Choosing a tab or chip pauses auto-open. Auto-open resumes only through its toggle on the overview. If the selected node changes status, the view moves to a chip that still shows it.
-- Sidebar width, collapsed state, tab, chip, search, selected node id (`<kind>:<id>`), open roots, open folds, kind chips and the project group toggle persist in the browser.
+- Sidebar width, collapsed state, tab, chip, search, selected node id (`<kind>:<id>`), open roots, open folds, the hidden sources of the source bar and the project group toggle persist in the browser.
 
 ## Menu behavior
 
