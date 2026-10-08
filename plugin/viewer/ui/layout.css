@@ -34,6 +34,11 @@
       flex: none;
     }
     .icon-button:hover { background: var(--hover); color: var(--fg); }
+    .icon-button svg { width: 16px; height: 16px; display: block; }
+    /* the sidebar's hide button: 2 px under the brand's padding so its top lands on the 4 px grid (12 px); the chevron
+       points into the list it hides, the header's show button keeps the chevron pointing out */
+    #hide-side { align-self: flex-start; margin-top: 2px; }
+    #hide-side svg { transform: scaleX(-1); }
     .mono { font-family: Consolas, Menlo, monospace; }
     svg { flex: none; }
     ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -52,7 +57,7 @@
     }
     body.side-collapsed #side { display: none; }
     #brand {
-      min-height: 58px; /* with the controls below (98 + 24 per chip row) the list starts at a multiple of 4 px */
+      min-height: 58px; /* with the controls below (98 + 32 for the source bar on Live + 24 per chip row) the list starts at a multiple of 4 px */
       padding: 10px 12px;
       display: flex;
       align-items: center;
@@ -83,7 +88,7 @@
     #connection.connected #connection-dot { background: var(--green); }
     #connection.disconnected #connection-dot { background: var(--red); }
 
-    #side-controls { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); }
+    #side-controls { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; } /* a flex column: the source bar's 1 px bottom margin never collapses into the chip row's */
     #search {
       width: 100%;
       height: 32px;
@@ -124,6 +129,40 @@
     .tab-button .count { margin-left: 0; color: var(--muted); opacity: 1; }
     /* A narrow sidebar drops the tab counts so the tab names stay whole (the chips keep theirs). */
     @container (max-width: 300px) { .tab-button .count { display: none; } }
+    /* The source bar (Live only): one bordered bar of three cells, Claude, Codex, OpenCode, each a toggle. It is a different
+       shape from the tabs above (underline) and the state chips below (dot and word), so the three controls read as three
+       questions: which view, which source, which state. None on means every source. 24 px, 7 px above and 1 px under (32 per
+       bar): the bar's top and its 16 px glyph boxes land on the 4 px grid. The first two cells are a multiple of 4 wide and the
+       glyph box sits 5 px in (1 px border + 5 = 16 px from the card edge, at a multiple of 4 from there on), so every glyph is
+       whole-pixel at any DPR; the third cell takes the rest. Cell lines are shadows, not borders, so they take no room. */
+    #kinds { display: flex; margin: 7px 0 1px; height: 24px; border: 1px solid var(--border); border-radius: var(--r-chip); background: var(--panel); overflow: hidden; }
+    .kind-button {
+      flex: 1 1 0;
+      flex: 0 0 round(down, calc(100% / 3), 4px); /* one shorthand: a browser without round() drops the line and keeps three equal cells */
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 22px;
+      border: 0;
+      box-shadow: -1px 0 0 var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      white-space: nowrap;
+      padding: 0 5px;
+    }
+    .kind-button:last-child { flex: 1 1 0; }
+    .kind-button:focus-visible { outline-offset: -2px; } /* inside the clipped bar, where a 2 px outside ring would be cut */
+    .kind-button .k { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; opacity: .75; }
+    .kind-button .k svg { width: 11px; height: 11px; }
+    .kind-button .w { overflow: hidden; text-overflow: ellipsis; }
+    .kind-button:hover { background: var(--hover); color: var(--fg); }
+    .kind-button.on { background: var(--panel-3); color: var(--fg); }
+    .kind-button:hover .k, .kind-button.on .k { opacity: 1; }
+    /* A narrow sidebar keeps only the glyphs (the tooltip holds the name), like the tabs drop their counts. */
+    @container (max-width: 300px) { .kind-button .w { display: none; } }
     /* The chip row is one compact line (reference "All 17 · Working 2 · Error 0 · Done 12 · Idle 3"): plain words with a
        dot and an inline count, the active one on a small filled block. It scrolls sideways when the sidebar is narrow. */
     #chips-wrap { position: relative; }
@@ -172,11 +211,6 @@
     .chip-button.on { background: var(--panel-3); color: var(--fg); opacity: 1; }
     .chip-button .count { color: var(--muted); opacity: 1; margin-left: 0; }
     .chip-button.on .count { color: var(--tree-text); }
-    /* kind chips (Claude, Codex): an SVG glyph instead of the dot; the two wrap as one unit */
-    .chip-button.kind::before { display: none; }
-    .chip-button.kind .k { display: inline-grid; place-items: center; width: 12px; height: 12px; }
-    .chip-button.kind .k svg { width: 11px; height: 11px; }
-    .chip-kinds { display: inline-flex; align-items: center; gap: 2px; flex: none; margin-left: 4px; padding-left: 6px; border-left: 1px solid var(--border); }
     #open-elsewhere {
       display: flex;
       align-items: center;

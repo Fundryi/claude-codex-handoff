@@ -46,7 +46,7 @@
       ghost: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 6a2.5 2.5 0 1 1 3.7 2.2C8.4 8.7 8 9.3 8 10.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="13.1" r="1" fill="currentColor"/></svg>',
       you: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M2.8 14a5.2 5.2 0 0 1 10.4 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
       plugin: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
-      chev: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5l4.5 4.5L6 12.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      chev: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.75 3.5l4.5 4.5-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       info: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.2" r="1.1" fill="currentColor"/><path d="M8 7v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
     };
     // glyph(name): the GL glyph as an <svg> element (sized by its parent's CSS).
@@ -88,20 +88,23 @@
       return dot;
     }
     // Kind chips (Claude, Codex) as one wrapping unit for #chips. The click handler is the logic's; this is the markup.
+    // Source toggles (Claude, Codex, OpenCode) for the #kinds bar: a 16 px glyph box in the actor color and the word.
     function kindChipsElement() {
-      var unit = document.createElement('span');
-      unit.className = 'chip-kinds';
-      [['claude', 'Claude', 'Only Claude’s own work'], ['codex', 'Codex', 'Only work that runs under Codex'], ['opencode', 'OpenCode', 'Only OpenCode sessions']].forEach(function (k) {
+      var unit = document.createDocumentFragment();
+      [['claude', 'Claude', 'Only Claude’s own work. None on: every source'], ['codex', 'Codex', 'Only work that runs under Codex. None on: every source'], ['opencode', 'OpenCode', 'Only OpenCode sessions. None on: every source']].forEach(function (k) {
         var button = document.createElement('button');
         button.type = 'button';
-        button.className = 'chip-button kind';
+        button.className = 'kind-button';
         button.dataset.kind = k[0];
         button.title = k[2];
         var box = document.createElement('span');
         box.className = 'k';
         box.style.color = 'var(--' + k[0] + ')';
         box.appendChild(glyph(k[0]));
-        button.append(box, document.createTextNode(k[1]));
+        var word = document.createElement('span');
+        word.className = 'w';
+        word.textContent = k[1];
+        button.append(box, word);
         unit.appendChild(button);
       });
       return unit;

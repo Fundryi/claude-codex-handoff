@@ -37,7 +37,7 @@
       #feed { padding: 10px 12px 56px; }
       #result-card { padding-left: 12px; padding-right: 12px; }
       .control-grid { grid-template-columns: 1fr; }
-      /* chips scroll sideways in one row; the kind chips follow the status chips */
+      /* state chips scroll sideways in one row; the source bar above keeps its three cells */
       #chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 2px; }
       #chips::-webkit-scrollbar { display: none; }
       #side-backdrop { display: none; position: fixed; inset: 0; z-index: 19; background: rgba(0, 0, 0, .5); }

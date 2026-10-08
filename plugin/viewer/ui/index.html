@@ -20,12 +20,13 @@
         <div id="brand-title">AI Live Viewer</div>
         <div id="brand-subtitle"><span id="connection"><span id="connection-dot"></span><span id="connection-text">Connecting</span></span></div>
       </div>
-      <button id="hide-side" class="icon-button" type="button" title="Collapse session list" aria-label="Collapse session list">&#x2039;</button>
+      <button id="hide-side" class="icon-button" type="button" title="Hide the task list" aria-label="Hide the task list"></button>
     </div>
     <div id="side-controls">
       <input id="search" type="search" placeholder="Search tasks, chats, projects, or IDs" aria-label="Search tasks">
       <div id="tabs" aria-label="Views"></div>
-      <div id="chips-wrap"><div id="chips" aria-label="Filter this view"></div></div>
+      <div id="kinds" role="group" aria-label="Filter by source: Claude, Codex or OpenCode. None on shows every source" hidden></div>
+      <div id="chips-wrap"><div id="chips" aria-label="Filter by state"></div></div>
     </div>
     <div id="open-elsewhere" hidden>Open: <span id="open-elsewhere-title"></span> (not in this view) &#xB7; <button id="open-elsewhere-show" type="button">Show</button></div>
     <div id="list-wrap"><div id="list"></div></div>
@@ -40,7 +41,7 @@
     <header id="task-header"><div class="inner">
       <div id="crumbs" aria-label="Path to this node"></div>
       <div id="header-top">
-        <button id="show-side" class="icon-button" type="button" title="Show session list" aria-label="Show session list">&#x2630;</button>
+        <button id="show-side" class="icon-button" type="button" title="Show the task list" aria-label="Show the task list"></button>
         <div id="task-copy" class="hd-main">
           <div id="task-title-row"><span id="task-status" class="status DONE" hidden></span><span id="task-handoff" class="status HANDOFF" hidden>Handoff</span><span id="task-claude" class="status CLAUDE_WF claude-only" title="A Claude Code workflow (Workflow tool), not a Codex task" hidden>Workflow</span><span id="task-fast" class="status FAST" title="Priority processing (fast tier)" hidden>FAST</span><span id="task-title">Select a task</span></div>
           <div id="task-facts" hidden></div>

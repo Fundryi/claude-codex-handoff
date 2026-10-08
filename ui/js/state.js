@@ -65,6 +65,7 @@
     var list = document.getElementById('list');
     var tabsBar = document.getElementById('tabs');
     var chipsBar = document.getElementById('chips');
+    var kindsBar = document.getElementById('kinds');
     var openElsewhere = document.getElementById('open-elsewhere');
     var openElsewhereTitle = document.getElementById('open-elsewhere-title');
     var search = document.getElementById('search');

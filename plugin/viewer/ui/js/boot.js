@@ -97,6 +97,7 @@
 
     tabsBar.addEventListener('keydown', rovingKeydown(tabsBar));
     chipsBar.addEventListener('keydown', rovingKeydown(chipsBar));
+    kindsBar.addEventListener('keydown', rovingKeydown(kindsBar));
 
     resumeSessionButton.addEventListener('click', function () {
       var row = selectedRow();
@@ -156,6 +157,9 @@
       jumpLatest.hidden = feedOverview() || nearBottom();
     }, { passive: true });
 
+    // one chevron for both sidebar buttons: hide points into the list (left, mirrored in CSS), show points out of the header (right)
+    document.getElementById('hide-side').appendChild(glyph('chev'));
+    document.getElementById('show-side').appendChild(glyph('chev'));
     document.getElementById('hide-side').addEventListener('click', function () {
       if (window.innerWidth <= 760) document.body.classList.remove('mobile-side-open');
       else {

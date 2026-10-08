@@ -107,9 +107,12 @@
         button.addEventListener('click', function () { chooseView(prefs.tab, chip); });
         chipsBar.appendChild(button);
       });
+      // The source bar (Claude, Codex, OpenCode) is its own control above the state chips: it narrows what every count below says.
+      kindsBar.hidden = prefs.tab !== 'LIVE';
+      kindsBar.textContent = '';
       if (prefs.tab === 'LIVE') {
         var kinds = kindChipsElement();
-        kinds.querySelectorAll('.chip-button.kind').forEach(function (button) {
+        kinds.querySelectorAll('.kind-button').forEach(function (button) {
           var kind = button.dataset.kind;
           var on = !!(prefs.kinds || {})[kind];
           button.classList.toggle('on', on);
@@ -120,7 +123,7 @@
             chooseView('LIVE', prefs.chip);
           });
         });
-        chipsBar.appendChild(kinds);
+        kindsBar.appendChild(kinds);
       }
       chipEdges();
     }
