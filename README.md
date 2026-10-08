@@ -131,7 +131,7 @@ When in doubt, go one tier up. A smarter run costs a little more time and quota;
 
 **In the browser** (`localhost:8377`):
 
-- one tree of all work, grouped by project: Claude chats with their subagents, workflow runs and Codex handoffs, Codex sessions and agents, and recent OpenCode chats with their child sessions. Two tabs (Live, History), status chips, and Claude, Codex and OpenCode kind chips
+- one tree of all work, grouped by project: Claude chats with their subagents, workflow runs and Codex handoffs, Codex sessions and agents, and recent OpenCode chats with their child sessions. Two tabs (Live, History), a source bar with Claude, Codex and OpenCode buttons (all on until you hide one), and status chips
 - a feed that shows who says what: your messages, Claude's handoff prompts and automatic answers, the plugin's return format, Codex's replies and questions, and Codex's work (thinking, commands, patches) in its own collapsed log, each actor in one color with a legend
 - a result card on every finished handoff (Summary, Changed files, Checks run, Needs decision) with an answer box that resumes the thread when Codex asked a question; "Show full result" opens the full result dialog and lists every run on the thread, newest first
 - a Claude chat opens with its live transcript (your prompts, Claude's replies and work); a Claude subagent or workflow agent opens in a side panel next to it; a workflow groups its agents by topic, with the phase steps of each topic. Claude work uses the Claude orange, Codex work teal. The viewer only reads the files under `~/.claude/projects` and has no stop or resume buttons for Claude

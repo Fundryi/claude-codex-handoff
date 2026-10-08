@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.28.0
+
+- **Sources have their own buttons.** Claude, Codex and OpenCode are now three buttons above the state chips. Before, they sat at the end of the chip row and looked like more state chips. They sit on top because they change every count below them.
+- **All sources are on by default.** A source that is on is filled and has a border in its own color. Click a source to hide its work. It then shows only an outline and dim text. If you click the only source that is still on, all three turn on again, so the list is never empty for no visible reason. Your saved filter is converted once, so the list shows the same work as before.
+- **One "Needs you" chip.** The "Needs attention" chip is gone. "Needs you" now holds a question for you and a stuck job. The row word tells them apart: "needs answer" or "Stuck". A stuck job is a job whose process stopped or died. Check it, then click Resume. A saved "Needs attention" filter opens "Needs you".
+- **The hide and show buttons of the task list have an arrow icon.** Before, they used the text characters `‹` and `☰`. Both now use the same centered arrow icon.
+- **The empty list looks calm.** The message and the "Show everything from today" button are stacked in the center. Before, the button sat right after the sentence on the same line. This also applies to an empty History list and a search with no results.
+- **The Live overview shows a running command on one line.** A long command filled three lines in a box, because the overview used the same style name as the command block in the feed.
+- **Tests:** new test "source toggles: all on by default, a click hides one, the last one on cannot go off" in `tests/viewer-ui-state.test.js`. `tests/ui-rows.test.js` now checks the new source filter, the merged chip, ghost rows and the conversion of saved filters. `tests/ui-jobs.test.js` and `tests/stopped-status.test.js` expect the label "Stuck" instead of "Needs attention". No test was removed.
+
 ## 2.27.2
 
 - **Old Codex questions no longer show "Needs answer".** A Codex question is now open only until its result reaches Claude. Before, the viewer looked for a newer write in the Codex session to decide whether you had answered. The viewer tracks only the 40 newest Codex sessions, so an older session fell out of that list, and its delivered question came back as "Needs answer" under Running. The server also stops keeping a finished job in the list only because it has a delivered question.
