@@ -26,7 +26,7 @@
       --blue: #82aaff;             /* Running */
       --green: #4ade80;            /* Finished */
       --yellow: #fcd14a;           /* Waiting */
-      --amber: #f9b141;            /* Needs attention, Needs answer, near a limit */
+      --amber: #f9b141;            /* Stuck, Needs answer, near a limit */
       --red: #fca5a5;              /* Failed, over a limit */
       --gray: #8087a8;             /* Stopped, Ended */
       /* actors (actor only): who sent a feed message */

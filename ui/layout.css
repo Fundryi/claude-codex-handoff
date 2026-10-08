@@ -27,7 +27,7 @@
       border: 1px solid var(--border);
       border-radius: var(--r-btn);
       background: transparent;
-      color: var(--muted);
+      color: var(--faint); /* off: a hidden source reads dim; .on brings it to full color */
       cursor: pointer;
       display: inline-grid;
       place-items: center;
@@ -155,12 +155,14 @@
     }
     .kind-button:last-child { flex: 1 1 0; }
     .kind-button:focus-visible { outline-offset: -2px; } /* inside the clipped bar, where a 2 px outside ring would be cut */
-    .kind-button .k { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; opacity: .75; }
+    .kind-button .k { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; opacity: .4; }
     .kind-button .k svg { width: 11px; height: 11px; }
     .kind-button .w { overflow: hidden; text-overflow: ellipsis; }
-    .kind-button:hover { background: var(--hover); color: var(--fg); }
+    .kind-button:hover { background: var(--hover); color: var(--muted); }
     .kind-button.on { background: var(--panel-3); color: var(--fg); }
-    .kind-button:hover .k, .kind-button.on .k { opacity: 1; }
+    .kind-button:hover .k { opacity: .7; }
+    .kind-button.on .k { opacity: 1; }
+    .kind-button.on:hover { color: var(--fg); }
     /* A narrow sidebar keeps only the glyphs (the tooltip holds the name), like the tabs drop their counts. */
     @container (max-width: 300px) { .kind-button .w { display: none; } }
     /* The chip row is one compact line (reference "All 17 · Working 2 · Error 0 · Done 12 · Idle 3"): plain words with a

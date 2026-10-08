@@ -32,7 +32,7 @@
                static; the halo box turns with a transform, which runs on the compositor (an animated gradient angle
                costs a style recalc and a repaint every frame on the main thread). The box, the mask and the stroke are
                rotationally symmetric about the box centre, so the turn reads the same at every DPR and zoom.
-       mk-ask = a solid amber ring (needs answer).   mk-warn = a dotted amber ring (needs attention).
+       mk-ask = a solid amber ring (needs answer).   mk-warn = a dotted amber ring (stuck).
        mk-dim = the mark dims (finished, stopped, ended, archived, background). Waiting = the plain mark. ---- */
     .mark.mk-busy::after, .mark.mk-ask::after, .mark.mk-warn::after {
       content: ''; position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;

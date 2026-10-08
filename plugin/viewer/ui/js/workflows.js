@@ -9,25 +9,27 @@
       return div;
     }
 
-    // Header counter (design 4.5): every kind, over the Live roots' roll-up. Hidden when all three are zero.
+    // Header counter (design 4.5): every kind, over the Live roots' roll-up. Hidden when both are zero.
+    // ANSWER counts the roots that need you: a question (ANSWER) or a stuck job (ATTENTION), like the chip.
     var counter = document.getElementById('counter');
     function counterCounts() {
       var model = currentModel();
-      var counts = { RUNNING: 0, ANSWER: 0, ATTENTION: 0 };
+      var counts = { RUNNING: 0, ANSWER: 0 };
       viewRoots(model, { tab: 'LIVE', chip: 'ALL', kinds: {} }, Date.now(), prefs.dismissed, '').forEach(function (id) {
         var states = model.nodes[id].states;
-        Object.keys(counts).forEach(function (s) { if (states[s]) counts[s]++; });
+        if (states.RUNNING) counts.RUNNING++;
+        if (states.ANSWER || states.ATTENTION) counts.ANSWER++;
       });
       return counts;
     }
     function renderCounter() {
       var c = counterCounts();
-      var text = [c.RUNNING, c.ANSWER, c.ATTENTION].join('/');
-      counter.hidden = !c.RUNNING && !c.ANSWER && !c.ATTENTION;
+      var text = [c.RUNNING, c.ANSWER].join('/');
+      counter.hidden = !c.RUNNING && !c.ANSWER;
       if (counter.dataset.text === text) return;
       counter.dataset.text = text;
       counter.textContent = '';
-      [['RUNNING', 'LIVE', 'running', 'running'], ['ANSWER', 'NEEDS_ANSWER', 'need you', 'needs you'], ['ATTENTION', 'STALE', 'need attention', 'needs attention']].forEach(function (k) {
+      [['RUNNING', 'LIVE', 'running', 'running'], ['ANSWER', 'NEEDS_ANSWER', 'need you', 'needs you']].forEach(function (k) {
         if (!c[k[0]]) return;
         var span = document.createElement('span');
         span.append(stateDot(k[1]), document.createTextNode(c[k[0]] + ' ' + (c[k[0]] === 1 ? k[3] : k[2])));

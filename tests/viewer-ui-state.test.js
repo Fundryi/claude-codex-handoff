@@ -51,6 +51,17 @@ test("picking a tab or chip pauses automatic following and closes the overview",
   assert.equal(context.prefs.home, false);
 });
 
+test("source toggles: all on by default, a click hides one, the last one on cannot go off", () => {
+  const context = navigation();
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  vm.runInNewContext(script.match(/function toggleKind\([\s\S]*?\n    \}/)[0], context);
+  const toggle = (kinds, kind) => JSON.parse(JSON.stringify(context.toggleKind(kinds, kind)));
+  assert.deepEqual(toggle({}, "codex"), { codex: false }, "Codex off");
+  assert.deepEqual(toggle({ codex: false }, "codex"), {}, "and back on");
+  assert.deepEqual(toggle({ codex: false }, "opencode"), { codex: false, opencode: false });
+  assert.deepEqual(toggle({ codex: false, opencode: false }, "claude"), {}, "the last source on: every source turns back on");
+});
+
 test("Auto-open follows a running Codex task, never away from an open Claude page or panel", () => {
   const running = { id: "running", threadId: "t-run", status: "LIVE", lastGrow: Date.now() };
   const context = navigation();

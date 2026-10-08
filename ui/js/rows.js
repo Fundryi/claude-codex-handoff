@@ -25,9 +25,9 @@
       if (questionOpen(job)) return 'Needs answer';
       var map = {
         working: 'Running',
-        'possibly-stuck': 'Needs attention',
-        dead: 'Needs attention',
-        failed: 'Needs attention',
+        'possibly-stuck': 'Stuck',
+        dead: 'Stuck',
+        failed: 'Stuck',
         completed: 'Finished',
         cancelled: 'Stopped',
         queued: 'Running'

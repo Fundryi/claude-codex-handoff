@@ -104,7 +104,7 @@ test("UI knows the STOPPED status", () => {
 test("UI help text explains job-liveness-aware statuses", () => {
   assert.match(html, /LIVE: \{ label: 'Running', help: 'The session is writing new events, or its job process is alive and streaming\.' \}/);
   assert.match(html, /IDLE: \{ label: 'Waiting', help: 'No new events for 20 seconds and no live job process\. It may be running a quiet tool\.' \}/);
-  assert.match(html, /STALE: \{ label: 'Needs attention', help: 'The job process died or stopped its heartbeat before completing\.' \}/);
+  assert.match(html, /STALE: \{ label: 'Stuck', help: 'The job died, stopped its heartbeat or failed before it completed\. Check it, then Resume\.' \}/);
 });
 
 test("quiet session that ended in a turn_aborted error reports STOPPED with the error as reason", () => {

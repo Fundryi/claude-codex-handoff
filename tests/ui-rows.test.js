@@ -545,12 +545,25 @@ test("a handoff of a tracked chat that the frame did not send stays out of the r
 });
 
 test("worstState, the Live window and saved views from before the redesign", () => {
-  const { worstState, liveRoot, liveHidden, nodeSavedView, nodeIdFor, childOrder, nodeSelfMatch } = ctx();
+  const { worstState, liveRoot, liveHidden, nodeSavedView, nodeIdFor, childOrder, nodeSelfMatch, kindsFiltered, VIEW_TABS } = ctx();
   // The Running chip (the default) also shows a question for you; nothing finished.
   assert.equal(nodeSelfMatch({ kind: "handoff", state: "ANSWER" }, "RUNNING", {}), true);
   assert.equal(nodeSelfMatch({ kind: "chat", state: "RUNNING" }, "RUNNING", {}), true);
   assert.equal(nodeSelfMatch({ kind: "chat", state: "FINISHED" }, "RUNNING", {}), false);
   assert.equal(nodeSelfMatch({ kind: "handoff", state: "ATTENTION" }, "RUNNING", {}), false);
+  // One Needs you chip: a question and a stuck job both count under ANSWER; ATTENTION is no chip of its own.
+  assert.equal(VIEW_TABS.LIVE.indexOf("ATTENTION"), -1);
+  assert.equal(nodeSelfMatch({ kind: "handoff", state: "ATTENTION" }, "ANSWER", {}), true, "a stuck job is under Needs you");
+  assert.equal(nodeSelfMatch({ kind: "chat", state: "ANSWER" }, "ANSWER", {}), true);
+  assert.equal(nodeSelfMatch({ kind: "chat", state: "RUNNING" }, "ANSWER", {}), false);
+  // Source toggles: every source is on by default ({}); false hides one; a ghost never has a key and always shows.
+  assert.equal(kindsFiltered({}), false);
+  assert.equal(kindsFiltered({ codex: false }), true);
+  assert.equal(nodeSelfMatch({ kind: "handoff", state: "RUNNING" }, "ALL", {}), true);
+  assert.equal(nodeSelfMatch({ kind: "handoff", state: "RUNNING" }, "ALL", { codex: false }), false, "Codex off hides a handoff");
+  assert.equal(nodeSelfMatch({ kind: "chat", state: "RUNNING" }, "ALL", { codex: false }), true, "and keeps Claude");
+  assert.equal(nodeSelfMatch({ kind: "ghost", state: "FINISHED" }, "ALL", {}), true, "a ghost shows with every source on");
+  assert.equal(nodeSelfMatch({ kind: "ghost", state: "FINISHED" }, "ALL", { codex: false, claude: false }), true, "and when sources are off");
   // Children: active first (newest started on top), then finished (newest finished on top).
   const kids = [
     { id: "old-done", rollup: "FINISHED", startedMs: 1, updatedMs: 10 },
@@ -572,17 +585,23 @@ test("worstState, the Live window and saved views from before the redesign", () 
   assert.equal(liveHidden({ state: "ARCHIVED", row: { id: "s3" } }, []), true, "so does an archived one");
   assert.equal(liveHidden({ state: "ARCHIVED" }, []), false, "a Claude node has no Codex row to dismiss");
   // Design 4.3: Now -> Live; Handoffs -> Live + Codex; Claude -> Live + Claude; History unchanged.
-  const v = (p) => { const r = plain(nodeSavedView(p)); assert.equal(r.viewV, 2); delete r.viewV; return r; };
-  assert.deepEqual(v({ tab: "NOW", chip: "ANSWER" }), { tab: "LIVE", chip: "ANSWER", kinds: { claude: false, codex: false } });
-  assert.deepEqual(v({ tab: "HANDOFFS", chip: "FINISHED" }), { tab: "LIVE", chip: "FINISHED", kinds: { claude: false, codex: true } });
-  assert.deepEqual(v({ tab: "CLAUDE", chip: "RUNNING" }), { tab: "LIVE", chip: "RUNNING", kinds: { claude: true, codex: false } });
-  assert.deepEqual(v({ tab: "HISTORY", chip: "ARCHIVED" }), { tab: "HISTORY", chip: "ARCHIVED", kinds: { claude: false, codex: false } });
-  assert.deepEqual(v({ tab: "LIVE", chip: "STOPPED", kinds: { codex: true } }), { tab: "LIVE", chip: "STOPPED", kinds: { claude: false, codex: true } });
-  assert.deepEqual(v({ filter: "STALE" }), { tab: "LIVE", chip: "ATTENTION", kinds: { claude: false, codex: false } });
+  // viewV 3: kinds hold the sources turned off (false); {} is every source on. Old "none on" (= every source) becomes {}.
+  const v = (p) => { const r = plain(nodeSavedView(p)); assert.equal(r.viewV, 3); delete r.viewV; return r; };
+  assert.deepEqual(v({ tab: "NOW", chip: "ANSWER" }), { tab: "LIVE", chip: "ANSWER", kinds: {} });
+  assert.deepEqual(v({ tab: "HANDOFFS", chip: "FINISHED" }), { tab: "LIVE", chip: "FINISHED", kinds: { claude: false, codex: true, opencode: false } });
+  assert.deepEqual(v({ tab: "CLAUDE", chip: "RUNNING" }), { tab: "LIVE", chip: "RUNNING", kinds: { claude: true, codex: false, opencode: false } });
+  assert.deepEqual(v({ tab: "HISTORY", chip: "ARCHIVED" }), { tab: "HISTORY", chip: "ARCHIVED", kinds: {} });
+  assert.deepEqual(v({ tab: "LIVE", chip: "STOPPED", kinds: { codex: true }, viewV: 2 }), { tab: "LIVE", chip: "STOPPED", kinds: { claude: false, codex: true, opencode: false } }, "old some-on: those on, the rest off");
+  assert.deepEqual(v({ tab: "LIVE", chip: "STOPPED", kinds: { claude: false, codex: false }, viewV: 2 }), { tab: "LIVE", chip: "STOPPED", kinds: {} }, "old none-on: every source");
+  assert.deepEqual(v({ tab: "LIVE", chip: "STOPPED", kinds: { codex: false }, viewV: 3 }), { tab: "LIVE", chip: "STOPPED", kinds: { codex: false } }, "new data is kept as is");
+  assert.deepEqual(v({ tab: "LIVE", chip: "STOPPED", kinds: {}, viewV: 3 }), { tab: "LIVE", chip: "STOPPED", kinds: {} }, "idempotent");
+  // The Needs attention chip is gone: a saved one opens the merged Needs you chip.
+  assert.deepEqual(v({ filter: "STALE" }), { tab: "LIVE", chip: "ANSWER", kinds: {} });
+  assert.deepEqual(v({ tab: "LIVE", chip: "ATTENTION", viewV: 2 }), { tab: "LIVE", chip: "ANSWER", kinds: {} });
   // Running is the default: a first start, and a saved Live "All" from before, open on Running once.
-  assert.deepEqual(v({}), { tab: "LIVE", chip: "RUNNING", kinds: { claude: false, codex: false } });
-  assert.deepEqual(v({ tab: "LIVE", chip: "ALL" }), { tab: "LIVE", chip: "RUNNING", kinds: { claude: false, codex: false } });
-  assert.deepEqual(v({ tab: "LIVE", chip: "ALL", viewV: 2 }), { tab: "LIVE", chip: "ALL", kinds: { claude: false, codex: false } }, "All picked after the switch stays");
+  assert.deepEqual(v({}), { tab: "LIVE", chip: "RUNNING", kinds: {} });
+  assert.deepEqual(v({ tab: "LIVE", chip: "ALL" }), { tab: "LIVE", chip: "RUNNING", kinds: {} });
+  assert.deepEqual(v({ tab: "LIVE", chip: "ALL", viewV: 2 }), { tab: "LIVE", chip: "ALL", kinds: {} }, "All picked after the switch stays");
   // A saved Codex row id or Claude run maps to its node; a missing one gives null (the overview shows).
   const model = { nodes: { "handoff:T1": { row: { id: "s-h1" } }, "workflow:s/wf_x": { kind: "workflow", runId: "wf_x" },
     "wfagent:s/wf_x/a2": { kind: "wfagent", run: { id: "wf_x" }, agent: { id: "a2" } } }, roots: [] };

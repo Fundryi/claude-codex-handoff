@@ -115,7 +115,7 @@
     var STATUS = {
       LIVE: { label: 'Running', help: 'The session is writing new events, or its job process is alive and streaming.' },
       IDLE: { label: 'Waiting', help: 'No new events for 20 seconds and no live job process. It may be running a quiet tool.' },
-      STALE: { label: 'Needs attention', help: 'The job process died or stopped its heartbeat before completing.' },
+      STALE: { label: 'Stuck', help: 'The job died, stopped its heartbeat or failed before it completed. Check it, then Resume.' },
       DONE: { label: 'Finished', help: 'The session reported that the task completed.' },
       STOPPED: { label: 'Stopped', help: 'Stopped: the job was cancelled, or the Codex turn was aborted.' },
       ARCHIVED: { label: 'Archived', help: 'This session was archived with codex archive. Copy the unarchive command to bring it back.' },
@@ -124,7 +124,7 @@
     // Tab and chip ids come from TABS.
     var VIEW_LABELS = {
       LIVE: 'Live', NOW: 'Now', HANDOFFS: 'Handoffs', HISTORY: 'History', CLAUDE: 'Claude',
-      ALL: 'All', RUNNING: 'Running', WAITING: 'Waiting', ATTENTION: 'Needs attention', ANSWER: 'Needs answer',
+      ALL: 'All', RUNNING: 'Running', WAITING: 'Waiting', ATTENTION: 'Stuck', ANSWER: 'Needs you',
       FINISHED: 'Finished', STOPPED: 'Stopped', ARCHIVED: 'Archived', DISMISSED: 'Dismissed', EVERYTHING: 'Everything'
     };
 

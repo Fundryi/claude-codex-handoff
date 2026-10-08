@@ -16,9 +16,9 @@ function ctx() {
 test("jobStatusLabel maps liveness to one title-case status vocabulary", () => {
   const { jobStatusLabel } = ctx();
   assert.equal(jobStatusLabel({ live: "working" }), "Running");
-  assert.equal(jobStatusLabel({ live: "possibly-stuck" }), "Needs attention");
-  assert.equal(jobStatusLabel({ live: "dead" }), "Needs attention");
-  assert.equal(jobStatusLabel({ live: "failed" }), "Needs attention");
+  assert.equal(jobStatusLabel({ live: "possibly-stuck" }), "Stuck");
+  assert.equal(jobStatusLabel({ live: "dead" }), "Stuck");
+  assert.equal(jobStatusLabel({ live: "failed" }), "Stuck");
   assert.equal(jobStatusLabel({ live: "completed" }), "Finished");
   assert.equal(jobStatusLabel({ live: "completed", needsDecision: "Keep the API?" }), "Needs answer");
   assert.equal(jobStatusLabel({ live: "cancelled" }), "Stopped");

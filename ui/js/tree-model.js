@@ -275,7 +275,8 @@
       return { nodes: nodes, roots: roots };
     }
     // Live tab chips, in the design's fixed order (4.2). History keeps its own chips.
-    var VIEW_TABS = { LIVE: ['ALL', 'RUNNING', 'ANSWER', 'ATTENTION', 'WAITING', 'FINISHED', 'STOPPED'], HISTORY: ['FINISHED', 'STOPPED', 'ARCHIVED', 'DISMISSED', 'EVERYTHING'] };
+    // Needs you (ANSWER) is one chip for a question (ANSWER) and a stuck or failed job (ATTENTION): both mean you must act.
+    var VIEW_TABS = { LIVE: ['ALL', 'RUNNING', 'ANSWER', 'WAITING', 'FINISHED', 'STOPPED'], HISTORY: ['FINISHED', 'STOPPED', 'ARCHIVED', 'DISMISSED', 'EVERYTHING'] };
     // Live: a root that changed in the root window (24 h), or one that still needs something,
     // so an old "Needs answer" stays as visible as it was in the Now tab.
     function liveRoot(node, now, dismissedIds) {
@@ -292,13 +293,19 @@
       if (node.kind === 'opencode' || (node.row && node.row.job && node.row.job.engine === 'opencode')) return 'opencode';
       return node.kind === 'handoff' || node.kind === 'codex' || node.kind === 'codexagent' ? 'codex' : node.kind === 'ghost' ? 'ghost' : 'claude';
     }
-    // One node against a chip and the kind toggles (both off = every kind). FINISHED takes ENDED
-    // (an agent with no end record); RUNNING takes BACKGROUND only through the child that runs.
-    function nodeSelfMatch(node, chip, kinds) {
+    // The source toggles: every source is on unless its key is false, so {} shows everything and a ghost
+    // (kind 'ghost', never a key) always shows.
+    function kindsFiltered(kinds) {
       var k = kinds || {};
-      if ((k.claude || k.codex || k.opencode) && !k[nodeKind(node)]) return false;
+      return k.claude === false || k.codex === false || k.opencode === false;
+    }
+    // One node against a chip and the source toggles. FINISHED takes ENDED (an agent with no end
+    // record); RUNNING takes BACKGROUND only through the child that runs; ANSWER (Needs you) takes ATTENTION.
+    function nodeSelfMatch(node, chip, kinds) {
+      if ((kinds || {})[nodeKind(node)] === false) return false;
       if (chip === 'ALL') return true;
       if (chip === 'FINISHED') return node.state === 'FINISHED' || node.state === 'ENDED';
+      if (chip === 'ANSWER') return node.state === 'ANSWER' || node.state === 'ATTENTION';
       // Running (the default view) also keeps a question for you in sight.
       if (chip === 'RUNNING') return node.state === 'RUNNING' || node.state === 'ANSWER';
       return node.state === chip;
@@ -364,23 +371,30 @@
     }
     // Saved tab and chip from before the redesign map to Live plus a kind (design 4.3).
     // Running is the default Live chip: a saved Live "All" from before (viewV < 2) switches to it once.
+    // viewV 3: the source toggles hide (false) instead of show; a saved "none on" (= everything) from
+    // before becomes {} and "some on" keeps those on and turns the rest off. Needs attention merged into Needs you.
+    var KIND_KEYS = ['claude', 'codex', 'opencode'];
     function nodeSavedView(prefs) {
       var saved = prefs && typeof prefs === 'object' ? prefs : {};
-      var kinds = saved.kinds && typeof saved.kinds === 'object' ? { claude: !!saved.kinds.claude, codex: !!saved.kinds.codex } : { claude: false, codex: false };
-      if (saved.kinds && saved.kinds.opencode) kinds.opencode = true;
+      if (saved.tab === 'LIVE' && saved.chip === 'ATTENTION') saved = Object.assign({}, saved, { chip: 'ANSWER' });
+      var kinds = {};
+      var old = saved.kinds && typeof saved.kinds === 'object' ? saved.kinds : {};
+      if (saved.viewV >= 3) KIND_KEYS.forEach(function (k) { if (old[k] === false) kinds[k] = false; });
+      else if (old.claude || old.codex || old.opencode) KIND_KEYS.forEach(function (k) { kinds[k] = !!old[k]; });
       var view;
       if (Object.prototype.hasOwnProperty.call(VIEW_TABS, saved.tab) && VIEW_TABS[saved.tab].indexOf(saved.chip) !== -1) view = { tab: saved.tab, chip: saved.chip, kinds: kinds };
       else {
-        var old = savedView(saved); // NOW, HANDOFFS, CLAUDE, HISTORY
-        if (old.tab === 'HISTORY') view = { tab: 'HISTORY', chip: old.chip, kinds: kinds };
+        var legacy = savedView(saved); // NOW, HANDOFFS, CLAUDE, HISTORY
+        if (legacy.tab === 'HISTORY') view = { tab: 'HISTORY', chip: legacy.chip, kinds: kinds };
         else {
-          if (old.tab === 'HANDOFFS') kinds = { claude: false, codex: true };
-          if (old.tab === 'CLAUDE') kinds = { claude: true, codex: false };
-          view = { tab: 'LIVE', chip: VIEW_TABS.LIVE.indexOf(old.chip) !== -1 ? old.chip : 'ALL', kinds: kinds };
+          if (legacy.tab === 'HANDOFFS') kinds = { claude: false, codex: true, opencode: false };
+          if (legacy.tab === 'CLAUDE') kinds = { claude: true, codex: false, opencode: false };
+          var chip = legacy.chip === 'ATTENTION' ? 'ANSWER' : legacy.chip;
+          view = { tab: 'LIVE', chip: VIEW_TABS.LIVE.indexOf(chip) !== -1 ? chip : 'ALL', kinds: kinds };
         }
       }
-      if (saved.viewV !== 2 && view.tab === 'LIVE' && view.chip === 'ALL') view.chip = 'RUNNING';
-      view.viewV = 2;
+      if (!(saved.viewV >= 2) && view.tab === 'LIVE' && view.chip === 'ALL') view.chip = 'RUNNING';
+      view.viewV = 3;
       return view;
     }
     // A saved selection from before the redesign: a Codex row id (session id or job:<id>), or a

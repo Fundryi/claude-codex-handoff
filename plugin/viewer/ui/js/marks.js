@@ -91,7 +91,7 @@
     // Source toggles (Claude, Codex, OpenCode) for the #kinds bar: a 16 px glyph box in the actor color and the word.
     function kindChipsElement() {
       var unit = document.createDocumentFragment();
-      [['claude', 'Claude', 'Only Claude’s own work. None on: every source'], ['codex', 'Codex', 'Only work that runs under Codex. None on: every source'], ['opencode', 'OpenCode', 'Only OpenCode sessions. None on: every source']].forEach(function (k) {
+      [['claude', 'Claude', 'Claude’s own work. Click to hide it, click again to show it'], ['codex', 'Codex', 'Work that runs under Codex. Click to hide it, click again to show it'], ['opencode', 'OpenCode', 'OpenCode sessions. Click to hide them, click again to show them']].forEach(function (k) {
         var button = document.createElement('button');
         button.type = 'button';
         button.className = 'kind-button';

@@ -88,7 +88,7 @@ The dashboard classifies every job from ground truth (real PID + heartbeat), not
 | Status | Means | You do |
 |---|---|---|
 | Running | Heartbeat fresh, or the process is alive on a long command | Nothing. Long tasks are never misflagged. |
-| Needs attention | Process gone before finishing, its heartbeat stopped, or it failed with a known cause | Click **Resume**, optionally with more effort or another model, or read the fix hint (broken sandbox, expired `codex login`, rate limit). |
+| Stuck | Process gone before finishing, its heartbeat stopped, or it failed with a known cause. Listed under the **Needs you** chip with Needs answer | Click **Resume**, optionally with more effort or another model, or read the fix hint (broken sandbox, expired `codex login`, rate limit). |
 | Needs answer | The finished job asked a question | Answer it in the result card; "Answer and resume" continues the same thread after a confirm. |
 | Stopped | Cancelled job or aborted turn | Nothing. Not an alarm. |
 | Finished | Completion event received | Read the result card: Summary, Changed files, Checks run. |

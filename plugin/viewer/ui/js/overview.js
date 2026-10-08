@@ -135,8 +135,8 @@
       var right = textDiv('ov-column', '');
       left.appendChild(overviewSection(model, groups, 'Running', groups.running, false));
       if (!groups.running.length) left.appendChild(textDiv('activity-count', 'Nothing running right now'));
-      if (groups.answer.length) right.appendChild(overviewSection(model, groups, 'Needs you', groups.answer, false));
-      if (groups.attention.length) right.appendChild(overviewSection(model, groups, 'Needs attention', groups.attention, false));
+      var needs = groups.answer.concat(groups.attention); // one group: a question or a stuck job, the row word says which
+      if (needs.length) right.appendChild(overviewSection(model, groups, 'Needs you', needs, false));
       var finished = textDiv('ov-finished', groups.finished.length + ' finished today · ');
       var more = document.createElement('button');
       more.type = 'button';
@@ -159,9 +159,10 @@
     function renderActivity() {
       var model = currentModel();
       var groups = overviewGroups(model, Date.now(), prefs.dismissed);
-      var shown = groups.answer.slice(0, 4);
+      var needs = groups.answer.concat(groups.attention);
+      var shown = needs.slice(0, 4);
       // Parents outside the rail must not hide work that is still running.
-      var running = groups.running.concat(groups.attention.concat(groups.answer.slice(shown.length)).flatMap(function (node) { return groups.children[node.id] || []; }));
+      var running = groups.running.concat(needs.slice(shown.length).flatMap(function (node) { return groups.children[node.id] || []; }));
       var signature = JSON.stringify(['activity', dataVersion, prefs.node, Math.floor(Date.now() / 10000), new Date().toDateString()]);
       if (signature === lastPanelSignature) return;
       lastPanelSignature = signature;
@@ -169,15 +170,14 @@
       var focusKey = focusHost ? focusHost.dataset.key : null;
       panelHead.textContent = '';
       var copy = textDiv('', '');
-      copy.append(textDiv('t', 'Activity'), textDiv('activity-count', running.length + ' running · ' + groups.answer.length + (groups.answer.length === 1 ? ' needs you' : ' need you')));
+      copy.append(textDiv('t', 'Activity'), textDiv('activity-count', running.length + ' running · ' + needs.length + (needs.length === 1 ? ' needs you' : ' need you')));
       panelHead.appendChild(copy);
       panelInner.textContent = '';
       var wrap = textDiv('activity-list', '');
       if (running.length) wrap.appendChild(overviewSection(model, groups, 'Running', running, true));
       if (shown.length) wrap.appendChild(overviewSection(model, groups, 'Needs you', shown, true));
-      var more = groups.answer.length - shown.length;
-      var footer = textDiv('activity-foot', more + (more === 1 ? ' more needs you · ' : ' more need you · ')
-        + groups.attention.length + (groups.attention.length === 1 ? ' needs attention · ' : ' need attention · ') + groups.finished.length + ' finished · ');
+      var more = needs.length - shown.length;
+      var footer = textDiv('activity-foot', more + (more === 1 ? ' more needs you · ' : ' more need you · ') + groups.finished.length + ' finished · ');
       var live = document.createElement('button');
       live.type = 'button';
       live.className = 'activity-live';

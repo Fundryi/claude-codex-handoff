@@ -68,7 +68,7 @@
     function nodeFlagWords(node) {
       var words = [];
       if (node.state === 'ANSWER') words.push(['needs answer', node.kind === 'chat' ? 'Claude waits for you.' : 'Codex asked a question. Answer it in the main pane.', 'ask']);
-      if (node.state === 'ATTENTION') words.push(['needs attention', nodeStateHelp(node), 'ask']);
+      if (node.state === 'ATTENTION') words.push(['stuck', nodeStateHelp(node), 'ask']);
       if (node.state === 'STOPPED') words.push(['stopped', nodeStateHelp(node), 'st']);
       if (node.state === 'WAITING') words.push(['waiting', nodeStateHelp(node), 'st']);
       if (node.state === 'ENDED') words.push(['ended', nodeStateHelp(node), 'st']);
@@ -278,8 +278,8 @@
     // Folded: finished work, or (with a chip or kind on) a child that does not match. Never urgent work.
     function nodeFolded(model, node, view) {
       if (URGENT_STATES[node.rollup] && node.rollup !== 'WAITING') return false;
-      if (node.kind === 'wfgroup' && view.chip === 'ALL' && !(view.kinds && (view.kinds.claude || view.kinds.codex || view.kinds.opencode))) return false; // a run's topics stay in sight; their agents fold
-      if (view.chip !== 'ALL' || (view.kinds && (view.kinds.claude || view.kinds.codex || view.kinds.opencode))) {
+      if (node.kind === 'wfgroup' && view.chip === 'ALL' && !kindsFiltered(view.kinds)) return false; // a run's topics stay in sight; their agents fold
+      if (view.chip !== 'ALL' || kindsFiltered(view.kinds)) {
         if (nodeMatch(model.nodes, node.id, view.chip, view.kinds)) return false;
         return true;
       }

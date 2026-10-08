@@ -6,8 +6,8 @@
     panelBody.appendChild(panelInner);
     counter.addEventListener('click', function () {
       var c = counterCounts();
-      prefs.kinds = { claude: false, codex: false };
-      chooseView('LIVE', c.ANSWER ? 'ANSWER' : c.ATTENTION ? 'ATTENTION' : 'RUNNING');
+      prefs.kinds = {};
+      chooseView('LIVE', c.ANSWER ? 'ANSWER' : 'RUNNING');
     });
     controlModalForm.addEventListener('submit', async function (event) {
       event.preventDefault();
@@ -106,7 +106,7 @@
     });
 
     document.getElementById('open-elsewhere-show').addEventListener('click', function () {
-      prefs.kinds = { claude: false, codex: false };
+      prefs.kinds = {};
       chooseView(prefs.tab, prefs.tab === 'HISTORY' ? 'EVERYTHING' : 'ALL');
     });
 

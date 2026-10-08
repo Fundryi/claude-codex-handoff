@@ -39,6 +39,12 @@
     // Whose feed rows the open-state and paging choices belong to.
     function feedScope() { return pageKind() === 'chat' || pageKind() === 'opencode' ? 'chat:' + prefs.node : String(selected || ''); }
 
+    // Source toggle: off is stored as false, on as no key. Turning off the last source turns every source back on.
+    function toggleKind(kinds, kind) {
+      var next = Object.assign({}, kinds || {});
+      if (next[kind] === false) delete next[kind]; else next[kind] = false;
+      return next.claude === false && next.codex === false && next.opencode === false ? {} : next;
+    }
     function viewButton(className, label, count, on) {
       var button = document.createElement('button');
       button.type = 'button';
@@ -100,28 +106,25 @@
       chipsBar.textContent = '';
       VIEW_TABS[prefs.tab].forEach(function (chip) {
         var count = counts[prefs.tab][chip];
-        var label = prefs.tab === 'LIVE' && chip === 'ANSWER' ? 'Needs you' : VIEW_LABELS[chip];
-        var button = viewButton('chip-button' + (chip === 'RUNNING' && count > 0 ? ' has-sessions' : '') + (count === 0 ? ' zero' : ''), label, count, prefs.chip === chip);
+        var button = viewButton('chip-button' + (chip === 'RUNNING' && count > 0 ? ' has-sessions' : '') + (count === 0 ? ' zero' : ''), VIEW_LABELS[chip], count, prefs.chip === chip);
         button.dataset.chip = chip;
         if (chip === 'RUNNING' && prefs.tab === 'LIVE') button.title = 'Work that runs now, and work that waits for your answer';
+        if (chip === 'ANSWER' && prefs.tab === 'LIVE') button.title = 'Work that needs you: a question to answer, or a stuck or failed job to check and resume';
         button.addEventListener('click', function () { chooseView(prefs.tab, chip); });
         chipsBar.appendChild(button);
       });
-      // The source bar (Claude, Codex, OpenCode) is its own control above the state chips: it narrows what every count below says.
+      // The source bar (Claude, Codex, OpenCode) is its own control above the state chips: every source is on
+      // until clicked off, and an off source leaves every count below. Clicking the last one on turns all back on.
       kindsBar.hidden = prefs.tab !== 'LIVE';
       kindsBar.textContent = '';
       if (prefs.tab === 'LIVE') {
         var kinds = kindChipsElement();
         kinds.querySelectorAll('.kind-button').forEach(function (button) {
           var kind = button.dataset.kind;
-          var on = !!(prefs.kinds || {})[kind];
+          var on = (prefs.kinds || {})[kind] !== false;
           button.classList.toggle('on', on);
           button.setAttribute('aria-pressed', String(on));
-          button.addEventListener('click', function () {
-            prefs.kinds = Object.assign({ claude: false, codex: false }, prefs.kinds || {});
-            prefs.kinds[kind] = !prefs.kinds[kind];
-            chooseView('LIVE', prefs.chip);
-          });
+          button.addEventListener('click', function () { prefs.kinds = toggleKind(prefs.kinds, kind); chooseView('LIVE', prefs.chip); });
         });
         kindsBar.appendChild(kinds);
       }

@@ -47,7 +47,7 @@
     /* secondary button (reference "New worktree"): panel fill, thin border, rounded, muted text */
     .empty-action { display: inline-flex; align-items: center; justify-content: center; height: 32px; margin-top: 10px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--r-btn); background: var(--panel-2); color: var(--muted); font-size: 12px; cursor: pointer; transition: color .14s ease, background-color .14s ease; }
     .empty-action:hover { background: var(--hover); color: var(--fg); }
-    .empty-list .empty-action { display: inline-flex; margin-top: 12px; }
+    .empty-list .empty-action { margin: 0; height: 28px; } /* under the sentence, never beside it */
     .history-caption {
       padding: 10px 12px 4px;
       color: var(--faint);
@@ -148,7 +148,7 @@
        tree's kind label, so it never reads as a status and never as Codex work. */
     .status.CLAUDE_WF { background: transparent; color: var(--claude); padding: 0 1px; gap: 4px; }
     .status.CLAUDE_WF svg, .tab-button svg { width: 11px; height: 11px; vertical-align: -1px; color: var(--claude); flex: none; }
-    /* the unified header counter: one button, three counts (running · need you · need attention), filled by the logic */
+    /* the unified header counter: one button, two counts (running · need you), filled by the logic */
     #counter { height: 32px; border: 1px solid var(--border); border-radius: var(--r-btn); background: transparent; padding: 0 10px; display: inline-flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); cursor: pointer; white-space: nowrap; }
     #counter:hover { background: var(--hover); }
     #counter span { display: inline-flex; align-items: center; gap: 5px; }
@@ -202,7 +202,8 @@
     .topic-row .when { min-width: 52px; text-align: right; }
     .topic-note { margin: 4px 0 4px 36px; color: var(--faint); font-size: 10.5px; }
     .claude-note { margin: 18px 0 0; color: var(--faint); font-size: 11px; }
-    .empty-list { padding: 30px 15px; text-align: center; color: var(--muted); font-size: 12px; }
+    /* The empty list: one calm sentence, and the action stacked under it; everything centred on the 4 px grid. */
+    .empty-list { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 16px; text-align: center; color: var(--muted); font-size: 12px; line-height: 16px; }
     /* The side panel holds an open Claude agent or the wide-screen Activity rail. */
     /* the third card: beside the main pane, after a gutter */
     #panel { width: var(--panel-w); flex: none; margin-left: var(--gutter); display: none; flex-direction: column; background: var(--panel); }
