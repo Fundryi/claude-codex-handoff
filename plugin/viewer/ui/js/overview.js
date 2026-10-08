@@ -96,7 +96,7 @@
         var path = node.chat && node.chat.cwd || node.row && node.row.project || node.project || '';
         var project = textSpan('ov-project', projectName(path));
         project.title = path;
-        el.append(project, textSpan('ov-now' + (step.command ? ' cmd mono' : '') + (step.ask ? ' ov-answer' : ''), step.text),
+        el.append(project, textSpan('ov-now' + (step.command ? ' mono' : '') + (step.ask ? ' ov-answer' : ''), step.text),
           textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase()));
       }
       el.appendChild(textSpan('ov-age', relativeTime(node.updatedMs)));
