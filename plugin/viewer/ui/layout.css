@@ -129,40 +129,48 @@
     .tab-button .count { margin-left: 0; color: var(--muted); opacity: 1; }
     /* A narrow sidebar drops the tab counts so the tab names stay whole (the chips keep theirs). */
     @container (max-width: 300px) { .tab-button .count { display: none; } }
-    /* The source bar (Live only): one bordered bar of three cells, Claude, Codex, OpenCode, each a toggle. It is a different
-       shape from the tabs above (underline) and the state chips below (dot and word), so the three controls read as three
-       questions: which view, which source, which state. None on means every source. 24 px, 7 px above and 1 px under (32 per
-       bar): the bar's top and its 16 px glyph boxes land on the 4 px grid. The first two cells are a multiple of 4 wide and the
-       glyph box sits 5 px in (1 px border + 5 = 16 px from the card edge, at a multiple of 4 from there on), so every glyph is
-       whole-pixel at any DPR; the third cell takes the rest. Cell lines are shadows, not borders, so they take no room. */
-    #kinds { display: flex; margin: 7px 0 1px; height: 24px; border: 1px solid var(--border); border-radius: var(--r-chip); background: var(--panel); overflow: hidden; }
+    /* The source bar (Live only): three separate bordered buttons with a 4 px gap, Claude, Codex, OpenCode, each a toggle.
+       Three buttons (not one split strip) so each reads as its own click, and a different shape from the tabs above
+       (underline) and the state chips below (dot and word): three controls, three questions (which view, which source, which
+       state). On: a `--panel-3` fill, `--fg` text, a border tinted with the actor color. Off: outlined, `--faint` text, glyph
+       at 40 %. 24 px, 7 px above and 1 px under (32 per bar): the bar's top and its 16 px glyph boxes land on the 4 px grid.
+       The buttons start 10 px in (2 mod 4) and the first two are a multiple of 4 wide, so with the 4 px gap every button
+       starts at 2 mod 4 and its glyph box (1 px border + 5 px padding) at a multiple of 4 from the card edge, whole-pixel at
+       any DPR; the third button takes the rest. */
+    #kinds { display: flex; gap: 4px; margin: 7px 0 1px; height: 24px; }
     .kind-button {
       flex: 1 1 0;
-      flex: 0 0 round(down, calc(100% / 3), 4px); /* one shorthand: a browser without round() drops the line and keeps three equal cells */
+      flex: 0 0 round(down, calc((100% - 8px) / 3), 4px); /* one shorthand: a browser without round() drops the line and keeps three equal buttons */
       min-width: 0;
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      height: 22px;
-      border: 0;
-      box-shadow: -1px 0 0 var(--border);
+      height: 24px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-chip);
       background: transparent;
-      color: var(--muted);
+      color: var(--faint);
       cursor: pointer;
       font-size: 11px;
       white-space: nowrap;
       padding: 0 5px;
+      transition: background .1s, border-color .1s, color .1s;
     }
     .kind-button:last-child { flex: 1 1 0; }
-    .kind-button:focus-visible { outline-offset: -2px; } /* inside the clipped bar, where a 2 px outside ring would be cut */
+    .kind-button:focus-visible { outline-offset: 1px; } /* the ring stays 1 px clear of the neighbour across the 4 px gap */
+    .kind-button[data-kind="claude"] { --kc: var(--claude); }
+    .kind-button[data-kind="codex"] { --kc: var(--codex); }
+    .kind-button[data-kind="opencode"] { --kc: var(--opencode); }
     .kind-button .k { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; opacity: .4; }
     .kind-button .k svg { width: 11px; height: 11px; }
     .kind-button .w { overflow: hidden; text-overflow: ellipsis; }
-    .kind-button:hover { background: var(--hover); color: var(--muted); }
-    .kind-button.on { background: var(--panel-3); color: var(--fg); }
+    .kind-button:hover { background: var(--hover); border-color: var(--border-strong); color: var(--muted); } /* never the on look */
     .kind-button:hover .k { opacity: .7; }
+    .kind-button:active { background: var(--border); }
+    .kind-button.on { background: var(--panel-3); border-color: color-mix(in srgb, var(--kc) 45%, var(--border-strong)); color: var(--fg); }
     .kind-button.on .k { opacity: 1; }
-    .kind-button.on:hover { color: var(--fg); }
+    .kind-button.on:hover { background: var(--panel-3); border-color: color-mix(in srgb, var(--kc) 70%, var(--border-strong)); color: var(--fg); }
+    .kind-button.on:active { background: var(--border-strong); }
     /* A narrow sidebar keeps only the glyphs (the tooltip holds the name), like the tabs drop their counts. */
     @container (max-width: 300px) { .kind-button .w { display: none; } }
     /* The chip row is one compact line (reference "All 17 · Working 2 · Error 0 · Done 12 · Idle 3"): plain words with a
