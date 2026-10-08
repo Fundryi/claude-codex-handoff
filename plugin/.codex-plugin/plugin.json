@@ -1,6 +1,6 @@
 {
   "name": "codex",
-  "version": "2.27.1",
+  "version": "2.27.2",
   "description": "Codex skills and an optional approval hook that makes the AI Live Viewer refresh sooner. Codex loads only codex-hooks/hooks.json. The Claude hooks stay separate.",
   "author": {
     "name": "Fundryi"

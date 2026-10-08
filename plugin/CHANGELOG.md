@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.27.2
+
+- **Old Codex questions no longer show "Needs answer".** A Codex question is now open only until its result reaches Claude. Before, the viewer looked for a newer write in the Codex session to decide whether you had answered. The viewer tracks only the 40 newest Codex sessions, so an older session fell out of that list, and its delivered question came back as "Needs answer" under Running. The server also stops keeping a finished job in the list only because it has a delivered question.
+- **The viewer uses much less CPU.** With about 20 agents at work, an open viewer tab used 388 ms of CPU per second in 2.27.1 and uses 35 ms per second now. The working ring turns with a simple rotation and no longer redraws its color ring on each frame. The page collects updates and draws them once per frame. It draws nothing while the tab is hidden, and it skips a handoff list that did not change. The job list no longer sends the full task prompt, and the session list no longer sends a quiet-time field that changed every second.
+- **Tests:** no test was added or removed. Tests in `tests/ui-rows.test.js`, `tests/stuck-session.test.js`, `tests/ui-jobs.test.js` and `tests/ui-markdown.test.js` now check the new rules: a delivered question is finished, a newer session write does not close a question, and the wait time comes from the last session write. A browser check on live data before and after measured the CPU numbers above.
+
 ## 2.27.1
 
 - **Code blocks in lists use the full width.** A code block, diff, table or JSON view inside a list item now uses the full width of the message, as it does outside a list. Before, it stopped at the width of the list text, about 80 characters. The text of a list item still stops at about 80 characters, so it stays easy to read.
