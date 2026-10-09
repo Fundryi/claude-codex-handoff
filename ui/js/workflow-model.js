@@ -15,7 +15,7 @@
       return ({
         running: { badge: 'LIVE', label: 'Running', help: 'This agent is working.' },
         done: { badge: 'DONE', label: 'Done', help: 'This agent returned its result.' },
-        failed: { badge: 'STALE', label: 'Failed', help: 'This agent failed.' },
+        failed: { badge: 'STOPPED', label: 'No result', help: 'This agent ended without returning a result. Its last words say why.' },
         ended: { badge: 'STOPPED', label: 'Ended', help: 'No end record. The run ended or went quiet.' }
       })[state] || { badge: 'STOPPED', label: 'Ended', help: 'No end record. The run ended or went quiet.' };
     }
@@ -39,7 +39,7 @@
     // "9 started, 6 done, 1 failed". Never "6/71": the planned total is not on disk.
     function claudeRunLine(run) {
       var c = (run && run.counts) || {};
-      return (c.started || 0) + ' started, ' + (c.done || 0) + ' done' + (c.failed ? ', ' + c.failed + ' failed' : '');
+      return (c.started || 0) + ' started, ' + (c.done || 0) + ' done' + (c.failed ? ', ' + c.failed + ' no result' : '');
     }
     // "claude-opus-5-5" -> "Opus 5.5", "claude-haiku-4-5-20251001" -> "Haiku 4.5". Anything else unchanged.
     function modelShortName(id) {

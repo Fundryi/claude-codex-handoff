@@ -171,7 +171,7 @@
     .claude-bar { display: flex; height: 4px; margin-top: 8px; border-radius: 2px; background: var(--meter-track); overflow: hidden; }
     .claude-bar span { display: block; height: 100%; }
     .claude-bar .bar-done { background: linear-gradient(90deg, #a855f7, #38bdf8); }
-    .claude-bar .bar-failed { background: var(--amber); }
+    .claude-bar .bar-failed { background: var(--muted); } /* no result: quiet, not a warning */
     /* phase caption: a plain caption like .ov-heading, no stripe */
     .claude-phase { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; height: 16px; color: var(--faint); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
     .claude-phase .phase-count { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
@@ -183,8 +183,8 @@
     .agent-row.running, .agent-row.live { background: color-mix(in srgb, var(--blue) 6%, transparent); }
     .agent-row.running.open, .agent-row.live.open { background: var(--selected); }
     .agent-row .lab { font-weight: 600; display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-    .agent-row .lab .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .agent-row .tool { color: var(--muted); font-size: 11px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .agent-row .lab .t { flex: 0 0 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .agent-row .tool { flex: 1 1 auto; min-width: 0; color: var(--muted); font-size: 11px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* the label keeps its width; the tool or last words take the rest */
     .agent-row .tail { color: var(--muted); font-size: 10.5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
     .agent-row.child { grid-template-columns: 16px minmax(0, 1fr) auto; padding-left: 36px; position: relative; }
     .agent-row.child .rl { left: 19px; }

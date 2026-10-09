@@ -307,6 +307,7 @@
       meta.className = 'm';
       function item(text, tip, mono) { var s = textSpan(mono ? 'mono' : '', text); if (tip) s.title = tip; meta.appendChild(s); }
       if (p && p.kind === 'wfagent' && p.phase) item(p.phase, 'Phase');
+      if (p && p.kind === 'wfagent' && p.agent.reason) item(p.agent.reason, 'Its last words before it ended without a result');
       else if (p && p.agent && p.agent.agentType) item(p.agent.agentType, 'Agent type');
       var model = (p && p.model) || t.model, effort = (p && p.effort) || t.effort;
       if (model || effort) item([modelShortName(model), effort ? 'effort ' + effort : ''].filter(Boolean).join(' · '), [model, effort].filter(Boolean).join(', '));

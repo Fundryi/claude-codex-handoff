@@ -100,6 +100,7 @@
     // The open agent's row is highlighted (its transcript is in the side panel); running rows get a faint blue.
     function claudeAgentRow(agent, run) {
       var view = claudeAgentView(agent.state);
+      var help = agent.reason ? view.help + ' Its last words: ' + agent.reason : view.help;
       var open = agent.id === panelAgentId();
       var button = document.createElement('button');
       button.type = 'button';
@@ -107,12 +108,13 @@
       button.className = 'agent-row claude-agent ' + agent.state + (open ? ' open' : '');
       button.setAttribute('aria-pressed', open ? 'true' : 'false');
       button.dataset.key = 'agent:' + agent.id; // renderClaudeOverview puts focus back by this key
-      button.title = [agent.label, view.label + ': ' + view.help, 'agent ' + agent.id, 'Click to open its transcript in the side panel'].join('\n');
-      var dot = markElement('ring', 'claude', 'claude', view.label + ': ' + view.help, agent.state);
+      button.title = [agent.label, view.label + ': ' + help, 'agent ' + agent.id, 'Click to open its transcript in the side panel'].join('\n');
+      var dot = markElement('ring', 'claude', 'claude', view.label + ': ' + help, agent.state);
       var lab = document.createElement('span');
       lab.className = 'lab';
       lab.appendChild(textSpan('t', agent.label || agent.id));
       if (agent.state === 'running' && agent.tool) lab.appendChild(textSpan('tool mono', agent.tool));
+      if (agent.reason) lab.appendChild(textSpan('tool', agent.reason)); // a failed agent's last words
       // A script can run one agent on another model or effort: tag only what differs from the run.
       var differs = [agent.model && run.model && agent.model !== run.model ? modelShortName(agent.model) : '',
         agent.effort && run.effort && agent.effort !== run.effort ? agent.effort : ''].filter(Boolean);
@@ -185,7 +187,7 @@
       progress.append(done, document.createTextNode(' of ' + (c.started || 0) + ' started'));
       line.appendChild(progress);
       if (c.running) line.appendChild(textSpan('', c.running + ' running'));
-      if (c.failed) line.appendChild(textSpan('', c.failed + ' failed'));
+      if (c.failed) line.appendChild(textSpan('', c.failed + ' no result'));
       if (c.ended) line.appendChild(claudeMetaItem(c.ended + ' ended', 'No end record: the run ended or went quiet'));
       if (run.totals) {
         line.appendChild(claudeMetaItem(compactCount(run.totals.tokens) + ' tokens · ' + (run.totals.toolCalls || 0).toLocaleString() + ' tool calls', 'From the finish record'));
@@ -251,7 +253,7 @@
         claudePhaseGroups(loose).forEach(function (group) {
           var heading = document.createElement('div');
           heading.className = 'claude-phase';
-          heading.append(textSpan('', group.title), textSpan('phase-count', group.done + '/' + group.started + (group.failed ? ' · ' + group.failed + ' failed' : '')),
+          heading.append(textSpan('', group.title), textSpan('phase-count', group.done + '/' + group.started + (group.failed ? ' · ' + group.failed + ' no result' : '')),
             claudeBar(group.done, group.failed, group.started));
           heading.title = group.done + ' done of ' + group.started + ' started';
           wrap.appendChild(heading);

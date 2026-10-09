@@ -49,7 +49,7 @@
         return { text: count ? count + (count === 1 ? ' agent running' : ' agents running') : '' };
       }
       if (node.state !== 'RUNNING') {
-        var reason = job && job.errorMessage || node.chat && node.chat.outcome
+        var reason = job && job.errorMessage || node.chat && node.chat.outcome || (node.agent && node.agent.reason)
           || (session && session.lastKind === 'err' ? session.lastText : '') || (node.state === 'STOPPED' ? 'stopped' : '');
         return { text: firstLine(String(reason).split(/\r?\n/, 1)[0], 160) };
       }
@@ -75,7 +75,7 @@
       var path = node.chat && node.chat.cwd || node.row && node.row.project || node.project || '';
       var meta = [info.label, node.model, node.effort, nodeTokens(node) ? nodeTokens(node) + (node.usage.total === 1 ? ' token' : ' tokens') : 'tokens unknown',
         node.fast ? 'FAST' : '', SOURCE_NAMES[node.source] || node.source].filter(Boolean);
-      return [node.title, path, step.text, nodeStateLabel(node.state), meta.join(' · '), (node.flags || []).join(' · ')].filter(Boolean).join('\n');
+      return [node.title, path, step.text, nodeWord(node), meta.join(' · '), (node.flags || []).join(' · ')].filter(Boolean).join('\n');
     }
     function overviewRowElement(model, node, child, rail, depth) {
       var step = overviewStep(model, node);
@@ -97,7 +97,7 @@
         var project = textSpan('ov-project', projectName(path));
         project.title = path;
         el.append(project, textSpan('ov-now' + (step.command ? ' mono' : '') + (step.ask ? ' ov-answer' : ''), step.text),
-          textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase()));
+          textSpan('state-word ' + nodeBadge(node.state), nodeWord(node).toLowerCase()));
       }
       el.appendChild(textSpan('ov-age', relativeTime(node.updatedMs)));
       el.addEventListener('click', function () { lastHomeSignature = ''; selectNode(node.id, true); });

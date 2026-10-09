@@ -610,3 +610,19 @@ test("worstState, the Live window and saved views from before the redesign", () 
   assert.equal(nodeIdFor(model, { claudeRun: "wf_x", claudeAgent: "a2" }), "wfagent:s/wf_x/a2", "the v2.18 open agent opens again");
   assert.equal(nodeIdFor(model, { selected: "gone" }), null);
 });
+
+test("a workflow agent without a result is ended, never urgent; a quiet run still reads stuck", () => {
+  const c = ctx();
+  const now = T0;
+  const frame = { chats: [{ id: "chat:c", sessionId: "c", title: "Audit", project: "repo", state: "running", updatedMs: now, children: [
+    { kind: "workflow", id: "workflow:c/wf_1", runId: "wf_1", parentId: "chat:c", label: "audit", state: "running", startedMs: 1 },
+  ] }], ghosts: [] };
+  const build = (status, agentState) => c.buildNodes(frame, [{ id: "wf_1", sessionId: "c", status, agents: [{ id: "a1", label: "A1-L1", phase: "Refute", state: agentState }] }], c.buildRows([], []), [], now).nodes;
+  let nodes = build("RUNNING", "failed");
+  assert.equal(nodes["wfagent:c/wf_1/a1"].state, "ENDED", "no result is not a failure the owner must act on");
+  assert.equal(nodes["chat:c"].rollup, "RUNNING");
+  assert.equal(nodes["chat:c"].hung, false);
+  nodes = build("QUIET", "running");
+  assert.equal(nodes["workflow:c/wf_1"].failed, false);
+  assert.equal(nodes["chat:c"].hung, true, "a quiet run under it: the roll-up word is stuck");
+});

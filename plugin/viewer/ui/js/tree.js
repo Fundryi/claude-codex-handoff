@@ -21,23 +21,27 @@
     function nodeStateLabel(state) {
       return state === 'BACKGROUND' ? 'Background' : state === 'ENDED' ? 'Ended' : state === 'ANSWER' ? 'Needs answer' : STATUS[rowBadge(state)].label;
     }
+    // A reported failure reads Failed; every other ATTENTION node keeps the Stuck label.
+    function nodeWord(node) { return node.failed ? 'Failed' : nodeStateLabel(node.state); }
     function nodeStateHelp(node) {
       if (node.kind === 'opencode') return node.chat.state === 'ended' ? 'Finished: no end record was found for it.'
         : node.chat.state === 'running' ? 'OpenCode updated this session in the last 5 minutes.' : 'OpenCode reported ' + (node.chat.outcome || 'stopped') + '.';
       if (node.state === 'BACKGROUND') return 'The turn is done, and work it started still runs.';
       if (node.state === 'ENDED') return 'Finished: no end record was found for it.';
       if (node.kind === 'chat' && node.state === 'ANSWER') return 'Claude is waiting for you (a question or a dialog).';
+      if (node.agent && node.agent.reason) return claudeAgentView('failed').help + ' Its last words: ' + node.agent.reason;
+      if (node.failed) return claudeStatusView('FAILED').help;
       if (node.row) return rowReason(node.row) || STATUS[rowBadge(node.state)].help;
       return STATUS[rowBadge(node.state)] ? STATUS[rowBadge(node.state)].help : '';
     }
     function nodePill(node) {
       var badge = nodeBadge(node.state);
-      return statusChip(badge === 'ENDED' ? 'STOPPED' : badge, nodeStateLabel(node.state), nodeStateHelp(node));
+      return statusChip(badge === 'ENDED' ? 'STOPPED' : badge, nodeWord(node), nodeStateHelp(node));
     }
     function nodeMark(node) {
       var info = KIND_INFO[node.kind] || KIND_INFO.chat;
       var shape = node.kind === 'opencode' && node.chat && node.chat.parentId ? 'ring' : info.shape;
-      return markElement(shape, info.k, info.glyph, info.label + ' · ' + nodeStateLabel(node.state), nodeBadge(node.state));
+      return markElement(shape, info.k, info.glyph, info.label + ' · ' + nodeWord(node), nodeBadge(node.state));
     }
     function nodeKindLabel(node) {
       var info = KIND_INFO[node.kind] || KIND_INFO.chat;
@@ -68,7 +72,7 @@
     function nodeFlagWords(node) {
       var words = [];
       if (node.state === 'ANSWER') words.push(['needs answer', node.kind === 'chat' ? 'Claude waits for you.' : 'Codex asked a question. Answer it in the main pane.', 'ask']);
-      if (node.state === 'ATTENTION') words.push(['stuck', nodeStateHelp(node), 'ask']);
+      if (node.state === 'ATTENTION') words.push([node.failed ? 'failed' : 'stuck', nodeStateHelp(node), 'ask']);
       if (node.state === 'STOPPED') words.push(['stopped', nodeStateHelp(node), 'st']);
       if (node.state === 'WAITING') words.push(['waiting', nodeStateHelp(node), 'st']);
       if (node.state === 'ENDED') words.push(['ended', nodeStateHelp(node), 'st']);
@@ -138,7 +142,7 @@
       title.className = 'row-title';
       title.textContent = node.title;
       if (node.kind === 'ghost') title.appendChild(textSpan('mono src', ' ' + String(node.sessionId || '').slice(0, 8)));
-      var word = textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase());
+      var word = textSpan('state-word ' + nodeBadge(node.state), nodeWord(node).toLowerCase());
       word.title = nodeStateHelp(node);
       var time = textSpan('row-time', relativeTime(node.updatedMs));
       // The root carries the dot for its whole tree, so a folded child's news still shows.
@@ -162,9 +166,10 @@
         sum.className = 'row-sum';
         if (node.rollup !== node.state && STATE_ORDER.indexOf(node.rollup) < STATE_ORDER.indexOf(node.state)) {
           var roll = textSpan('rollup', '');
-          roll.title = 'Most urgent work under it: ' + nodeStateLabel(node.rollup);
+          var rollLabel = node.rollup === 'ATTENTION' && !node.hung ? 'Failed' : nodeStateLabel(node.rollup);
+          roll.title = 'Most urgent work under it: ' + rollLabel;
           var word = document.createElement('i');
-          word.textContent = nodeStateLabel(node.rollup).toLowerCase();
+          word.textContent = rollLabel.toLowerCase();
           roll.append(stateDot(nodeBadge(node.rollup)), word);
           sum.appendChild(roll);
         }
@@ -217,9 +222,9 @@
     }
     function topicTooltip(group) {
       var head = group.title + ' · ' + (group.loose ? 'phase bucket' : 'workflow topic') + ': ' + group.done + ' done of ' + group.started +
-        (group.running ? ', ' + group.running + ' running' : '') + (group.failed ? ', ' + group.failed + ' failed' : '');
+        (group.running ? ', ' + group.running + ' running' : '') + (group.failed ? ', ' + group.failed + ' no result' : '');
       return [head].concat((group.steps || []).map(function (s) {
-        return s.title + ' ' + s.done + '/' + s.started + (s.running ? ', ' + s.running + ' running' : '') + (s.failed ? ', ' + s.failed + ' failed' : '');
+        return s.title + ' ' + s.done + '/' + s.started + (s.running ? ', ' + s.running + ' running' : '') + (s.failed ? ', ' + s.failed + ' no result' : '');
       })).join('\n');
     }
     function childRowElement(node, depth, last, ancestors, openKids) {
@@ -239,7 +244,7 @@
       if (topic) mark.classList.add('topic');
       el.append(mark);
       var title = textSpan('row-title', node.title);
-      var word = textSpan('state-word ' + nodeBadge(node.state), nodeStateLabel(node.state).toLowerCase());
+      var word = textSpan('state-word ' + nodeBadge(node.state), nodeWord(node).toLowerCase());
       word.title = nodeStateHelp(node);
       var time = textSpan('row-time', relativeTime(node.updatedMs));
       if (nodeUnread(node)) time.prepend(textSpan('unread', ''), document.createTextNode(' '));

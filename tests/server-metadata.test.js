@@ -415,6 +415,18 @@ test("Claude transcript tail: the newest real assistant line gives model and eff
   assert.deepEqual(last("", false), { model: "", effort: "" });
 });
 
+test("Claude transcript tail: a failed agent's reason is its last assistant text, first line, capped", () => {
+  const last = fn("claudeLastText");
+  const line = (o) => JSON.stringify({ isSidechain: true, agentId: "a7beb7a64a116bddb", timestamp: "2026-10-09T19:00:00.000Z", ...o });
+  const asst = (...blocks) => line({ type: "assistant", message: { model: "claude-opus-5-5", role: "assistant", content: blocks } });
+  const nudge = line({ type: "user", message: { role: "user", content: "[structured-output-enforce] You MUST call the StructuredOutput tool." } });
+  const tail = [asst({ type: "text", text: "first reply" }), nudge, asst({ type: "thinking", thinking: "hm" }, { type: "text", text: "I can't call StructuredOutput: it isn't among my tools.\nThe verdict is saved." })].join("\n") + "\n";
+  assert.equal(last(tail, false), "I can't call StructuredOutput: it isn't among my tools.");
+  assert.equal(last([asst({ type: "text", text: "x".repeat(300) })].join("\n"), false), "x".repeat(200));
+  assert.equal(last(asst({ type: "tool_use", name: "Bash", input: {} }) + "\n" + nudge + "\n", false), "", "no text block: no reason");
+  assert.equal(last('","type":"assistant","message":{"content":[{"type":"text","text":"cut"}]}}\n', true), "", "a cut first line is never parsed");
+});
+
 // Claude chat tree parsers. Line shapes from main chat files of Claude Code 2.1.186 and 2.1.285
 // on this PC, trimmed, with text, paths and ids redacted.
 function fns(...names) { const c = {}; for (const n of names) vm.runInNewContext(src.match(new RegExp("\\nfunction " + n + "\\([\\s\\S]*?\\n\\}"))[0], c); return c; }

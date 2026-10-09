@@ -8,7 +8,7 @@
     function claudeNodeState(kind, state) {
       var maps = {
         chat: { running: 'RUNNING', background: 'BACKGROUND', 'needs-you': 'ANSWER', done: 'FINISHED' },
-        agent: { running: 'RUNNING', done: 'FINISHED', failed: 'ATTENTION', stopped: 'STOPPED', killed: 'STOPPED', ended: 'ENDED' },
+        agent: { running: 'RUNNING', done: 'FINISHED', failed: 'ENDED', stopped: 'STOPPED', killed: 'STOPPED', ended: 'ENDED' }, // failed: no result came back, the agent's last words say why; never urgent
         workflow: { running: 'RUNNING', quiet: 'ATTENTION', failed: 'ATTENTION', killed: 'STOPPED', done: 'FINISHED',
           RUNNING: 'RUNNING', QUIET: 'ATTENTION', FAILED: 'ATTENTION', KILLED: 'STOPPED', DONE: 'FINISHED' }
       };
@@ -107,7 +107,7 @@
           } else if (kid.kind === 'workflow') {
             var run = runById[kid.runId] || null;
             var wf = add({ id: kid.id, kind: 'workflow', run: run, runId: kid.runId, chatId: chat.sessionId, title: kid.label,
-              state: claudeNodeState('workflow', run ? run.status : kid.state), project: chat.project, model: run ? run.model : '', effort: run ? run.effort : '',
+              state: claudeNodeState('workflow', run ? run.status : kid.state), failed: !!run && run.status === 'FAILED', project: chat.project, model: run ? run.model : '', effort: run ? run.effort : '',
               startedMs: kid.startedMs, updatedMs: kid.updatedMs, usage: kid.usage, parentHint: kid.parentId });
             // Topic groups (server's run.groups) sit between the run and its agents, in start order.
             var groupBase = 'wfgroup:' + chat.sessionId + '/' + kid.runId + '/';
@@ -249,6 +249,7 @@
         n.rollup = n.state;
         n.states = {};
         n.states[n.state] = true;
+        n.hung = n.state === 'ATTENTION' && !n.failed; // a hung job or quiet run under it, not a reported failure: the roll-up word
         var claude = 0, codex = 0, opencode = 0, partial = !n.usage, total = n.usage ? n.usage.total || 0 : 0;
         if (n.usage && n.usage.partial) partial = true;
         if (n.kind === 'opencode') opencode += total;
@@ -257,6 +258,7 @@
         if (depth < 8) n.children.forEach(function (cid) {
           var c = walk(cid, depth + 1);
           n.rollup = worstState(n.rollup, c.rollup);
+          if (c.hung) n.hung = true;
           Object.keys(c.states).forEach(function (s) { n.states[s] = true; });
           claude += c.tree.claude;
           codex += c.tree.codex;

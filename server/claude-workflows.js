@@ -267,6 +267,29 @@ function claudeLastModel(text, midFile) {
   return { model: "", effort: "" };
 }
 
+// The last assistant text in a transcript tail, first line only: a failed agent's own last words.
+function claudeLastText(text, midFile) {
+  const lines = String(text || "").split("\n");
+  if (midFile) lines.shift();
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].includes('"assistant"')) continue;
+    let o;
+    try { o = JSON.parse(lines[i]); } catch { continue; }
+    const blocks = o && o.type === "assistant" && o.message && Array.isArray(o.message.content) ? o.message.content : [];
+    for (let k = blocks.length - 1; k >= 0; k--) {
+      const t = blocks[k] && blocks[k].type === "text" ? String(blocks[k].text || "").trim() : "";
+      if (t) return t.split("\n")[0].slice(0, 200);
+    }
+  }
+  return "";
+}
+
+// One tail read when an agent fails: its last words are the only reason record there is.
+function claudeFailReason(run, a) {
+  const tail = claudeReadTail(path.join(run.dir, "agent-" + a.id + ".jsonl"), 64 * 1024);
+  a.reason = claudeLastText(tail.text, tail.midFile);
+}
+
 // Soft: the snapshot is the only finish record. Never "stopped" from a pid (a workflow can outlive
 // its Claude process). Quiet = may be paused, rate-limited or ended; a flag only, nothing acts on it.
 function claudeRunStatus(snapshotStatus, newestWriteMs, pendingSinceMs, now) {
@@ -305,7 +328,7 @@ function claudeAgent(run, id) {
   let a = run.agents.get(id);
   if (a || !CLAUDE_AGENT_ID.test(id)) return a;
   a = { id, order: run.agents.size, label: "", phase: "", metaLabel: "", metaPhase: "", state: "running",
-    cursor: claudeCursor(), lastWriteMs: 0, pending: new Map(), toolName: "", toolPreview: "", toolSinceMs: 0, contextTokens: 0, model: "", effort: "" };
+    cursor: claudeCursor(), lastWriteMs: 0, pending: new Map(), toolName: "", toolPreview: "", toolSinceMs: 0, contextTokens: 0, model: "", effort: "", reason: "" };
   try {
     const m = JSON.parse(fs.readFileSync(path.join(run.dir, "agent-" + id + ".meta.json"), "utf8"));
     if (typeof m.description === "string") a.metaLabel = m.description;
@@ -363,7 +386,7 @@ function claudeTickRun(run, now) {
         const a = claudeAgent(run, e.agentId);
         if (!a) continue;
         if (e.type === "started") { a.state = "running"; if (e.label) a.label = e.label; if (e.phase) a.phase = e.phase; }
-        else a.state = e.type === "result" ? "done" : "failed";
+        else { a.state = e.type === "result" ? "done" : "failed"; if (a.state === "failed") claudeFailReason(run, a); }
       }
       if (!fresh || run.journal.offset >= run.journal.size) break;
     }
@@ -375,7 +398,7 @@ function claudeTickRun(run, now) {
     if (run.snapshot) {
       for (const [id, s] of run.snapshot.agents) {
         const a = claudeAgent(run, id);
-        if (a && a.state === "running") a.state = s.state;
+        if (a && a.state === "running") { a.state = s.state; if (a.state === "failed") claudeFailReason(run, a); }
       }
       run.settledAt = sst.mtimeMs; // finished: no more journal or transcript reads until the snapshot changes
     } else {
@@ -455,7 +478,7 @@ function claudeRunView(run) {
       id: a.id, order: a.order, label: a.label || a.metaLabel || (s && s.label) || a.id,
       phase: a.phase || a.metaPhase || (s && s.phase) || "phase unknown", state,
       lastWriteMs: Math.floor(a.lastWriteMs || (s && s.lastMs) || 0), tool: state === "running" ? a.toolName : "", contextTokens: a.contextTokens,
-      model: a.model || (s && s.model) || "", effort: a.effort,
+      model: a.model || (s && s.model) || "", effort: a.effort, reason: state === "failed" ? a.reason : "",
     };
   });
   // The run's model and effort: the most common across all its agents (a script can override per agent).

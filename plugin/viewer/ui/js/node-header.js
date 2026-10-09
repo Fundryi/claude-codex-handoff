@@ -159,7 +159,7 @@
       var badge = nodeBadge(node.state);
       taskStatus.hidden = false;
       taskStatus.className = 'status ' + (badge === 'ENDED' ? 'STOPPED' : badge);
-      taskStatus.textContent = nodeStateLabel(node.state);
+      taskStatus.textContent = nodeWord(node);
       taskStatus.title = nodeStateHelp(node);
       // The kind word sits before the title, in the title row.
       var row = document.getElementById('task-title-row');
