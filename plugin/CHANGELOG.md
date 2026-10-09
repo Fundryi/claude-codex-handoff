@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.29.0
+
+- **A workflow agent that ends without a result is a quiet row, not a problem.** Since Claude Code 2.1.295, a workflow agent with a result schema often cannot see its StructuredOutput tool and ends without a return value. Before, the viewer called every such agent "stuck" and listed it under "Needs you". Now the row reads "no result" in grey. It does not count as stuck or failed, and it never shows under "Needs you". A workflow run that reports failed as a whole still reads "Failed". See [issue #1](https://github.com/Fundryi/claude-codex-handoff/issues/1).
+- **The row shows why.** The agent's last words appear after its label on the run page, in the middle column of the Live overview, in the agent header and in the sidebar tooltip. This works for any agent that ends without a result, not only the StructuredOutput case.
+- **Counts say "no result".** Phase and group counts read "41 no result" instead of "41 failed", and the matching part of the progress bar is grey, not amber.
+- **"Stuck" is only for a hung job.** A Codex job whose process died or stopped its heartbeat, or a workflow that went quiet, still reads "stuck". A workflow run that reported failed reads "failed".
+- **Long last words do not squeeze the label.** On the run page the agent label keeps its width and the text after it is cut with an ellipsis.
+- **Tests:** new test "Claude transcript tail: a failed agent's reason is its last assistant text, first line, capped" in `tests/server-metadata.test.js`, and "a workflow agent without a result is ended, never urgent; a quiet run still reads stuck" in `tests/ui-rows.test.js`. No test was removed.
+
 ## 2.28.0
 
 - **Sources have their own buttons.** Claude, Codex and OpenCode are now three buttons above the state chips. Before, they sat at the end of the chip row and looked like more state chips. They sit on top because they change every count below them.
