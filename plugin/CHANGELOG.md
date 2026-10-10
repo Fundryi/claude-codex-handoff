@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.29.1
+
+- **The open node no longer unfolds its finished neighbours.** When you clicked a workflow under a chat with the Running chip on, every finished Codex row of that chat showed too. The tree opened the whole fold because the open node sat inside it. Now only the path to the open node stays in sight. The other finished children stay folded.
+- **The fold button works again under an open node.** Before, a click on "fold 14 finished" did nothing while a child of that fold was open. The button now folds and unfolds as it should.
+- **Tests:** none added. The fix was checked in a browser against a live tree. No test was removed.
+
 ## 2.29.0
 
 - **A workflow agent that ends without a result is a quiet row, not a problem.** Since Claude Code 2.1.295, a workflow agent with a result schema often cannot see its StructuredOutput tool and ends without a return value. Before, the viewer called every such agent "stuck" and listed it under "Needs you". Now the row reads "no result" in grey. It does not count as stuck or failed, and it never shows under "Needs you". A workflow run that reports failed as a whole still reads "Failed". See [issue #1](https://github.com/Fundryi/claude-codex-handoff/issues/1).
