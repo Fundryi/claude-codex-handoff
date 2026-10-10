@@ -293,8 +293,9 @@
     function appendChildren(container, model, node, depth, ancestors, view, reveal) {
       var kids = node.children.map(function (id) { return model.nodes[id]; })
         .filter(function (k) { return k && (view.tab !== 'LIVE' || !liveHidden(k, prefs.dismissed)); }).sort(childOrder);
-      var foldOpen = !!(prefs.openFolds || {})[node.id] || kids.some(function (k) { return reveal[k.id] || k.id === prefs.node || k.id === prefs.panel; });
-      var folded = kids.filter(function (k) { return nodeFolded(model, k, view); });
+      var foldOpen = !!(prefs.openFolds || {})[node.id];
+      // The way to the open node stays in sight on its own; it never opens the whole fold.
+      var folded = kids.filter(function (k) { return nodeFolded(model, k, view) && !(reveal[k.id] || k.id === prefs.node || k.id === prefs.panel); });
       var shown = foldOpen ? kids : kids.filter(function (k) { return folded.indexOf(k) === -1; });
       var hidden = kids.length - shown.length;
       var cap = node.kind === 'chat' && node.hidden ? node.hidden : 0;
